@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="600" height="240">
+  <rect width="600" height="240" rx="16" fill="#ECFDF5"/>
+  <text x="30" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#065F46">Distributive Property Array Slicer: 4 × (5 + 2) = (4 × 5) + (4 × 2)</text>
+  <rect x="30" y="60" width="250" height="140" fill="#34D399" stroke="#047857" stroke-width="3" rx="6"/>
+  <text x="95" y="135" font-family="sans-serif" font-size="22" font-weight="bold" fill="#064E3B">4 × 5 = 20</text>
+  <line x1="295" y1="50" x2="295" y2="210" stroke="#EF4444" stroke-width="4" stroke-dasharray="8,6"/>
+  <rect x="310" y="60" width="110" height="140" fill="#60A5FA" stroke="#1D4ED8" stroke-width="3" rx="6"/>
+  <text x="325" y="135" font-family="sans-serif" font-size="20" font-weight="bold" fill="#1E3A8A">4 × 2 = 8</text>
+</svg>

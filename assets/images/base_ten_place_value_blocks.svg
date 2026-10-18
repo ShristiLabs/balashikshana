@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 260" width="600" height="260">
+  <rect width="600" height="260" rx="16" fill="#F0FDF4"/>
+  <text x="30" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#14532D">Base-10 Place Value Blocks (Hundreds, Tens, Ones)</text>
+  <g id="concrete-interactive" transform="translate(30, 55)">
+    <rect x="0" y="0" width="160" height="160" fill="#22C55E" stroke="#15803D" stroke-width="3" rx="4"/>
+    <text x="45" y="90" font-family="sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF">100 Flat</text>
+    <rect x="210" y="0" width="24" height="160" fill="#3B82F6" stroke="#1D4ED8" stroke-width="2" rx="3"/>
+    <rect x="245" y="0" width="24" height="160" fill="#3B82F6" stroke="#1D4ED8" stroke-width="2" rx="3"/>
+    <rect x="280" y="0" width="24" height="160" fill="#3B82F6" stroke="#1D4ED8" stroke-width="2" rx="3"/>
+    <text x="215" y="185" font-family="sans-serif" font-size="15" font-weight="bold" fill="#1E3A8A">3 Ten-Rods (30)</text>
+    <rect x="360" y="130" width="26" height="26" fill="#F59E0B" stroke="#B45309" stroke-width="2" rx="3"/>
+    <rect x="395" y="130" width="26" height="26" fill="#F59E0B" stroke="#B45309" stroke-width="2" rx="3"/>
+    <text x="360" y="185" font-family="sans-serif" font-size="15" font-weight="bold" fill="#92400E">2 Ones (2)</text>
+  </g>
+</svg>

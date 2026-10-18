@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="600" height="240">
+  <rect width="600" height="240" rx="16" fill="#FEFCE8"/>
+  <text x="30" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#713F12">US Currency: Penny (1¢), Nickel (5¢), Dime (10¢), Quarter (25¢) &amp; $1 Bill</text>
+  <circle cx="70" cy="120" r="34" fill="#D97706" stroke="#92400E" stroke-width="3"/><text x="54" y="126" font-family="sans-serif" font-size="18" font-weight="bold" fill="#FFF">1¢</text>
+  <circle cx="165" cy="120" r="40" fill="#94A3B8" stroke="#475569" stroke-width="3"/><text x="148" y="126" font-family="sans-serif" font-size="18" font-weight="bold" fill="#FFF">5¢</text>
+  <circle cx="260" cy="120" r="30" fill="#CBD5E1" stroke="#475569" stroke-width="3"/><text x="240" y="126" font-family="sans-serif" font-size="16" font-weight="bold" fill="#1E293B">10¢</text>
+  <circle cx="360" cy="120" r="46" fill="#E2E8F0" stroke="#334155" stroke-width="3"/><text x="340" y="126" font-family="sans-serif" font-size="20" font-weight="bold" fill="#0F172A">25¢</text>
+  <rect x="435" y="80" width="135" height="80" rx="6" fill="#BBF7D0" stroke="#166534" stroke-width="3"/><text x="482" y="128" font-family="sans-serif" font-size="26" font-weight="bold" fill="#14532D">$1</text>
+</svg>

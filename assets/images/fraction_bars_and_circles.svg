@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="600" height="240">
+  <rect width="600" height="240" rx="16" fill="#FDF2F8"/>
+  <text x="30" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#831843">Synchronized Fraction Strips (1 Whole, 1/2, 2/4, 4/8)</text>
+  <rect x="30" y="55" width="540" height="36" fill="#EC4899" stroke="#9D174D" stroke-width="2"/><text x="275" y="79" font-family="sans-serif" font-size="16" font-weight="bold" fill="#FFF">1 Whole</text>
+  <rect x="30" y="100" width="270" height="36" fill="#8B5CF6" stroke="#5B21B6" stroke-width="2"/><rect x="300" y="100" width="270" height="36" fill="#DDD6FE" stroke="#5B21B6" stroke-width="2"/><text x="150" y="124" font-family="sans-serif" font-size="16" font-weight="bold" fill="#FFF">1/2</text>
+  <rect x="30" y="145" width="135" height="36" fill="#06B6D4" stroke="#155E75" stroke-width="2"/><rect x="165" y="145" width="135" height="36" fill="#06B6D4" stroke="#155E75" stroke-width="2"/><rect x="300" y="145" width="135" height="36" fill="#CFFAFE" stroke="#155E75" stroke-width="2"/><rect x="435" y="145" width="135" height="36" fill="#CFFAFE" stroke="#155E75" stroke-width="2"/><text x="140" y="169" font-family="sans-serif" font-size="16" font-weight="bold" fill="#FFF">2/4 = 1/2</text>
+</svg>

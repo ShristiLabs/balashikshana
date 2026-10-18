@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="600" height="240">
+  <rect width="600" height="240" rx="16" fill="#ECFEFF"/>
+  <text x="30" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#155E75">NGSS Science Virtual Lab: Phase Change, Forces &amp; Ecosystems</text>
+  <rect x="50" y="75" width="120" height="110" rx="8" fill="#67E8F9" stroke="#0E7490" stroke-width="3"/><text x="85" y="135" font-family="sans-serif" font-size="16" font-weight="bold" fill="#083344">Solid</text>
+  <rect x="240" y="75" width="120" height="110" rx="8" fill="#38BDF8" stroke="#0369A1" stroke-width="3"/><text x="275" y="135" font-family="sans-serif" font-size="16" font-weight="bold" fill="#FFF">Liquid</text>
+  <rect x="430" y="75" width="120" height="110" rx="8" fill="#E0F2FE" stroke="#0284C7" stroke-width="3" stroke-dasharray="6,4"/><text x="475" y="135" font-family="sans-serif" font-size="16" font-weight="bold" fill="#0369A1">Gas</text>
+</svg>

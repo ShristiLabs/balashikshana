@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="600" height="240">
+  <rect width="600" height="240" rx="16" fill="#F0F9FF"/>
+  <text x="30" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#075985">Sentence &amp; Morphology Architect (Clauses, Roots &amp; Affixes)</text>
+  <rect x="30" y="75" width="170" height="70" rx="10" fill="#38BDF8"/><text x="65" y="117" font-family="sans-serif" font-size="18" font-weight="bold" fill="#FFF">Prefix: RE-</text>
+  <rect x="215" y="75" width="170" height="70" rx="10" fill="#6366F1"/><text x="245" y="117" font-family="sans-serif" font-size="18" font-weight="bold" fill="#FFF">Root: STRUCT</text>
+  <rect x="400" y="75" width="170" height="70" rx="10" fill="#EC4899"/><text x="430" y="117" font-family="sans-serif" font-size="18" font-weight="bold" fill="#FFF">Suffix: -ION</text>
+</svg>
