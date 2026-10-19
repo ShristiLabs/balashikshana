@@ -1,71 +1,122 @@
 import React, { useState } from "react";
 import { ScrollView, View, Text, Pressable } from "react-native";
 
-export default function HomeScreen() {
-  const [selectedGrade, setSelectedGrade] = useState("kindergarten");
-  const [activeStudentId, setActiveStudentId] = useState("stu-aarav-k");
+const WINDING_OFFSETS = [0, -42, -68, -36, 18, 56, 32, -14];
 
-  const students = [
-    { studentId: "stu-maya-pk", nickname: "Maya", avatar: "🦊", grade: "pre-k", mastered: 3 },
-    { studentId: "stu-aarav-k", nickname: "Aarav", avatar: "🦁", grade: "kindergarten", mastered: 5 },
-    { studentId: "stu-liam-g2", nickname: "Liam", avatar: "🚀", grade: "grade-2", mastered: 4 }
+export default function DuolingoJourneyScreen() {
+  const [loggedIn, setLoggedIn] = useState(true);
+  const [selectedSubject, setSelectedSubject] = useState("math");
+
+  const sampleUnits = [
+    {
+      unitId: "K-M1",
+      title: "Numbers, Counting & Comparing to 5",
+      color: "#58CC02",
+      topics: [
+        { code: "A", name: "Numbers to 3", status: "completed", crowns: 3 },
+        { code: "B", name: "Counting to 3", status: "completed", crowns: 3 },
+        { code: "C", name: "Numbers to 5", status: "completed", crowns: 3 },
+        { code: "D", name: "Counting to 5", status: "completed", crowns: 3 }
+      ]
+    },
+    {
+      unitId: "K-M2",
+      title: "Numbers, Cardinality & Comparing to 10",
+      color: "#1CB0F6",
+      topics: [
+        { code: "G", name: "Numbers & counting to 7", status: "completed", crowns: 3 },
+        { code: "H", name: "Numbers & counting to 9", status: "completed", crowns: 2 },
+        { code: "I", name: "Numbers to 10", status: "current", crowns: 0 },
+        { code: "J", name: "Counting to 10", status: "locked", crowns: 0 }
+      ]
+    }
   ];
 
-  const grades = [
-    { id: "pre-k", label: "Pre-K (3–4 yrs)" },
-    { id: "kindergarten", label: "Kindergarten (5–6 yrs)" },
-    { id: "grade-1", label: "Grade 1 (6–7 yrs)" },
-    { id: "grade-2", label: "Grade 2 (7–8 yrs)" },
-    { id: "grade-3", label: "Grade 3 (8–9 yrs)" }
-  ];
+  if (!loggedIn) {
+    return (
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 16 }}>
+        <Text style={{ fontSize: 28, fontWeight: "900", textAlign: "center" }}>Balashikshana</Text>
+        <Pressable
+          onPress={() => setLoggedIn(true)}
+          style={{ backgroundColor: "#58CC02", padding: 16, borderRadius: 16, borderCurve: "continuous" }}
+        >
+          <Text style={{ color: "#FFF", fontWeight: "800", textAlign: "center" }}>LOG IN AS AARAV (KINDERGARTEN)</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 20, gap: 18 }}
+      contentContainerStyle={{ padding: 20, gap: 24, alignItems: "center" }}
     >
-      <View
-        style={{
-          padding: 20,
-          borderRadius: 20,
-          borderCurve: "continuous",
-          backgroundColor: "#FFF4D6",
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.06)",
-          gap: 8
-        }}
-      >
-        <Text selectable style={{ fontSize: 22, fontWeight: "800", color: "#1E293B" }}>
-          Mastery-Gated US Curriculum Adventure
-        </Text>
-        <Text selectable style={{ fontSize: 15, color: "#475569" }}>
-          130 Sequential Units • 614 Skill Topics • Accuracy + Speed Boss Gates • Scientific Spaced Repetition
-        </Text>
-      </View>
-
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-        {grades.map((g) => (
+      <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+        {["math", "ela", "science", "socialStudies"].map((subj) => (
           <Pressable
-            key={g.id}
-            onPress={() => setSelectedGrade(g.id)}
+            key={subj}
+            onPress={() => setSelectedSubject(subj)}
             style={{
-              paddingVertical: 10,
+              paddingVertical: 8,
               paddingHorizontal: 16,
               borderRadius: 14,
               borderCurve: "continuous",
-              backgroundColor: selectedGrade === g.id ? "#0D9488" : "#F1F5F9"
+              backgroundColor: selectedSubject === subj ? "#1CB0F6" : "#E5E5E5"
             }}
           >
-            <Text
-              style={{
-                fontWeight: "700",
-                color: selectedGrade === g.id ? "#FFFFFF" : "#334155"
-              }}
-            >
-              {g.label}
+            <Text style={{ fontWeight: "800", color: selectedSubject === subj ? "#FFF" : "#3C3C3C" }}>
+              {subj.toUpperCase()}
             </Text>
           </Pressable>
         ))}
       </View>
+
+      {sampleUnits.map((unit) => (
+        <View key={unit.unitId} style={{ width: "100%", maxWidth: 540, gap: 20, alignItems: "center" }}>
+          <View
+            style={{
+              width: "100%",
+              padding: 18,
+              borderRadius: 20,
+              borderCurve: "continuous",
+              backgroundColor: unit.color
+            }}
+          >
+            <Text selectable style={{ color: "#FFF", fontWeight: "900", fontSize: 18 }}>
+              {unit.unitId}: {unit.title}
+            </Text>
+          </View>
+
+          {unit.topics.map((t, idx) => (
+            <View
+              key={t.code}
+              style={{
+                alignItems: "center",
+                transform: [{ translateX: WINDING_OFFSETS[idx % WINDING_OFFSETS.length] }]
+              }}
+            >
+              <Pressable
+                style={{
+                  width: 72,
+                  height: 66,
+                  borderRadius: 36,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor:
+                    t.status === "completed" ? "#FFC800" : t.status === "current" ? "#58CC02" : "#E5E5E5"
+                }}
+              >
+                <Text style={{ fontSize: 24, fontWeight: "900", color: t.status === "locked" ? "#999" : "#FFF" }}>
+                  {t.status === "completed" ? "✓" : t.status === "current" ? "★" : "🔒"}
+                </Text>
+              </Pressable>
+              <Text style={{ marginTop: 6, fontWeight: "800", fontSize: 13 }}>
+                {t.code}. {t.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ))}
     </ScrollView>
   );
 }

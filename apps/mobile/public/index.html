@@ -3,436 +3,767 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Balashikshana — Pre-K to Grade 3 Interactive Learning & Mastery Platform</title>
+  <title>Balashikshana — Fun Learning Journey (Pre-K to Grade 3)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@500;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-cream: #FFFDF7;
-      --bg-warm: #FFF6E0;
-      --ink-900: #182232;
-      --ink-700: #334155;
-      --ink-500: #64748B;
-      --teal-600: #0D9488;
-      --teal-700: #0F766E;
-      --amber-500: #F59E0B;
-      --amber-600: #D97706;
-      --coral-500: #F43F5E;
-      --indigo-600: #4F46E5;
-      --emerald-600: #16A34A;
-      --card-border: #E2E8F0;
-      --shadow-tactile: 0 6px 0 #CBD5E1, 0 10px 20px rgba(24, 34, 50, 0.08);
+      --duo-green: #58CC02;
+      --duo-green-dark: #46A302;
+      --duo-green-bg: #D7FFB8;
+      --duo-blue: #1CB0F6;
+      --duo-blue-dark: #1899D6;
+      --duo-gold: #FFC800;
+      --duo-gold-dark: #E5B400;
+      --duo-purple: #CE82FF;
+      --duo-purple-dark: #A568CC;
+      --duo-coral: #FF4B4B;
+      --duo-coral-dark: #EA2B2B;
+      --duo-orange: #FF9600;
+      --duo-orange-dark: #CC7800;
+      --duo-gray: #E5E5E5;
+      --duo-gray-dark: #AFAFAF;
+      --duo-text: #3C3C3C;
+      --duo-muted: #777777;
+      --bg-page: #FFFFFF;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Nunito', sans-serif;
-      background-color: var(--bg-cream);
-      background-image:
-        radial-gradient(circle at 12% 18%, rgba(245, 158, 11, 0.10) 0%, transparent 28%),
-        radial-gradient(circle at 88% 80%, rgba(13, 148, 136, 0.10) 0%, transparent 32%);
-      color: var(--ink-900);
+      background: var(--bg-page);
+      color: var(--duo-text);
       min-height: 100vh;
+      overflow-x: hidden;
     }
-    h1, h2, h3, h4, .display-font { font-family: 'Fredoka', sans-serif; letter-spacing: 0.01em; }
+    h1, h2, h3, h4, .display-font { font-family: 'Fredoka', sans-serif; }
     .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
 
-    /* Top Header */
-    header {
+    /* Tactile 3D Buttons (Duolingo style) */
+    .duo-btn {
+      cursor: pointer;
+      border: none;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 13px 22px;
+      border-radius: 16px;
+      background: var(--duo-green);
+      color: #FFFFFF;
+      box-shadow: 0 5px 0 var(--duo-green-dark);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .duo-btn:hover { filter: brightness(1.04); }
+    .duo-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--duo-green-dark); }
+    .duo-btn.blue { background: var(--duo-blue); box-shadow: 0 5px 0 var(--duo-blue-dark); }
+    .duo-btn.gold { background: var(--duo-gold); color: #5C4500; box-shadow: 0 5px 0 var(--duo-gold-dark); }
+    .duo-btn.purple { background: var(--duo-purple); box-shadow: 0 5px 0 var(--duo-purple-dark); }
+    .duo-btn.coral { background: var(--duo-coral); box-shadow: 0 5px 0 var(--duo-coral-dark); }
+    .duo-btn.outline {
       background: #FFFFFF;
-      border-bottom: 3px solid #E2E8F0;
-      padding: 14px 24px;
+      color: var(--duo-text);
+      border: 2px solid var(--duo-gray);
+      box-shadow: 0 4px 0 var(--duo-gray);
+    }
+
+    /* ================= LOGIN SCREEN ================= */
+    #loginScreen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(circle at 20% 20%, #E8F8FF 0%, #FFFFFF 55%, #F2FFE6 100%);
+    }
+    .login-card {
+      max-width: 520px;
+      width: 100%;
+      background: #FFFFFF;
+      border: 2px solid var(--duo-gray);
+      border-radius: 28px;
+      padding: 34px 30px;
+      box-shadow: 0 10px 0 var(--duo-gray);
+      text-align: center;
+    }
+    .mascot-hero {
+      width: 84px; height: 84px; border-radius: 24px;
+      background: var(--duo-green); color: #FFF;
+      font-size: 46px; display: grid; place-items: center;
+      margin: 0 auto 14px;
+      box-shadow: 0 6px 0 var(--duo-green-dark);
+    }
+    .student-login-Option {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border: 2px solid var(--duo-gray);
+      border-radius: 18px; margin-bottom: 12px; cursor: pointer;
+      background: #FFFFFF; box-shadow: 0 4px 0 var(--duo-gray);
+      transition: all 0.12s; text-align: left;
+    }
+    .student-login-Option:hover {
+      border-color: var(--duo-blue);
+      background: #F0FAFF;
+      box-shadow: 0 4px 0 var(--duo-blue-dark);
+    }
+    .input-field {
+      width: 100%; padding: 13px 16px; border-radius: 14px;
+      border: 2px solid var(--duo-gray); font-family: 'Nunito', sans-serif;
+      font-size: 16px; font-weight: 700; margin-bottom: 12px;
+    }
+
+    /* ================= MAIN APP LAYOUT ================= */
+    #mainAppScreen {
+      display: none;
+      grid-template-columns: 250px 1fr 330px;
+      min-height: 100vh;
+      max-width: 1380px;
+      margin: 0 auto;
+    }
+    @media (max-width: 1100px) {
+      #mainAppScreen { grid-template-columns: 84px 1fr; }
+      .right-sidebar { display: none; }
+      .nav-label-text { display: none; }
+    }
+    @media (max-width: 680px) {
+      #mainAppScreen { grid-template-columns: 1fr; }
+      .left-sidebar {
+        position: fixed; bottom: 0; left: 0; right: 0; height: 68px;
+        flex-direction: row !important; border-right: none !important;
+        border-top: 2px solid var(--duo-gray); z-index: 40; padding: 6px 12px !important;
+      }
+    }
+
+    /* Left Navigation Sidebar */
+    .left-sidebar {
+      border-right: 2px solid var(--duo-gray);
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #FFFFFF;
       position: sticky;
       top: 0;
-      z-index: 50;
+      height: 100vh;
+    }
+    .nav-item {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 16px;
+      border-radius: 16px;
+      font-weight: 900;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--duo-muted);
+      border: 2px solid transparent;
+      transition: all 0.12s;
+    }
+    .nav-item:hover { background: #F7F7F7; }
+    .nav-item.active {
+      background: #DDF4FF;
+      color: var(--duo-blue);
+      border-color: #84D8FF;
+    }
+
+    /* Center Winding Journey Column */
+    .center-journey {
+      padding: 20px 28px 100px;
+      max-width: 680px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Sticky Top Course & Stats Bar */
+    .top-course-bar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 2px solid var(--duo-gray);
+      padding: 12px 0;
+      margin-bottom: 22px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
+      gap: 10px;
     }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-badge {
-      width: 44px; height: 44px; border-radius: 14px;
-      background: linear-gradient(135deg, #0D9488, #14B8A6);
-      color: #FFF; display: grid; place-items: center;
-      font-family: 'Fredoka', sans-serif; font-size: 22px; font-weight: 700;
-      box-shadow: 0 4px 0 #0F766E;
-    }
-    .stats-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .pill {
+    .stat-chip {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 7px 13px; border-radius: 999px; font-weight: 800; font-size: 13px;
-      background: #F1F5F9; border: 2px solid #CBD5E1; color: var(--ink-900);
+      font-weight: 900; font-size: 15px; padding: 6px 12px;
+      border-radius: 12px; background: #FFF; border: 2px solid var(--duo-gray);
     }
-    .pill.gold { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
-    .pill.teal { background: #CCFBF1; border-color: #14B8A6; color: #115E59; }
-    .btn-3d {
-      cursor: pointer; border: none; font-family: 'Fredoka', sans-serif;
-      font-weight: 600; font-size: 15px; padding: 10px 18px; border-radius: 14px;
-      background: var(--teal-600); color: #FFF;
-      box-shadow: 0 4px 0 var(--teal-700);
-      transition: transform 0.1s ease, box-shadow 0.1s ease;
-    }
-    .btn-3d:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--teal-700); }
-    .btn-3d.amber { background: var(--amber-500); box-shadow: 0 4px 0 var(--amber-600); }
-    .btn-3d.coral { background: var(--coral-500); box-shadow: 0 4px 0 #BE123C; }
-    .btn-3d.indigo { background: var(--indigo-600); box-shadow: 0 4px 0 #3730A3; }
-    .btn-3d.secondary { background: #F1F5F9; color: var(--ink-900); box-shadow: 0 4px 0 #CBD5E1; }
 
-    /* Layout */
-    .container { max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; }
-    .selector-bar {
-      display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px;
-      background: #FFFFFF; padding: 16px; border-radius: 20px;
-      border: 2px solid var(--card-border); box-shadow: var(--shadow-tactile);
+    /* Subject & Grade Pill Bar */
+    .track-selector {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .track-pill {
+      cursor: pointer; padding: 8px 15px; border-radius: 14px;
+      font-weight: 800; font-size: 14px; border: 2px solid var(--duo-gray);
+      background: #FFFFFF; color: var(--duo-text);
+      box-shadow: 0 3px 0 var(--duo-gray);
+    }
+    .track-pill.active {
+      background: var(--duo-blue); color: #FFF;
+      border-color: var(--duo-blue-dark); box-shadow: 0 3px 0 var(--duo-blue-dark);
+    }
+
+    /* Duolingo Unit Banner */
+    .unit-section {
+      margin-bottom: 38px;
+      position: relative;
+    }
+    .unit-banner {
+      border-radius: 22px;
+      padding: 20px 24px;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+      box-shadow: 0 6px 0 rgba(0,0,0,0.18);
+    }
+    .unit-banner.theme-0 { background: var(--duo-green); }
+    .unit-banner.theme-1 { background: var(--duo-blue); }
+    .unit-banner.theme-2 { background: var(--duo-purple); }
+    .unit-banner.theme-3 { background: var(--duo-orange); }
+    .unit-banner.theme-locked { background: #CFCFCF; color: #666666; }
+
+    /* Winding S-Curve Stepping Stones Path */
+    .winding-path {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+      position: relative;
+      padding: 8px 0 16px;
+    }
+    .path-node-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .path-node {
+      width: 74px;
+      height: 68px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 900;
+      color: #FFFFFF;
+      position: relative;
+      transition: transform 0.1s ease;
+    }
+    .path-node:active { transform: translateY(5px); }
+
+    /* Node States */
+    .path-node.completed {
+      background: var(--duo-gold);
+      box-shadow: 0 8px 0 var(--duo-gold-dark);
+    }
+    .path-node.current {
+      background: var(--duo-green);
+      box-shadow: 0 8px 0 var(--duo-green-dark), 0 0 0 8px rgba(88, 204, 2, 0.22);
+      animation: pulseRing 1.8s infinite;
+    }
+    .path-node.locked {
+      background: var(--duo-gray);
+      color: #999999;
+      box-shadow: 0 8px 0 var(--duo-gray-dark);
+    }
+    .path-node.boss-gate {
+      width: 86px;
+      height: 78px;
+      border-radius: 26px;
+      font-size: 34px;
+    }
+    .path-node.boss-gate.unlocked {
+      background: var(--duo-purple);
+      box-shadow: 0 8px 0 var(--duo-purple-dark), 0 0 0 8px rgba(206, 130, 255, 0.22);
+    }
+
+    @keyframes pulseRing {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    /* Floating START Bubble above Current Node */
+    .start-tooltip {
+      background: #FFFFFF;
+      color: var(--duo-green);
+      border: 2px solid var(--duo-gray);
+      padding: 6px 14px;
+      border-radius: 12px;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      text-transform: uppercase;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+      margin-bottom: 8px;
+      animation: bounceTooltip 1.2s infinite ease-in-out;
+      white-space: nowrap;
+    }
+    @keyframes bounceTooltip {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+
+    .node-caption {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--duo-text);
+      max-width: 190px;
+      text-align: center;
+      line-height: 1.25;
+    }
+    .crown-strip {
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    /* Right Sidebar Cards */
+    .right-sidebar {
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .side-card {
+      border: 2px solid var(--duo-gray);
+      border-radius: 20px;
+      padding: 18px;
+      background: #FFFFFF;
+    }
+
+    /* ================= FULL-SCREEN DUOLINGO PRACTICE RUNNER ================= */
+    #lessonOverlay {
+      position: fixed;
+      inset: 0;
+      background: #FFFFFF;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    #lessonOverlay.open { display: flex; }
+
+    .lesson-top-bar {
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 22px 24px 10px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .progress-track {
+      flex: 1;
+      height: 16px;
+      background: var(--duo-gray);
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--duo-green);
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .lesson-stage-center {
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .speech-prompt-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
       margin-bottom: 22px;
     }
-    .tab-group { display: flex; flex-wrap: wrap; gap: 8px; }
-    .tab-btn {
-      cursor: pointer; border: 2px solid #E2E8F0; background: #F8FAFC;
-      padding: 9px 16px; border-radius: 12px; font-weight: 800; font-size: 14px;
-      color: var(--ink-700); transition: all 0.15s ease;
+    .mascot-avatar-sm {
+      width: 64px; height: 64px; border-radius: 20px;
+      background: #E8F8FF; border: 2px solid #84D8FF;
+      font-size: 36px; display: grid; place-items: center; flex-shrink: 0;
     }
-    .tab-btn.active {
-      background: var(--ink-900); color: #FFFFFF; border-color: var(--ink-900);
-      transform: translateY(-1px);
+    .speech-bubble {
+      border: 2px solid var(--duo-gray);
+      border-radius: 20px;
+      padding: 16px 20px;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.35;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
-    .tab-btn.subj-active {
-      background: var(--teal-600); color: #FFFFFF; border-color: var(--teal-700);
+    .audio-btn {
+      width: 44px; height: 44px; border-radius: 14px;
+      background: var(--duo-blue); color: #FFF; border: none;
+      box-shadow: 0 4px 0 var(--duo-blue-dark); cursor: pointer;
+      font-size: 20px; flex-shrink: 0;
     }
 
-    /* Main Grid */
-    .workspace-grid {
+    /* Interactive Problem Modes */
+    .duo-choices-grid {
       display: grid;
-      grid-template-columns: 380px 1fr;
-      gap: 24px;
-      align-items: start;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
     }
-    @media (max-width: 1024px) {
-      .workspace-grid { grid-template-columns: 1fr; }
+    @media (max-width: 600px) { .duo-choices-grid { grid-template-columns: 1fr; } }
+    .duo-choice-card {
+      cursor: pointer;
+      padding: 18px 20px;
+      border-radius: 18px;
+      border: 2px solid var(--duo-gray);
+      background: #FFFFFF;
+      box-shadow: 0 4px 0 var(--duo-gray);
+      font-family: 'Nunito', sans-serif;
+      font-size: 19px;
+      font-weight: 800;
+      color: var(--duo-text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.1s;
     }
-
-    /* Unit Progression Column */
-    .unit-list-card {
-      background: #FFFFFF; border: 2px solid var(--card-border);
-      border-radius: 22px; padding: 18px; box-shadow: var(--shadow-tactile);
-      max-height: 82vh; overflow-y: auto;
-    }
-    .unit-node {
-      border: 2px solid #E2E8F0; border-radius: 16px; padding: 14px;
-      margin-bottom: 12px; cursor: pointer; position: relative;
-      transition: all 0.15s ease; background: #FFFFFF;
-    }
-    .unit-node:hover { border-color: var(--teal-600); }
-    .unit-node.selected {
-      border-color: var(--teal-600); background: #F0FDFA;
-      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18);
-    }
-    .unit-node.locked {
-      background: #F8FAFC; opacity: 0.72; border-style: dashed;
-    }
-    .unit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .unit-code {
-      font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px;
-      padding: 3px 8px; border-radius: 8px; background: #E2E8F0; color: var(--ink-900);
-    }
-    .status-badge {
-      font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 99px;
-    }
-    .status-MASTERED { background: #DCFCE7; color: #166534; }
-    .status-READY { background: #FEF3C7; color: #92400E; }
-    .status-LOCKED { background: #E2E8F0; color: #475569; }
-
-    /* Right Active Stage Area */
-    .stage-card {
-      background: #FFFFFF; border: 2px solid var(--card-border);
-      border-radius: 24px; padding: 24px; box-shadow: var(--shadow-tactile);
-    }
-    .stage-stepper {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-      margin: 18px 0 22px;
-    }
-    .step-pill {
-      cursor: pointer; padding: 12px; border-radius: 14px;
-      border: 2px solid #E2E8F0; background: #F8FAFC; text-align: center;
-      font-weight: 800; font-size: 13px; transition: all 0.15s;
-    }
-    .step-pill.active {
-      background: var(--indigo-600); color: #FFF; border-color: #3730A3;
-      box-shadow: 0 4px 0 #312E81;
+    .duo-choice-card:hover { background: #F7F7F7; }
+    .duo-choice-card.selected {
+      background: #DDF4FF;
+      border-color: var(--duo-blue);
+      color: var(--duo-blue-dark);
+      box-shadow: 0 4px 0 var(--duo-blue);
     }
 
-    /* Topic Pills */
-    .topic-strip {
-      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px;
-      padding: 12px; background: #F8FAFC; border-radius: 14px; border: 1px solid #E2E8F0;
+    /* Tile Builder Mode */
+    .tile-answer-slots {
+      min-height: 68px;
+      border-top: 2px solid var(--duo-gray);
+      border-bottom: 2px solid var(--duo-gray);
+      padding: 14px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 20px;
     }
-    .topic-chip {
-      cursor: pointer; padding: 6px 12px; border-radius: 10px;
-      font-size: 13px; font-weight: 700; border: 2px solid #CBD5E1; background: #FFF;
+    .tile-bank {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
     }
-    .topic-chip.active {
-      background: var(--amber-500); color: #FFF; border-color: var(--amber-600);
-    }
-
-    /* Interactive Manipulative & SVG Stage */
-    .manipulative-stage {
-      display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px;
-      background: var(--bg-warm); border: 2px solid #FDE68A;
-      border-radius: 20px; padding: 20px; margin-bottom: 20px;
-    }
-    @media (max-width: 900px) { .manipulative-stage { grid-template-columns: 1fr; } }
-    .svg-preview-box {
-      background: #FFFFFF; border-radius: 16px; padding: 14px;
-      border: 2px solid #E2E8F0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; min-height: 250px;
-    }
-    .svg-preview-box img { max-width: 100%; height: auto; border-radius: 10px; }
-
-    /* Interactive Ten-Frame Widget */
-    .ten-frame-grid {
-      display: grid; grid-template-columns: repeat(5, 48px); gap: 6px;
-      margin: 12px auto; justify-content: center;
-    }
-    .tf-cell {
-      width: 48px; height: 48px; border: 2px solid #334155; border-radius: 8px;
-      background: #FFF; display: grid; place-items: center; cursor: pointer;
-    }
-    .tf-token {
-      width: 32px; height: 32px; border-radius: 50%;
-      background: var(--coral-500); box-shadow: inset 0 -3px 0 rgba(0,0,0,0.2);
-      transition: transform 0.15s ease;
-    }
-    .tf-token.blue { background: #3B82F6; }
-
-    /* 9-Asset Inspector Grid */
-    .asset-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px;
-    }
-    @media (max-width: 900px) { .asset-grid { grid-template-columns: 1fr; } }
-    .asset-box {
-      background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 14px;
-      padding: 13px; font-size: 13px;
-    }
-    .asset-box h4 {
-      font-size: 14px; color: var(--teal-700); margin-bottom: 6px;
-      display: flex; align-items: center; justify-content: space-between;
+    .word-tile {
+      cursor: pointer;
+      padding: 12px 18px;
+      border-radius: 14px;
+      border: 2px solid var(--duo-gray);
+      background: #FFFFFF;
+      box-shadow: 0 4px 0 var(--duo-gray);
+      font-size: 18px;
+      font-weight: 800;
     }
 
-    /* Game & Boss Gate Arena */
-    .arena-box {
-      background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
-      color: #FFFFFF; border-radius: 22px; padding: 26px; margin-top: 12px;
+    /* Interactive Counter Grid Mode */
+    .counter-frame-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 62px);
+      gap: 10px;
+      justify-content: center;
+      margin: 16px 0;
     }
-    .hud-bar {
-      display: flex; justify-content: space-between; align-items: center;
-      flex-wrap: wrap; gap: 12px; padding-bottom: 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.15); margin-bottom: 20px;
+    .counter-cell {
+      width: 62px; height: 62px;
+      border: 3px solid #CBD5E1;
+      border-radius: 16px;
+      background: #F8FAFC;
+      display: grid;
+      place-items: center;
+      font-size: 32px;
+      cursor: pointer;
+      transition: all 0.12s;
     }
-    .question-prompt {
-      font-size: 21px; font-weight: 700; line-height: 1.4;
-      background: rgba(255,255,255,0.08); padding: 18px; border-radius: 16px;
-      margin-bottom: 18px; border-left: 5px solid var(--amber-500);
+    .counter-cell.filled {
+      background: #FFFBEB;
+      border-color: var(--duo-gold-dark);
+      transform: scale(1.04);
     }
-    .choices-grid {
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
-    }
-    @media (max-width: 640px) { .choices-grid { grid-template-columns: 1fr; } }
-    .choice-btn {
-      cursor: pointer; padding: 16px 18px; border-radius: 16px;
-      border: 2px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.10);
-      color: #FFFFFF; font-family: 'Nunito', sans-serif; font-size: 17px;
-      font-weight: 800; text-align: left; transition: all 0.12s ease;
-    }
-    .choice-btn:hover { background: rgba(255,255,255,0.20); border-color: #38BDF8; }
-    .choice-btn.correct { background: #16A34A; border-color: #4ADE80; }
-    .choice-btn.wrong { background: #E11D48; border-color: #FDA4AF; }
 
-    /* Modal */
+    /* Bottom Check & Feedback Bar */
+    .lesson-bottom-bar {
+      border-top: 2px solid var(--duo-gray);
+      padding: 20px 28px;
+      background: #FFFFFF;
+    }
+    .lesson-bottom-bar.correct-bg {
+      background: var(--duo-green-bg);
+      border-top-color: #A5ED6E;
+    }
+    .lesson-bottom-bar.wrong-bg {
+      background: #FFDFE0;
+      border-top-color: #FF9999;
+    }
+    .bottom-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Modal Backdrop */
     .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65);
-      display: none; place-items: center; z-index: 100; padding: 20px;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      place-items: center;
+      z-index: 120;
+      padding: 20px;
     }
     .modal-backdrop.open { display: grid; }
     .modal-card {
-      background: #FFFFFF; border-radius: 24px; max-width: 900px; width: 100%;
-      padding: 26px; max-height: 90vh; overflow-y: auto;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-    }
-    .quadrant-grid {
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 16px 0;
-    }
-    .quad-cell {
-      padding: 14px; border-radius: 14px; border: 2px solid #E2E8F0;
+      background: #FFFFFF;
+      border-radius: 26px;
+      max-width: 620px;
+      width: 100%;
+      padding: 28px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 12px 0 var(--duo-gray);
     }
   </style>
 </head>
 <body>
 
-  <header>
-    <div class="brand">
-      <div class="brand-badge">B</div>
-      <div>
-        <h1 style="font-size: 21px; color: var(--ink-900);">Balashikshana</h1>
-        <p style="font-size: 12px; font-weight: 700; color: var(--ink-500);">
-          US Curriculum (Pre-K to Grade 3) • 130 Units • 614 Skill Topics • Accuracy + Speed Mastery Gates
-        </p>
-      </div>
-    </div>
+  <!-- ================= 1. SINGLE-STUDENT LOGIN & SIGNUP SCREEN ================= -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="mascot-hero">🦉</div>
+      <h1 style="font-size: 28px; margin-bottom: 6px;">Balashikshana</h1>
+      <p style="color: var(--duo-muted); font-weight: 700; margin-bottom: 22px;">
+        Fun US Curriculum Learning Journey (Pre-K to 3rd Grade)
+      </p>
 
-    <div class="stats-bar">
-      <div id="studentSwitcherBar" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"></div>
-      <button class="btn-3d" style="padding:7px 12px; font-size:13px;" onclick="openNewStudentModal()">+ Add Student</button>
-      <span class="pill teal" id="motorPill">⚡ Motor: 0.42s</span>
-      <span class="pill gold" id="keysPill">🔑 Keys: 0</span>
-      <span class="pill" id="coinsPill">⭐ 0 Coins</span>
-      <span class="pill" id="gardenPill">🌱 Garden: 100%</span>
-      <button class="btn-3d amber" onclick="openMotorCalibration()">🎈 Calibrate Tap</button>
-      <button class="btn-3d indigo" onclick="openDailyBrainBoost()">🧠 Brain Boost</button>
-      <button class="btn-3d secondary" onclick="openParentPortal()">🔒 Parent Analytics</button>
-    </div>
-  </header>
-
-  <div class="container">
-    <!-- Grade & Subject Selector Bar -->
-    <div class="selector-bar">
-      <div>
-        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-500); margin-bottom: 6px;">
-          1. Select Grade Level (Pre-K to 3rd Grade)
+      <div id="existingAccountsBox">
+        <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--duo-muted); margin-bottom: 10px; text-align: left;">
+          Log in to your Student Account:
         </div>
-        <div class="tab-group" id="gradeTabs"></div>
-      </div>
-      <div>
-        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-500); margin-bottom: 6px;">
-          2. Select Curriculum Track
-        </div>
-        <div class="tab-group" id="subjectTabs"></div>
-      </div>
-    </div>
-
-    <div class="workspace-grid">
-      <!-- Left Column: Sequential Units of Work (DAG) -->
-      <div class="unit-list-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-          <h2 style="font-size: 18px;" id="unitListHeading">Sequential Units</h2>
-          <span class="mono" style="font-size: 12px; font-weight: 700; color: var(--teal-700);" id="unitCountBadge"></span>
-        </div>
-        <p style="font-size: 12px; color: var(--ink-500); margin-bottom: 14px;">
-          Units progress gradually. <strong>Unit N+1 stays locked</strong> until Unit N's Boss Gate is passed with target Accuracy (%) and Speed (sec/item).
-        </p>
-        <div id="unitListContainer"></div>
+        <div id="loginStudentsList"></div>
       </div>
 
-      <!-- Right Column: Active Unit 4-Stage Loop & 9-Asset Explorer -->
-      <div class="stage-card" id="activeUnitPanel">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
-          <div>
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-              <span class="unit-code" id="activeUnitIdBadge">PK-M1</span>
-              <span class="pill teal" id="activePrereqBadge" style="font-size:11px; padding:3px 10px;">Prereq: None</span>
-              <span class="pill gold" id="activeGateBadge" style="font-size:11px; padding:3px 10px;">Gate: ≥85% & ≤5.5s</span>
-            </div>
-            <h2 style="font-size: 24px;" id="activeUnitTitle">Loading curriculum...</h2>
-          </div>
-          <div style="display:flex; gap:8px;">
-            <button class="btn-3d secondary" onclick="speakCurrentTopicIntro()">🔊 Narrate Lesson</button>
-            <button class="btn-3d amber" onclick="playSound('/assets/sounds/sfx_star_fanfare.wav')">🎵 Test Audio SFX</button>
-          </div>
+      <div style="margin: 18px 0; border-top: 2px solid var(--duo-gray); position: relative;">
+        <span style="position: relative; top: -11px; background: #FFF; padding: 0 12px; font-size: 12px; font-weight: 900; color: var(--duo-muted);">
+          OR CREATE A NEW STUDENT ACCOUNT
+        </span>
+      </div>
+
+      <div style="text-align: left;">
+        <input id="signupName" class="input-field" type="text" placeholder="Your First Name (e.g., Sofia)" />
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <select id="signupAvatar" class="input-field">
+            <option value="🦁">🦁 Lion</option>
+            <option value="🦊">🦊 Fox</option>
+            <option value="🐼">🐼 Panda</option>
+            <option value="🚀">🚀 Rocket</option>
+            <option value="🦄">🦄 Unicorn</option>
+            <option value="🦖">🦖 Dino</option>
+          </select>
+          <select id="signupGrade" class="input-field">
+            <option value="pre-k">Pre-K (3–4 yrs)</option>
+            <option value="kindergarten" selected>Kindergarten (5–6 yrs)</option>
+            <option value="grade-1">1st Grade (6–7 yrs)</option>
+            <option value="grade-2">2nd Grade (7–8 yrs)</option>
+            <option value="grade-3">3rd Grade (8–9 yrs)</option>
+          </select>
         </div>
-
-        <!-- 4-Stage Pedagogical Loop Stepper -->
-        <div class="stage-stepper">
-          <div class="step-pill active" id="stageTab1" onclick="switchStage(1)">
-            1. Study &amp; Explore<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Manipulatives &amp; 9 Assets</span>
-          </div>
-          <div class="step-pill" id="stageTab2" onclick="switchStage(2)">
-            2. Guided Practice<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Untimed + CPA Hints</span>
-          </div>
-          <div class="step-pill" id="stageTab3" onclick="switchStage(3)">
-            3. Fluency Zone<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Timed 70/20/10 Spiral</span>
-          </div>
-          <div class="step-pill" id="stageTab4" onclick="switchStage(4)">
-            4. Unit Boss Gate<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Accuracy + Speed Lock</span>
-          </div>
-        </div>
-
-        <!-- Skill Topics Selector within Active Unit -->
-        <div>
-          <div style="font-size: 12px; font-weight: 800; color: var(--ink-500); margin-bottom: 6px;">
-            SKILL TOPICS IN THIS UNIT (CLICK ANY TOPIC TO INSPECT ITS 9 ASSETS &amp; PRACTICE):
-          </div>
-          <div class="topic-strip" id="topicStripContainer"></div>
-        </div>
-
-        <!-- Stage 1 View: Interactive Manipulative + 9 Asset Categories -->
-        <div id="stage1View">
-          <div class="manipulative-stage">
-            <div class="svg-preview-box">
-              <img id="topicSvgImage" src="/assets/images/ten_frame_and_number_line.svg" alt="Topic Vector Illustration" />
-              <div style="margin-top:10px; font-size:12px; font-weight:700; color:var(--ink-500);" id="cpaModeCaption">
-                CPA Mode: CONCRETE_INTERACTIVE -> PICTORIAL -> GHOST_FLASH -> ABSTRACT
-              </div>
-            </div>
-            <div>
-              <h3 style="font-size: 18px; margin-bottom: 8px;" id="manipWidgetTitle">Interactive Manipulative Playground</h3>
-              <p style="font-size: 13px; color: var(--ink-700); margin-bottom: 10px;" id="manipStepsText"></p>
-              <div style="background:#FFFFFF; border:2px solid #E2E8F0; border-radius:14px; padding:12px; text-align:center;">
-                <div style="font-size:12px; font-weight:800; color:var(--teal-700); margin-bottom:4px;">
-                  HANDS-ON TEN-FRAME COUNTER (TAP CELLS TO ADD/REMOVE COUNTERS)
-                </div>
-                <div class="ten-frame-grid" id="interactiveTenFrame"></div>
-                <div class="mono" style="font-size:15px; font-weight:700; margin-top:6px;" id="tenFrameCountLabel">
-                  Count: 5 (5 + 0 = 5 | Make-10 Needs: 5 more)
-                </div>
-              </div>
-              <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="btn-3d" onclick="switchStage(2)">▶ Start Guided Practice Game</button>
-                <button class="btn-3d coral" onclick="switchStage(4)">⚔️ Take Unit Boss Gate Exam</button>
-              </div>
-            </div>
-          </div>
-
-          <h3 style="font-size: 17px; margin-bottom: 4px;">Complete 9-Category Asset Bundle for Selected Skill Topic</h3>
-          <p style="font-size: 12px; color: var(--ink-500);">
-            Every single one of the 614 Skill Topics includes dedicated Sounds, Images, Videos, Interactive Elements, Voice Narration, Animations, Games, Quizzes, and Assessments.
-          </p>
-          <div class="asset-grid" id="nineAssetsContainer"></div>
-        </div>
-
-        <!-- Stage 2, 3 & 4 Interactive Game / Quiz / Boss Gate Arena -->
-        <div id="arenaView" style="display:none;">
-          <div class="arena-box">
-            <div class="hud-bar">
-              <div>
-                <span class="pill gold" id="arenaModeLabel">Stage 4: Unit Boss Gate</span>
-                <span class="mono" style="margin-left:10px; font-size:14px;" id="arenaProgressLabel">Question 1 / 12</span>
-              </div>
-              <div style="display:flex; gap:12px; align-items:center;">
-                <span class="mono pill" id="arenaTimerPill">⏱️ 0.0s (Target ≤ 5.0s)</span>
-                <span class="mono pill teal" id="arenaStreakPill">🔥 Streak: 0</span>
-                <span class="mono pill" id="arenaLagQueuePill">🔄 Lag +2/+5/+10 Queue: 0</span>
-              </div>
-            </div>
-
-            <div class="question-prompt" id="arenaPromptText">Loading question...</div>
-            <div class="choices-grid" id="arenaChoicesContainer"></div>
-
-            <div id="arenaFeedbackBox" style="display:none; margin-top:18px; padding:16px; border-radius:14px; background:rgba(255,255,255,0.12);"></div>
-
-            <div id="gateSummaryReport" style="display:none; margin-top:20px; padding:20px; border-radius:16px; background:#FFFFFF; color:var(--ink-900);"></div>
-          </div>
-        </div>
+        <button class="duo-btn" style="width: 100%;" onclick="handleCreateAndLogin()">
+          START MY LEARNING JOURNEY →
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- Modal: Motor Calibration / Daily Brain Boost / Parent Analytics -->
+  <!-- ================= 2. DUOLINGO-STYLE JOURNEY MAP SCREEN ================= -->
+  <div id="mainAppScreen">
+    <!-- Left Navigation Sidebar -->
+    <aside class="left-sidebar">
+      <div style="display:flex; align-items:center; gap:10px; padding: 6px 12px 16px;">
+        <div style="width:40px; height:40px; border-radius:12px; background:var(--duo-green); color:#FFF; display:grid; place-items:center; font-size:22px; box-shadow:0 4px 0 var(--duo-green-dark);">🦉</div>
+        <span class="display-font nav-label-text" style="font-size:22px; color:var(--duo-green);">Balashikshana</span>
+      </div>
+
+      <div class="nav-item active" id="navLearn" onclick="switchMainTab('learn')">
+        <span style="font-size:22px;">🗺️</span>
+        <span class="nav-label-text">Learn Path</span>
+      </div>
+      <div class="nav-item" id="navPractice" onclick="openSpacedRepetitionModal()">
+        <span style="font-size:22px;">🌱</span>
+        <span class="nav-label-text">Brain Boost</span>
+      </div>
+      <div class="nav-item" id="navCalibrate" onclick="openCalibrationModal()">
+        <span style="font-size:22px;">🎈</span>
+        <span class="nav-label-text">Speed Check</span>
+      </div>
+      <div class="nav-item" id="navProfile" onclick="openStudentProfileModal()">
+        <span style="font-size:22px;">👤</span>
+        <span class="nav-label-text">My Progress</span>
+      </div>
+      <div class="nav-item" style="margin-top: auto;" onclick="logoutStudent()">
+        <span style="font-size:22px;">🚪</span>
+        <span class="nav-label-text">Switch Student</span>
+      </div>
+    </aside>
+
+    <!-- Center Winding S-Curve Journey Column -->
+    <main class="center-journey">
+      <!-- Top Sticky Bar -->
+      <div class="top-course-bar">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span id="studentHeaderBadge" style="font-weight:900; font-size:16px;">🦁 Aarav</span>
+          <select id="gradeDropdown" onchange="selectGrade(this.value)" style="padding:7px 12px; border-radius:12px; border:2px solid var(--duo-gray); font-weight:800; font-family:'Nunito',sans-serif;">
+            <option value="pre-k">Pre-K</option>
+            <option value="kindergarten">Kindergarten</option>
+            <option value="grade-1">1st Grade</option>
+            <option value="grade-2">2nd Grade</option>
+            <option value="grade-3">3rd Grade</option>
+          </select>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span class="stat-chip" style="color:#FF9600;" id="streakStat">🔥 7</span>
+          <span class="stat-chip" style="color:#1CB0F6;" id="coinsStat">💎 340</span>
+          <span class="stat-chip" style="color:#E5B400;" id="keysStat">🥇 2</span>
+          <span class="stat-chip" style="color:#FF4B4B;" id="heartsStat">❤️ 5</span>
+        </div>
+      </div>
+
+      <!-- Subject Track Pills -->
+      <div class="track-selector" id="subjectTrackBar"></div>
+
+      <!-- The Winding Journey Path of Units & Topic Stepping-Stone Nodes -->
+      <div id="journeyPathContainer"></div>
+    </main>
+
+    <!-- Right Sidebar: Active Student Progress & Daily Quests -->
+    <aside class="right-sidebar">
+      <div class="side-card">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div id="sideAvatar" style="width:52px; height:52px; border-radius:16px; background:#FFF4D6; font-size:30px; display:grid; place-items:center;">🦁</div>
+          <div>
+            <h3 id="sideStudentName" style="font-size:19px;">Aarav</h3>
+            <div id="sideStudentSub" style="font-size:13px; color:var(--duo-muted); font-weight:700;">Kindergarten Explorer</div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:13px; font-weight:800;">
+          <div style="padding:10px; background:#F7F7F7; border-radius:12px;">
+            <div style="color:var(--duo-muted); font-size:11px;">TOPICS DONE</div>
+            <div style="font-size:18px; color:var(--duo-green);" id="sideTopicsDone">0</div>
+          </div>
+          <div style="padding:10px; background:#F7F7F7; border-radius:12px;">
+            <div style="color:var(--duo-muted); font-size:11px;">UNITS MASTERED</div>
+            <div style="font-size:18px; color:var(--duo-blue);" id="sideUnitsMastered">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-card">
+        <h3 style="font-size:17px; margin-bottom:10px;">🎯 Daily Mastery Quests</h3>
+        <div style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; margin-bottom:4px;">
+            <span>⚡ Complete 1 Topic Node</span>
+            <span style="color:var(--duo-green);">+20 💎</span>
+          </div>
+          <div class="progress-track" style="height:10px;"><div class="progress-fill" style="width:65%;"></div></div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; margin-bottom:4px;">
+            <span>🏆 Pass a Unit Boss Gate</span>
+            <span style="color:var(--duo-gold-dark);">+1 Silver Key</span>
+          </div>
+          <div class="progress-track" style="height:10px;"><div class="progress-fill" style="width:40%; background:var(--duo-gold);"></div></div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; margin-bottom:4px;">
+            <span>🌱 Keep Memory Garden ≥80%</span>
+            <span style="color:var(--duo-blue);" id="sideGardenPct">96%</span>
+          </div>
+          <div class="progress-track" style="height:10px;"><div class="progress-fill" style="width:96%; background:var(--duo-blue);"></div></div>
+        </div>
+      </div>
+
+      <div class="side-card" style="background:#FFFBEB; border-color:#FDE68A;">
+        <h3 style="font-size:16px; color:#92400E; margin-bottom:6px;">🔒 Mastery Gate Rule</h3>
+        <p style="font-size:13px; color:#78350F; line-height:1.4; font-weight:700;">
+          Complete each <strong>Skill Topic Stepping Stone</strong> in order to unlock the <strong>Unit Trophy Boss Gate</strong>. Pass the Boss Gate with both <strong>Accuracy (%)</strong> and <strong>Speed (sec/item)</strong> to unlock the next Unit!
+        </p>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ================= 3. FULL-SCREEN DUOLINGO PRACTICE / BOSS GATE OVERLAY ================= -->
+  <div id="lessonOverlay">
+    <div class="lesson-top-bar">
+      <button onclick="closeLessonOverlay()" style="background:none; border:none; font-size:26px; color:var(--duo-gray-dark); cursor:pointer; font-weight:900;">✕</button>
+      <div class="progress-track">
+        <div class="progress-fill" id="lessonProgressBar"></div>
+      </div>
+      <span class="stat-chip mono" id="lessonTimerChip">⏱️ 0.0s</span>
+      <span class="stat-chip" style="color:#FF9600;" id="lessonStreakChip">🔥 0</span>
+    </div>
+
+    <div class="lesson-stage-center" id="lessonStageCenter">
+      <!-- Dynamic Question Content Injected Here -->
+    </div>
+
+    <div class="lesson-bottom-bar" id="lessonBottomBar">
+      <div class="bottom-inner" id="lessonBottomInner">
+        <div id="lessonFeedbackText" style="font-size:16px; font-weight:800;">
+          Select or build your answer above!
+        </div>
+        <button class="duo-btn" id="lessonActionBtn" onclick="handleCheckOrContinue()">
+          CHECK
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 4. NODE POPOVER / GUIDEBOOK / PROFILE MODAL ================= -->
   <div class="modal-backdrop" id="appModal">
     <div class="modal-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <h2 id="modalTitle">Modal</h2>
-        <button class="btn-3d secondary" onclick="closeModal()">✕ Close</button>
+        <h2 id="modalTitle" style="font-size:22px;">Topic</h2>
+        <button class="duo-btn outline" style="padding:6px 12px; font-size:13px;" onclick="closeModal()">✕</button>
       </div>
       <div id="modalBody"></div>
     </div>
@@ -440,43 +771,44 @@
 
   <script>
     const API_BASE = window.location.protocol + "//" + window.location.hostname + ":4000";
+
     let curriculumSummary = null;
-    let activeGradeId = "pre-k";
-    let activeSubjectKey = "math";
     let gradeCatalogCache = {};
-    let activeUnit = null;
-    let activeTopicIdx = 0;
-    let activeStage = 1;
-    let motorBaselineSec = 0.42;
-    let tenFrameState = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0];
+    let loggedInStudent = null;
+    let studentSummary = null;
+    let activeGradeId = "kindergarten";
+    let activeSubjectKey = "math";
 
-    // Multi-Student Profile & Per-Student Progress State
-    let allStudentsList = [];
-    let activeStudent = null;
-    let studentUnitProgress = {};
-    let studentTopicMastery = {};
+    // Active Practice / Boss Gate Session State
+    let sessionMode = "topic"; // "topic" | "boss"
+    let sessionUnitId = null;
+    let sessionTopicCode = null;
+    let sessionProblems = [];
+    let sessionIndex = 0;
+    let sessionResponses = [];
+    let sessionStreak = 0;
+    let sessionTargetSpeedSec = 5.0;
+    let questionStartTimeMs = 0;
+    let questionTimerInterval = null;
+    let currentSelectedAnswer = null;
+    let currentTileSelection = [];
+    let currentCounterCells = [];
+    let hasCheckedCurrentQuestion = false;
 
-    // Active Game / Gate state
-    let arenaQuestions = [];
-    let arenaIndex = 0;
-    let arenaStartTimeMs = 0;
-    let arenaTimerInterval = null;
-    let arenaResponses = [];
-    let arenaStreak = 0;
-    let expandingLagQueue = [];
-
-    const SUBJECT_LABELS = {
-      math: "📐 Mathematics",
-      ela: "📖 Language Arts (ELA)",
-      science: "🔬 Science (NGSS)",
-      socialStudies: "🌎 Social Studies (C3)"
+    const SUBJECT_NAMES = {
+      math: "📐 Math",
+      ela: "📖 Reading & ELA",
+      science: "🔬 Science",
+      socialStudies: "🌎 Social Studies"
     };
+
+    const WINDING_OFFSETS = [0, -52, -82, -46, 18, 68, 42, -16];
 
     function playSound(url) {
       try {
-        const audio = new Audio(url);
-        audio.volume = 0.6;
-        audio.play().catch(() => {});
+        const a = new Audio(url);
+        a.volume = 0.65;
+        a.play().catch(() => {});
       } catch (e) {}
     }
 
@@ -485,143 +817,106 @@
       window.speechSynthesis.cancel();
       const clean = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       const utter = new SpeechSynthesisUtterance(clean);
-      utter.rate = activeGradeId === "pre-k" ? 0.9 : 1.0;
-      utter.pitch = 1.08;
+      utter.rate = activeGradeId === "pre-k" ? 0.92 : 1.0;
+      utter.pitch = 1.06;
       window.speechSynthesis.speak(utter);
     }
 
-    function speakCurrentTopicIntro() {
-      if (!activeUnit) return;
-      const t = activeUnit.skillTopics[activeTopicIdx] || activeUnit.skillTopics[0];
-      if (t && t.assets && t.assets.voiceNarration) {
-        speakText(t.assets.voiceNarration.introPromptSsml);
-      }
-    }
-
-    async function initApp() {
+    async function boot() {
       const [currRes, stuRes] = await Promise.all([
         fetch(`${API_BASE}/api/curriculum/summary`),
         fetch(`${API_BASE}/api/students`)
       ]);
       curriculumSummary = await currRes.json();
       const stuData = await stuRes.json();
-      allStudentsList = stuData.students || [];
-      renderInteractiveTenFrame();
-      await switchStudentProfile(stuData.activeStudentId || (allStudentsList[0] && allStudentsList[0].studentId));
+      renderLoginScreen(stuData.students || []);
+
+      // Auto-restore logged in student if saved in sessionStorage
+      const savedId = sessionStorage.getItem("balashikshana_student_id");
+      if (savedId) {
+        await loginWithStudentId(savedId);
+      }
     }
 
-    function renderStudentSwitcher() {
-      const bar = document.getElementById("studentSwitcherBar");
-      bar.innerHTML = allStudentsList.map((s) => {
-        const isCurrent = activeStudent && activeStudent.studentId === s.studentId;
-        return `
-          <button class="tab-btn ${isCurrent ? 'active' : ''}"
-                  style="padding:6px 11px; font-size:13px; border-radius:999px;"
-                  onclick="switchStudentProfile('${s.studentId}')">
-            ${s.avatar} ${s.nickname} <span style="font-size:11px; opacity:0.8;">(${s.masteredUnitsCount}✓)</span>
-          </button>
-        `;
-      }).join("");
-    }
-
-    function updateHeaderStudentStats(summary) {
-      motorBaselineSec = summary.motorBaselineSec || 0.42;
-      document.getElementById("motorPill").textContent = `⚡ Motor: ${motorBaselineSec}s`;
-      document.getElementById("keysPill").textContent = `🔑 ${summary.goldKeysCount}🥇 ${summary.silverKeysCount}🥈`;
-      document.getElementById("coinsPill").textContent = `⭐ ${summary.starCoins} Coins (🔥${summary.streakDays}d)`;
-      document.getElementById("gardenPill").textContent = `🌱 Garden: ${summary.gardenHealthPct}% (${summary.dueSpacedReviewsCount} Due)`;
-    }
-
-    async function switchStudentProfile(studentId) {
-      if (!studentId) return;
-      const [detailRes, listRes] = await Promise.all([
-        fetch(`${API_BASE}/api/students/${studentId}`),
-        fetch(`${API_BASE}/api/students`)
-      ]);
-      const detail = await detailRes.json();
-      const listData = await listRes.json();
-      allStudentsList = listData.students || [];
-      activeStudent = detail.student;
-      studentUnitProgress = activeStudent.unitProgress || {};
-      studentTopicMastery = activeStudent.topicMastery || {};
-      updateHeaderStudentStats(detail.summary);
-      renderStudentSwitcher();
-      await selectGrade(activeStudent.currentGrade || "kindergarten");
-    }
-
-    function openNewStudentModal() {
-      const modal = document.getElementById("appModal");
-      document.getElementById("modalTitle").textContent = "👧👦 Create New Student Profile";
-      document.getElementById("modalBody").innerHTML = `
-        <p style="margin-bottom:14px; color:var(--ink-700); font-size:14px;">
-          Each student gets an independent Mastery DAG, personal Motor-Latency Baseline ($T_{\\text{motor}}$), Silver/Gold Sleep-Consolidation Keys, and FSRS Spaced-Repetition Queue.
-        </p>
-        <div style="display:grid; gap:12px; max-width:480px;">
-          <label style="font-weight:800; font-size:13px;">
-            Student Nickname:
-            <input id="newStuName" type="text" placeholder="e.g., Sofia" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;" />
-          </label>
-          <label style="font-weight:800; font-size:13px;">
-            Choose Avatar:
-            <select id="newStuAvatar" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;">
-              <option value="🐼">🐼 Panda</option>
-              <option value="🦁">🦁 Lion</option>
-              <option value="🦊">🦊 Fox</option>
-              <option value="🚀">🚀 Rocket Explorer</option>
-              <option value="🦄">🦄 Unicorn</option>
-              <option value="🦖">🦖 Dino</option>
-              <option value="🦉">🦉 Wise Owl</option>
-              <option value="🐬">🐬 Dolphin</option>
-            </select>
-          </label>
-          <label style="font-weight:800; font-size:13px;">
-            Age (Years):
-            <input id="newStuAge" type="number" min="3" max="9" value="6" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;" />
-          </label>
-          <label style="font-weight:800; font-size:13px;">
-            Assigned Starting Grade:
-            <select id="newStuGrade" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;">
-              <option value="pre-k">Pre-K (3–4 yrs)</option>
-              <option value="kindergarten">Kindergarten (5–6 yrs)</option>
-              <option value="grade-1" selected>Grade 1 (6–7 yrs)</option>
-              <option value="grade-2">Grade 2 (7–8 yrs)</option>
-              <option value="grade-3">Grade 3 (8–9 yrs)</option>
-            </select>
-          </label>
-          <button class="btn-3d" onclick="createNewStudentProfile()">✓ Create Student &amp; Start Learning</button>
+    function renderLoginScreen(students) {
+      const list = document.getElementById("loginStudentsList");
+      list.innerHTML = students.map((s) => `
+        <div class="student-login-Option" onclick="loginWithStudentId('${s.studentId}')">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:34px;">${s.avatar}</span>
+            <div>
+              <div style="font-weight:900; font-size:17px;">${s.nickname}</div>
+              <div style="font-size:13px; color:var(--duo-muted); font-weight:700;">
+                ${s.currentGrade.toUpperCase()} • ${s.completedTopicsCount || 0} Topics • ${s.masteredUnitsCount || 0} Units Mastered
+              </div>
+            </div>
+          </div>
+          <span class="duo-btn blue" style="padding:8px 14px; font-size:13px;">LOG IN →</span>
         </div>
-      `;
-      modal.classList.add("open");
+      `).join("");
     }
 
-    async function createNewStudentProfile() {
-      const nickname = document.getElementById("newStuName").value.trim() || "Explorer";
-      const avatar = document.getElementById("newStuAvatar").value;
-      const ageYears = Number(document.getElementById("newStuAge").value) || 6;
-      const currentGrade = document.getElementById("newStuGrade").value;
+    async function loginWithStudentId(studentId) {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId })
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      loggedInStudent = data.student;
+      studentSummary = data.summary;
+      sessionStorage.setItem("balashikshana_student_id", loggedInStudent.studentId);
+
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("mainAppScreen").style.display = "grid";
+
+      updateStudentHud();
+      await selectGrade(loggedInStudent.currentGrade || "kindergarten");
+    }
+
+    async function handleCreateAndLogin() {
+      const nickname = document.getElementById("signupName").value.trim() || "Explorer";
+      const avatar = document.getElementById("signupAvatar").value;
+      const currentGrade = document.getElementById("signupGrade").value;
       const res = await fetch(`${API_BASE}/api/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nickname, avatar, ageYears, currentGrade })
+        body: JSON.stringify({ nickname, avatar, currentGrade })
       });
-      const created = await res.json();
-      closeModal();
+      const data = await res.json();
       playSound("/assets/sounds/sfx_star_fanfare.wav");
-      await switchStudentProfile(created.student.studentId);
+      await loginWithStudentId(data.student.studentId);
     }
 
-    function renderGradeTabs() {
-      const container = document.getElementById("gradeTabs");
-      container.innerHTML = curriculumSummary.grades.map((g) => `
-        <button class="tab-btn ${g.gradeId === activeGradeId ? 'active' : ''}" onclick="selectGrade('${g.gradeId}')">
-          ${g.gradeName} <span style="font-size:11px; opacity:0.8;">(${g.targetAgeYears}y)</span>
-        </button>
-      `).join("");
+    async function logoutStudent() {
+      sessionStorage.removeItem("balashikshana_student_id");
+      const stuRes = await fetch(`${API_BASE}/api/students`);
+      const stuData = await stuRes.json();
+      renderLoginScreen(stuData.students || []);
+      document.getElementById("mainAppScreen").style.display = "none";
+      document.getElementById("loginScreen").style.display = "flex";
+    }
+
+    function updateStudentHud() {
+      if (!loggedInStudent || !studentSummary) return;
+      document.getElementById("studentHeaderBadge").textContent = `${loggedInStudent.avatar} ${loggedInStudent.nickname}`;
+      document.getElementById("streakStat").textContent = `🔥 ${studentSummary.streakDays}`;
+      document.getElementById("coinsStat").textContent = `💎 ${studentSummary.starCoins}`;
+      document.getElementById("keysStat").textContent = `🥇 ${studentSummary.goldKeysCount} 🥈 ${studentSummary.silverKeysCount}`;
+      document.getElementById("heartsStat").textContent = `❤️ ${studentSummary.hearts || 5}`;
+
+      document.getElementById("sideAvatar").textContent = loggedInStudent.avatar;
+      document.getElementById("sideStudentName").textContent = loggedInStudent.nickname;
+      document.getElementById("sideStudentSub").textContent = `Grade: ${loggedInStudent.currentGrade.toUpperCase()} • Tap Speed: ${loggedInStudent.motorBaselineSec}s`;
+      document.getElementById("sideTopicsDone").textContent = `${studentSummary.completedTopicsCount || 0}`;
+      document.getElementById("sideUnitsMastered").textContent = `${studentSummary.masteredUnitsCount || 0}`;
+      document.getElementById("sideGardenPct").textContent = `${studentSummary.gardenHealthPct || 100}%`;
     }
 
     async function selectGrade(gradeId) {
       activeGradeId = gradeId;
-      renderGradeTabs();
+      document.getElementById("gradeDropdown").value = gradeId;
       if (!gradeCatalogCache[gradeId]) {
         const res = await fetch(`/assets/catalogs/${gradeId}-skill-topic-assets.json`);
         gradeCatalogCache[gradeId] = await res.json();
@@ -631,527 +926,670 @@
       if (!availSubjects.includes(activeSubjectKey)) {
         activeSubjectKey = availSubjects[0];
       }
-      renderSubjectTabs(availSubjects);
-      selectSubject(activeSubjectKey);
+      renderSubjectTrackBar(availSubjects);
+      renderJourneyPath();
     }
 
-    function renderSubjectTabs(availSubjects) {
-      const container = document.getElementById("subjectTabs");
-      container.innerHTML = availSubjects.map((s) => `
-        <button class="tab-btn ${s === activeSubjectKey ? 'subj-active' : ''}" onclick="selectSubject('${s}')">
-          ${SUBJECT_LABELS[s] || s}
+    function renderSubjectTrackBar(availSubjects) {
+      const bar = document.getElementById("subjectTrackBar");
+      bar.innerHTML = availSubjects.map((s) => `
+        <button class="track-pill ${s === activeSubjectKey ? 'active' : ''}" onclick="selectSubjectTrack('${s}')">
+          ${SUBJECT_NAMES[s] || s}
         </button>
       `).join("");
     }
 
-    function isUnitUnlocked(unit) {
-      if (!unit.prerequisiteUnitIds || unit.prerequisiteUnitIds.length === 0) return true;
-      if (unit.sequenceOrder === 1) return true;
-      return unit.prerequisiteUnitIds.every((pid) => {
-        const p = studentUnitProgress[pid];
-        return p && p.status === "MASTERED";
-      });
-    }
-
-    function selectSubject(subjKey) {
+    function selectSubjectTrack(subjKey) {
       activeSubjectKey = subjKey;
       const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
-      renderSubjectTabs(Object.keys(gradeObj.subjects));
-      const subj = gradeObj.subjects[subjKey];
-      const stuName = activeStudent ? `${activeStudent.avatar} ${activeStudent.nickname} — ` : "";
-      document.getElementById("unitListHeading").textContent = `${stuName}${gradeObj.gradeName} ${SUBJECT_LABELS[subjKey]}`;
-      document.getElementById("unitCountBadge").textContent = `${subj.totalUnits} Units • ${subj.totalSkillTopics} Topics`;
-      renderUnitList(subj.units);
-      selectUnit(subj.units[0].unitId);
+      renderSubjectTrackBar(Object.keys(gradeObj.subjects));
+      renderJourneyPath();
     }
 
-    function renderUnitList(units) {
-      const container = document.getElementById("unitListContainer");
-      container.innerHTML = units.map((u) => {
-        const unlocked = isUnitUnlocked(u);
-        const prog = studentUnitProgress[u.unitId];
-        const mastered = prog && prog.status === "MASTERED";
-        const keyBadge = prog && prog.keyState === "GOLD_KEY"
-          ? "🥇 Gold Key (Sleep-Consolidated)"
-          : prog && prog.keyState === "SILVER_KEY"
-          ? "🥈 Silver Key (Day-2 Check Ready)"
-          : prog && prog.status === "REMEDIATION_REQUIRED"
-          ? "🔄 Remediation Prescribed"
-          : "";
-        const perfStats = prog
-          ? `<div style="margin-top:4px; font-size:11px; color:var(--teal-700); font-weight:800;">
-               Student Best: ${prog.bestAccuracyPct}% Acc • ${prog.bestMedianSpeedSec}s Speed (${prog.attemptsCount || 1}x)
-             </div>`
-          : "";
+    function isUnitUnlockedForStudent(unit) {
+      if (unit.sequenceOrder === 1) return true;
+      if (!unit.prerequisiteUnitIds || unit.prerequisiteUnitIds.length === 0) return true;
+      const up = loggedInStudent?.unitProgress || {};
+      return unit.prerequisiteUnitIds.every((pid) => up[pid] && up[pid].status === "MASTERED");
+    }
+
+    function renderJourneyPath() {
+      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
+      const units = gradeObj.subjects[activeSubjectKey].units;
+      const tm = loggedInStudent?.topicMastery || {};
+      const up = loggedInStudent?.unitProgress || {};
+
+      let foundCurrentActiveNode = false;
+      const container = document.getElementById("journeyPathContainer");
+
+      container.innerHTML = units.map((unit, uIdx) => {
+        const unitUnlocked = isUnitUnlockedForStudent(unit);
+        const uProg = up[unit.unitId];
+        const unitMastered = uProg && uProg.status === "MASTERED";
+        const themeClass = unitUnlocked ? `theme-${uIdx % 4}` : "theme-locked";
+
+        // Build stepping-stone nodes for each Skill Topic in this unit
+        const topicNodesHtml = unit.skillTopics.map((topic, tIdx) => {
+          const fullKey = `${unit.unitId}-${topic.code}`;
+          const tProg = tm[fullKey];
+          const isCompleted = Boolean(tProg && tProg.completed) || unitMastered;
+
+          let isCurrent = false;
+          if (unitUnlocked && !isCompleted && !foundCurrentActiveNode) {
+            isCurrent = true;
+            foundCurrentActiveNode = true;
+          }
+
+          const nodeUnlocked = isCompleted || isCurrent;
+          const offset = WINDING_OFFSETS[tIdx % WINDING_OFFSETS.length];
+          const crowns = isCompleted ? (tProg?.crowns || 3) : 0;
+
+          return `
+            <div class="path-node-wrapper" style="transform: translateX(${offset}px);">
+              ${isCurrent ? `<div class="start-tooltip">START TOPIC ${topic.code}</div>` : ""}
+              <button class="path-node ${isCompleted ? 'completed' : isCurrent ? 'current' : 'locked'}"
+                      onclick="onTopicNodeClick('${unit.unitId}', '${topic.code}', ${nodeUnlocked})">
+                ${isCompleted ? "✓" : isCurrent ? "★" : "🔒"}
+              </button>
+              <div class="node-caption">
+                <strong>${topic.code}.</strong> ${topic.name.length > 34 ? topic.name.slice(0, 34) + "…" : topic.name}
+                ${crowns > 0 ? `<div class="crown-strip">${"👑".repeat(crowns)}</div>` : ""}
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        // End-of-Unit Trophy Boss Gate Node
+        const allTopicsCompleted = unit.skillTopics.every((t) => tm[`${unit.unitId}-${t.code}`]?.completed) || unitMastered;
+        const bossNodeClass = unitMastered ? "completed" : allTopicsCompleted ? "unlocked" : "locked";
+
         return `
-          <div class="unit-node ${activeUnit && activeUnit.unitId === u.unitId ? 'selected' : ''} ${!unlocked ? 'locked' : ''}"
-               onclick="handleUnitClick('${u.unitId}', ${unlocked})">
-            <div class="unit-header">
-              <span class="unit-code">${u.unitId}</span>
-              <span class="status-badge status-${mastered ? 'MASTERED' : unlocked ? 'READY' : 'LOCKED'}">
-                ${mastered ? '✓ MASTERED' : unlocked ? 'UNLOCKED' : '🔒 LOCKED BY GATE'}
-              </span>
+          <section class="unit-section">
+            <div class="unit-banner ${themeClass}">
+              <div>
+                <div style="font-size:12px; font-weight:900; text-transform:uppercase; opacity:0.9;">
+                  UNIT ${unit.sequenceOrder} • ${unit.unitId} ${unitMastered ? "• 🏆 MASTERED" : !unitUnlocked ? "• 🔒 COMPLETE PREVIOUS UNIT TO UNLOCK" : ""}
+                </div>
+                <h2 style="font-size:22px; margin-top:2px;">${unit.title}</h2>
+                <div style="font-size:12px; font-weight:700; margin-top:4px; opacity:0.92;">
+                  ${unit.skillTopics.length} Stepping-Stone Topics • Boss Gate: ≥${unit.masteryGate.minAccuracyPercent}% Acc &amp; ≤${unit.masteryGate.maxMedianResponseTimeSec}s Speed
+                </div>
+              </div>
+              <button class="duo-btn outline" style="padding:10px 14px; font-size:13px; flex-shrink:0;"
+                      onclick="openUnitGuidebook('${unit.unitId}')">
+                📖 GUIDEBOOK
+              </button>
             </div>
-            <div style="font-weight:800; font-size:15px; margin-bottom:4px;">${u.title}</div>
-            <div style="font-size:12px; color:var(--ink-500); display:flex; justify-content:space-between;">
-              <span>${u.skillTopics.length} Skill Topics</span>
-              <span>Gate: ≥${u.masteryGate.minAccuracyPercent}% &amp; ≤${u.masteryGate.maxMedianResponseTimeSec}s</span>
+
+            <div class="winding-path">
+              ${topicNodesHtml}
+
+              <!-- Unit Boss Gate Trophy Node -->
+              <div class="path-node-wrapper" style="margin-top:8px;">
+                ${allTopicsCompleted && !unitMastered ? `<div class="start-tooltip" style="color:var(--duo-purple-dark);">UNLOCK NEXT UNIT!</div>` : ""}
+                <button class="path-node boss-gate ${bossNodeClass}"
+                        onclick="onBossGateNodeClick('${unit.unitId}', ${allTopicsCompleted})">
+                  🏆
+                </button>
+                <div class="node-caption" style="font-weight:900;">
+                  ${unit.unitId} Unit Boss Gate
+                  <div style="font-size:11px; color:var(--duo-muted);">
+                    ${unitMastered ? `🥇 Passed (${uProg.bestAccuracyPct}% • ${uProg.bestMedianSpeedSec}s)` : allTopicsCompleted ? "Ready for Assessment!" : "Complete all topics above first"}
+                  </div>
+                </div>
+              </div>
             </div>
-            ${perfStats}
-            ${keyBadge ? `<div style="margin-top:4px; font-size:11px; font-weight:800; color:#B45309;">${keyBadge}</div>` : ""}
-          </div>
+          </section>
         `;
       }).join("");
     }
 
-    function handleUnitClick(unitId, unlocked) {
-      if (!unlocked) {
+    function onTopicNodeClick(unitId, topicCode, nodeUnlocked) {
+      if (!nodeUnlocked) {
         playSound("/assets/sounds/sfx_gentle_nudge.wav");
-        alert("🔒 Mastery Gate Locked!\n\nYou must complete the prerequisite Unit Assessment with the required Accuracy (%) and Fluency Speed (sec/item) before unlocking this unit.");
+        const modal = document.getElementById("appModal");
+        document.getElementById("modalTitle").textContent = "🔒 Stepping Stone Locked";
+        document.getElementById("modalBody").innerHTML = `
+          <p style="font-size:15px; font-weight:700; color:var(--duo-muted); margin-bottom:18px;">
+            Complete the glowing <strong>★ START</strong> stepping-stone node above first! Topics progress step-by-step along the journey path.
+          </p>
+          <button class="duo-btn" style="width:100%;" onclick="closeModal()">GOT IT!</button>
+        `;
+        modal.classList.add("open");
         return;
       }
-      selectUnit(unitId);
-    }
 
-    async function selectUnit(unitId) {
-      const res = await fetch(`${API_BASE}/api/curriculum/unit/${unitId}`);
-      const data = await res.json();
-      activeUnit = data.unit;
-      activeTopicIdx = 0;
+      const catalog = gradeCatalogCache[activeGradeId];
+      const entry = catalog.skillTopicAssets.find((item) => item.unitId === unitId && item.skillTopicCode === topicCode);
+      const tProg = loggedInStudent?.topicMastery?.[`${unitId}-${topicCode}`];
 
-      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
-      renderUnitList(gradeObj.subjects[activeSubjectKey].units);
+      playSound("/assets/sounds/sfx_count_pop.wav");
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = `${unitId} • Topic ${topicCode}: ${entry ? entry.skillTopicName : topicCode}`;
+      document.getElementById("modalBody").innerHTML = `
+        <div style="background:#F8FAFC; border:2px solid var(--duo-gray); border-radius:18px; padding:16px; margin-bottom:16px; text-align:center;">
+          <img src="/${entry ? entry.assets.images.primaryIllustrationSvg : 'assets/images/ten_frame_and_number_line.svg'}"
+               style="max-width:100%; height:160px; object-fit:contain; border-radius:10px;" alt="Topic visual" />
+          <div style="margin-top:10px; font-size:13px; font-weight:800; color:var(--duo-muted);">
+            ${(entry?.assets?.interactiveElements?.guidedStudySteps || []).join("<br>")}
+          </div>
+        </div>
 
-      document.getElementById("activeUnitIdBadge").textContent = activeUnit.unitId;
-      document.getElementById("activePrereqBadge").textContent =
-        activeUnit.prerequisiteUnitIds.length > 0 ? `Prereq: ${activeUnit.prerequisiteUnitIds.join(", ")}` : "Entry Unit";
-      document.getElementById("activeGateBadge").textContent =
-        `Gate: ≥${activeUnit.masteryGate.minAccuracyPercent}% Acc & ≤${activeUnit.masteryGate.maxMedianResponseTimeSec}s Speed`;
-      document.getElementById("activeUnitTitle").textContent = activeUnit.title;
+        ${tProg ? `
+          <div style="margin-bottom:16px; padding:12px; border-radius:14px; background:#D7FFB8; color:#2B6600; font-weight:800; font-size:14px;">
+            ✓ Completed (${"👑".repeat(tProg.crowns || 1)}) • Best Accuracy: ${tProg.accuracyPct}% • Speed: ${tProg.medianSpeedSec}s • Memory Stability: ${tProg.stabilityDays}d
+          </div>
+        ` : ""}
 
-      renderTopicStrip();
-      selectTopic(0);
-      switchStage(1);
-    }
-
-    function renderTopicStrip() {
-      const strip = document.getElementById("topicStripContainer");
-      strip.innerHTML = activeUnit.skillTopics.map((t, idx) => `
-        <button class="topic-chip ${idx === activeTopicIdx ? 'active' : ''}" onclick="selectTopic(${idx})">
-          <strong>${t.code}.</strong> ${t.name.length > 42 ? t.name.slice(0, 42) + "…" : t.name}
-        </button>
-      `).join("");
-    }
-
-    function selectTopic(idx) {
-      activeTopicIdx = idx;
-      renderTopicStrip();
-      const topic = activeUnit.skillTopics[idx];
-      const a = topic.assets;
-      playSound("/" + a.sounds.primarySfx);
-
-      document.getElementById("topicSvgImage").src = "/" + a.images.primaryIllustrationSvg;
-      document.getElementById("manipWidgetTitle").textContent = `${a.interactiveElements.widgetType} — Topic ${topic.code}: ${topic.name}`;
-      document.getElementById("manipStepsText").innerHTML = (a.interactiveElements.guidedStudySteps || []).join("<br>");
-
-      const container = document.getElementById("nineAssetsContainer");
-      container.innerHTML = `
-        <div class="asset-box">
-          <h4>1. Sounds <span>🔊</span></h4>
-          <div><strong>Primary SFX:</strong> <code>${a.sounds.primarySfx.split("/").pop()}</code></div>
-          <div><strong>Cues:</strong> ${a.sounds.domainAudioCues.join(", ")}</div>
-          <button class="btn-3d secondary" style="margin-top:8px; padding:5px 10px; font-size:12px;" onclick="playSound('/${a.sounds.primarySfx}')">▶ Play Topic SFX</button>
-        </div>
-        <div class="asset-box">
-          <h4>2. Images (CPA Vector) <span>🖼️</span></h4>
-          <div><strong>SVG:</strong> <code>${a.images.primaryIllustrationSvg.split("/").pop()}</code></div>
-          <div><strong>Cards:</strong> ${a.images.topicFlashcardSvgs.slice(0, 3).join(", ")}</div>
-        </div>
-        <div class="asset-box">
-          <h4>3. Micro-Lesson Video <span>🎬</span></h4>
-          <div><strong>${a.videos.title}</strong> (${a.videos.durationSec}s)</div>
-          <div>3 Scenes: Hook -> Manipulative -> Pause &amp; Predict</div>
-        </div>
-        <div class="asset-box">
-          <h4>4. Interactive Element <span>🧩</span></h4>
-          <div><strong>Widget:</strong> <code>${a.interactiveElements.widgetType}</code></div>
-          <div><strong>Gesture:</strong> ${a.interactiveElements.interactionGesture}</div>
-        </div>
-        <div class="asset-box">
-          <h4>5. Voice Narration (SSML) <span>🎙️</span></h4>
-          <div><strong>Persona:</strong> ${a.voiceNarration.voicePersona} (${a.voiceNarration.speakingRateWpm} WPM)</div>
-          <button class="btn-3d secondary" style="margin-top:8px; padding:5px 10px; font-size:12px;" onclick="speakCurrentTopicIntro()">🔊 Speak Prompt</button>
-        </div>
-        <div class="asset-box">
-          <h4>6. Animations (60-120fps) <span>✨</span></h4>
-          <div><strong>Engine:</strong> ${a.animations.engine}</div>
-          <div><strong>States:</strong> ${a.animations.stateMachineStates.map(s => s.state).slice(0, 4).join(", ")}</div>
-        </div>
-        <div class="asset-box">
-          <h4>7. Stage 2 &amp; 3 Games <span>🎮</span></h4>
-          <div><strong>Guided:</strong> <code>${a.games.guidedPracticeGame.archetype}</code></div>
-          <div><strong>Fluency:</strong> <code>${a.games.fluencySprintGame.archetype}</code> (≤${a.games.fluencySprintGame.targetResponseSpeedSec}s)</div>
-        </div>
-        <div class="asset-box">
-          <h4>8. Formative Quiz <span>📝</span></h4>
-          <div><strong>Items:</strong> ${a.quizzes.itemCount} questions + 3 misconception distractors</div>
-          <div><strong>Micro-Spacing:</strong> Lag +${a.quizzes.intraSessionExpandingLagsOnMiss.join("/+")}</div>
-        </div>
-        <div class="asset-box">
-          <h4>9. Boss Gate Assessment <span>🏆</span></h4>
-          <div><strong>Gate Quota:</strong> ${a.assessments.unitBossGateQuotaItems} items | Floor: ≥${a.assessments.minTopicAccuracyFloorPercent}%</div>
-          <div><strong>FSRS Schedule:</strong> [${a.assessments.spacedRepetitionScheduleDays.join("d, ")}d]</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="duo-btn blue" style="flex:1;" onclick="speakText(${JSON.stringify(entry?.assets?.voiceNarration?.introPromptSsml || 'Let us practice!')})">
+            🔊 LISTEN LESSON
+          </button>
+          <button class="duo-btn" style="flex:2;" onclick="closeModal(); startTopicPracticeSession('${unitId}', '${topicCode}')">
+            ▶ START PRACTICE (8 PROBLEMS)
+          </button>
         </div>
       `;
+      modal.classList.add("open");
     }
 
-    function renderInteractiveTenFrame() {
-      const grid = document.getElementById("interactiveTenFrame");
-      const count = tenFrameState.reduce((acc, v) => acc + v, 0);
-      grid.innerHTML = tenFrameState.map((val, i) => `
-        <div class="tf-cell" onclick="toggleTenFrameCell(${i})">
-          ${val ? `<div class="tf-token ${i >= 5 ? 'blue' : ''}"></div>` : ""}
-        </div>
-      `).join("");
-      document.getElementById("tenFrameCountLabel").textContent =
-        `Count: ${count} (${Math.min(5, count)} + ${Math.max(0, count - 5)} = ${count} | Make-10 Needs: ${10 - count} more)`;
-    }
-
-    function toggleTenFrameCell(idx) {
-      tenFrameState[idx] = tenFrameState[idx] ? 0 : 1;
-      playSound("/assets/sounds/sfx_count_pop.wav");
-      renderInteractiveTenFrame();
-    }
-
-    async function switchStage(stageNum) {
-      activeStage = stageNum;
-      for (let i = 1; i <= 4; i++) {
-        document.getElementById(`stageTab${i}`).classList.toggle("active", i === stageNum);
-      }
-      if (stageNum === 1) {
-        if (arenaTimerInterval) clearInterval(arenaTimerInterval);
-        document.getElementById("stage1View").style.display = "block";
-        document.getElementById("arenaView").style.display = "none";
+    function onBossGateNodeClick(unitId, unlocked) {
+      if (!unlocked) {
+        playSound("/assets/sounds/sfx_gentle_nudge.wav");
+        const modal = document.getElementById("appModal");
+        document.getElementById("modalTitle").textContent = "🏆 Unit Boss Gate Locked";
+        document.getElementById("modalBody").innerHTML = `
+          <p style="font-size:15px; font-weight:700; color:var(--duo-muted); margin-bottom:18px;">
+            Finish all <strong>Skill Topic Stepping Stones</strong> in <strong>${unitId}</strong> first! Once every topic in this unit is completed, the Boss Gate unlocks to test your Accuracy (%) and Speed (sec/item).
+          </p>
+          <button class="duo-btn" style="width:100%;" onclick="closeModal()">BACK TO PATH</button>
+        `;
+        modal.classList.add("open");
         return;
       }
+      startUnitBossGateSession(unitId);
+    }
 
-      document.getElementById("stage1View").style.display = "none";
-      document.getElementById("arenaView").style.display = "block";
-      document.getElementById("gateSummaryReport").style.display = "none";
-      document.getElementById("arenaFeedbackBox").style.display = "none";
-
-      const count = stageNum === 4 ? activeUnit.masteryGate.questionCount : 6;
-      const res = await fetch(`${API_BASE}/api/curriculum/unit/${activeUnit.unitId}?count=${count}`);
+    async function openUnitGuidebook(unitId) {
+      const res = await fetch(`${API_BASE}/api/curriculum/unit/${unitId}?count=3`);
       const data = await res.json();
-      arenaQuestions = data.generatedQuestions;
-      arenaIndex = 0;
-      arenaResponses = [];
-      arenaStreak = 0;
-      expandingLagQueue = [];
-
-      const labels = {
-        2: `Stage 2: Guided Practice (${activeUnit.skillTopics[activeTopicIdx].assets.games.guidedPracticeGame.archetype})`,
-        3: `Stage 3: Fluency Zone Sprint (70/20/10 Spiral Mix)`,
-        4: `Stage 4: Unit Boss Gate Assessment (Strict Accuracy + Speed Lock)`
-      };
-      document.getElementById("arenaModeLabel").textContent = labels[stageNum];
-      renderArenaQuestion();
+      const u = data.unit;
+      const firstTopic = u.skillTopics[0];
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = `📖 ${u.unitId} Guidebook: ${u.title}`;
+      document.getElementById("modalBody").innerHTML = `
+        <div style="text-align:center; background:#FFFBEB; border:2px solid #FDE68A; border-radius:18px; padding:16px; margin-bottom:16px;">
+          <img src="/${firstTopic.assets.images.primaryIllustrationSvg}" style="max-width:100%; height:170px; object-fit:contain;" alt="Guidebook illustration" />
+          <div style="margin-top:8px;">
+            <button class="duo-btn blue" style="padding:8px 14px; font-size:12px;"
+                    onclick="speakText(${JSON.stringify(firstTopic.assets.voiceNarration.introPromptSsml)})">
+              🔊 Narrate Unit Concept
+            </button>
+          </div>
+        </div>
+        <h4 style="margin-bottom:8px;">Skill Topics in this Unit (${u.skillTopics.length}):</h4>
+        <div style="display:grid; gap:8px; margin-bottom:16px;">
+          ${u.skillTopics.map((t) => `
+            <div style="padding:10px 14px; border:2px solid var(--duo-gray); border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+              <span><strong>${t.code}.</strong> ${t.name}</span>
+              <button class="duo-btn" style="padding:6px 12px; font-size:12px;" onclick="closeModal(); startTopicPracticeSession('${u.unitId}', '${t.code}')">
+                PRACTICE
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      `;
+      modal.classList.add("open");
     }
 
-    function renderArenaQuestion() {
-      if (arenaTimerInterval) clearInterval(arenaTimerInterval);
-      if (arenaIndex >= arenaQuestions.length) {
-        finishArenaSession();
+    /* ================= INTERACTIVE PRACTICE & BOSS GATE RUNNER ================= */
+    async function startTopicPracticeSession(unitId, topicCode) {
+      const res = await fetch(`${API_BASE}/api/practice/topic/${unitId}/${topicCode}?count=8`);
+      const data = await res.json();
+      sessionMode = "topic";
+      sessionUnitId = unitId;
+      sessionTopicCode = topicCode;
+      sessionProblems = data.practiceProblems;
+      sessionTargetSpeedSec = data.targetSpeedSec || 5.0;
+      launchSessionRunner();
+    }
+
+    async function startUnitBossGateSession(unitId) {
+      const res = await fetch(`${API_BASE}/api/curriculum/unit/${unitId}`);
+      const data = await res.json();
+      sessionMode = "boss";
+      sessionUnitId = unitId;
+      sessionTopicCode = null;
+      sessionProblems = data.generatedQuestions;
+      sessionTargetSpeedSec = data.unit.masteryGate.maxMedianResponseTimeSec || 5.0;
+      launchSessionRunner();
+    }
+
+    function launchSessionRunner() {
+      sessionIndex = 0;
+      sessionResponses = [];
+      sessionStreak = 0;
+      document.getElementById("lessonOverlay").classList.add("open");
+      renderCurrentSessionProblem();
+    }
+
+    function closeLessonOverlay() {
+      if (questionTimerInterval) clearInterval(questionTimerInterval);
+      document.getElementById("lessonOverlay").classList.remove("open");
+    }
+
+    function renderCurrentSessionProblem() {
+      if (questionTimerInterval) clearInterval(questionTimerInterval);
+      if (sessionIndex >= sessionProblems.length) {
+        finishSessionAndGrade();
         return;
       }
 
-      const q = arenaQuestions[arenaIndex];
-      document.getElementById("arenaProgressLabel").textContent = `Question ${arenaIndex + 1} / ${arenaQuestions.length}`;
-      document.getElementById("arenaStreakPill").textContent = `🔥 Streak: ${arenaStreak}`;
-      document.getElementById("arenaLagQueuePill").textContent = `🔄 Lag +2/+5/+10 Queue: ${expandingLagQueue.length}`;
-      document.getElementById("arenaPromptText").textContent = q.prompt;
-      document.getElementById("arenaFeedbackBox").style.display = "none";
+      hasCheckedCurrentQuestion = false;
+      currentSelectedAnswer = null;
+      currentTileSelection = [];
 
-      const shuffled = [...q.choices].sort(() => Math.random() - 0.5);
-      document.getElementById("arenaChoicesContainer").innerHTML = shuffled.map((c, i) => `
-        <button class="choice-btn" id="choiceBtn_${i}" onclick="submitArenaAnswer(${i}, ${JSON.stringify(c).replace(/"/g, '&quot;')})">
-          ${c}
-        </button>
-      `).join("");
+      const q = sessionProblems[sessionIndex];
+      const pct = Math.round((sessionIndex / sessionProblems.length) * 100);
+      document.getElementById("lessonProgressBar").style.width = `${pct}%`;
+      document.getElementById("lessonStreakChip").textContent = `🔥 ${sessionStreak}`;
 
-      arenaStartTimeMs = performance.now();
-      const targetSec = activeUnit.masteryGate.maxMedianResponseTimeSec;
-      arenaTimerInterval = setInterval(() => {
-        const elapsed = ((performance.now() - arenaStartTimeMs) / 1000).toFixed(1);
-        document.getElementById("arenaTimerPill").textContent = `⏱️ ${elapsed}s (Target ≤ ${targetSec}s)`;
+      // Reset bottom bar
+      const bottomBar = document.getElementById("lessonBottomBar");
+      bottomBar.className = "lesson-bottom-bar";
+      document.getElementById("lessonFeedbackText").innerHTML = `<span style="color:var(--duo-muted);">Target Fluency Speed: ≤ ${sessionTargetSpeedSec}s</span>`;
+      const actionBtn = document.getElementById("lessonActionBtn");
+      actionBtn.textContent = "CHECK";
+      actionBtn.className = "duo-btn";
+
+      const stage = document.getElementById("lessonStageCenter");
+
+      if (q.interactionType === "interactive-counter") {
+        const maxCells = q.maxCounterCells || 10;
+        currentCounterCells = Array.from({ length: maxCells }, () => 0);
+        stage.innerHTML = `
+          <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:var(--duo-blue); margin-bottom:8px;">
+            HANDS-ON MANIPULATIVE • TOPIC ${q.topicCode}: ${q.topicName}
+          </div>
+          <div class="speech-prompt-row">
+            <div class="mascot-avatar-sm">${loggedInStudent?.avatar || "🦉"}</div>
+            <div class="speech-bubble">
+              <button class="audio-btn" onclick="speakText(${JSON.stringify(q.prompt)})">🔊</button>
+              <span>${q.prompt}</span>
+            </div>
+          </div>
+          <div class="counter-frame-grid" id="counterGridBox"></div>
+          <div style="text-align:center; font-weight:900; font-size:18px; margin-top:8px;" id="counterLiveStatus">
+            Current Count: 0 ${q.counterEmoji || "🍎"}
+          </div>
+        `;
+        renderCounterCellsUI(q.counterEmoji || "🍎");
+      } else if (q.interactionType === "tile-builder") {
+        const tiles = q.tileBank || q.choices;
+        stage.innerHTML = `
+          <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:var(--duo-purple-dark); margin-bottom:8px;">
+            BUILD WITH TILES • TOPIC ${q.topicCode}: ${q.topicName}
+          </div>
+          <div class="speech-prompt-row">
+            <div class="mascot-avatar-sm">${loggedInStudent?.avatar || "🦉"}</div>
+            <div class="speech-bubble">
+              <button class="audio-btn" onclick="speakText(${JSON.stringify(q.prompt)})">🔊</button>
+              <span>${q.prompt}</span>
+            </div>
+          </div>
+          <div class="tile-answer-slots" id="tileAnswerSlots">
+            <span style="color:var(--duo-muted); font-size:14px; font-weight:700;">Tap tiles below in order...</span>
+          </div>
+          <div class="tile-bank" id="tileBankBox">
+            ${tiles.map((t, idx) => `
+              <button class="word-tile" onclick="tapBuilderTile(${idx}, ${JSON.stringify(t).replace(/"/g, '&quot;')})">${t}</button>
+            `).join("")}
+          </div>
+          <div style="text-align:center; margin-top:12px;">
+            <button class="duo-btn outline" style="padding:7px 14px; font-size:12px;" onclick="clearBuilderTiles()">↺ Clear Tiles</button>
+          </div>
+        `;
+      } else {
+        const shuffled = [...q.choices].sort(() => Math.random() - 0.5);
+        stage.innerHTML = `
+          <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:var(--duo-green-dark); margin-bottom:8px;">
+            ${sessionMode === "boss" ? "⚔️ UNIT BOSS GATE ASSESSMENT" : `PRACTICE PROBLEM ${sessionIndex + 1} OF ${sessionProblems.length}`} • TOPIC ${q.topicCode}: ${q.topicName}
+          </div>
+          <div class="speech-prompt-row">
+            <div class="mascot-avatar-sm">${loggedInStudent?.avatar || "🦉"}</div>
+            <div class="speech-bubble">
+              <button class="audio-btn" onclick="speakText(${JSON.stringify(q.prompt)})">🔊</button>
+              <span>${q.prompt}</span>
+            </div>
+          </div>
+          ${q.visualObjects ? `
+            <div style="text-align:center; font-size:32px; padding:16px; background:#F8FAFC; border:2px solid var(--duo-gray); border-radius:18px; margin-bottom:18px; letter-spacing:4px;">
+              ${q.visualObjects}
+            </div>
+          ` : ""}
+          <div class="duo-choices-grid">
+            ${shuffled.map((choice, cIdx) => `
+              <button class="duo-choice-card" id="duoChoice_${cIdx}"
+                      onclick="selectDuoChoice(${cIdx}, ${JSON.stringify(choice).replace(/"/g, '&quot;')})">
+                <span>${choice}</span>
+                <span class="mono" style="font-size:13px; padding:3px 8px; border-radius:8px; border:2px solid var(--duo-gray); color:var(--duo-muted);">${cIdx + 1}</span>
+              </button>
+            `).join("")}
+          </div>
+        `;
+      }
+
+      questionStartTimeMs = performance.now();
+      questionTimerInterval = setInterval(() => {
+        const sec = ((performance.now() - questionStartTimeMs) / 1000).toFixed(1);
+        document.getElementById("lessonTimerChip").textContent = `⏱️ ${sec}s`;
       }, 100);
     }
 
-    function submitArenaAnswer(btnIdx, chosenValue) {
-      if (arenaTimerInterval) clearInterval(arenaTimerInterval);
-      const rawTimeSec = Number(((performance.now() - arenaStartTimeMs) / 1000).toFixed(2));
-      const q = arenaQuestions[arenaIndex];
-      const isCorrect = chosenValue === q.correctAnswer;
+    function renderCounterCellsUI(emoji) {
+      const box = document.getElementById("counterGridBox");
+      if (!box) return;
+      const total = currentCounterCells.reduce((a, b) => a + b, 0);
+      currentSelectedAnswer = String(total);
+      box.innerHTML = currentCounterCells.map((val, idx) => `
+        <div class="counter-cell ${val ? 'filled' : ''}" onclick="toggleCounterCell(${idx}, '${emoji}')">
+          ${val ? emoji : ""}
+        </div>
+      `).join("");
+      document.getElementById("counterLiveStatus").textContent = `Current Count: ${total} ${emoji}`;
+    }
 
-      // Anti-guessing check (< 1.2s wrong answer)
-      const isRapidGuess = !isCorrect && rawTimeSec < 1.2;
+    function toggleCounterCell(idx, emoji) {
+      if (hasCheckedCurrentQuestion) return;
+      currentCounterCells[idx] = currentCounterCells[idx] ? 0 : 1;
+      playSound("/assets/sounds/sfx_count_pop.wav");
+      renderCounterCellsUI(emoji);
+    }
 
-      if (isCorrect) {
-        arenaStreak += 1;
-        playSound("/assets/sounds/sfx_chime_correct.wav");
-      } else {
-        arenaStreak = 0;
-        playSound("/assets/sounds/sfx_gentle_nudge.wav");
-        // Intra-session Expanding Retrieval (re-queue at Lag +2)
-        expandingLagQueue.push({ ...q, prompt: `[Lag +2 Retrieval Check] ${q.prompt}` });
-        if (arenaQuestions.length < 18) {
-          const insertPos = Math.min(arenaQuestions.length, arenaIndex + 3);
-          arenaQuestions.splice(insertPos, 0, { ...q, prompt: `[Expanding Retrieval Lag +2] ${q.prompt}` });
+    function tapBuilderTile(idx, val) {
+      if (hasCheckedCurrentQuestion) return;
+      playSound("/assets/sounds/sfx_tile_snap.wav");
+      currentTileSelection.push(val);
+      currentSelectedAnswer = currentTileSelection.join(" ");
+      const slots = document.getElementById("tileAnswerSlots");
+      slots.innerHTML = currentTileSelection.map((t) => `<span class="word-tile" style="background:#DDF4FF; border-color:var(--duo-blue);">${t}</span>`).join("");
+    }
+
+    function clearBuilderTiles() {
+      if (hasCheckedCurrentQuestion) return;
+      currentTileSelection = [];
+      currentSelectedAnswer = null;
+      document.getElementById("tileAnswerSlots").innerHTML = `<span style="color:var(--duo-muted); font-size:14px; font-weight:700;">Tap tiles below in order...</span>`;
+    }
+
+    function selectDuoChoice(cIdx, val) {
+      if (hasCheckedCurrentQuestion) return;
+      playSound("/assets/sounds/sfx_count_pop.wav");
+      currentSelectedAnswer = val;
+      document.querySelectorAll(".duo-choice-card").forEach((el, i) => {
+        el.classList.toggle("selected", i === cIdx);
+      });
+    }
+
+    function handleCheckOrContinue() {
+      if (!hasCheckedCurrentQuestion) {
+        if (currentSelectedAnswer === null || currentSelectedAnswer === "") {
+          playSound("/assets/sounds/sfx_gentle_nudge.wav");
+          return;
         }
+        gradeCurrentQuestion();
+      } else {
+        sessionIndex += 1;
+        renderCurrentSessionProblem();
       }
+    }
 
-      arenaResponses.push({
+    function gradeCurrentQuestion() {
+      if (questionTimerInterval) clearInterval(questionTimerInterval);
+      hasCheckedCurrentQuestion = true;
+      const rawTimeSec = Number(((performance.now() - questionStartTimeMs) / 1000).toFixed(2));
+      const q = sessionProblems[sessionIndex];
+      const isCorrect = String(currentSelectedAnswer).trim() === String(q.correctAnswer).trim();
+      const cogSec = Math.max(0.5, rawTimeSec - (loggedInStudent?.motorBaselineSec || 0.42)).toFixed(2);
+
+      sessionResponses.push({
         topicCode: q.topicCode,
         isCorrect,
         rawTimeSec,
         misconceptionTags: q.misconceptionTags || []
       });
 
-      const btn = document.getElementById(`choiceBtn_${btnIdx}`);
-      if (btn) btn.classList.add(isCorrect ? "correct" : "wrong");
+      const bottomBar = document.getElementById("lessonBottomBar");
+      const fb = document.getElementById("lessonFeedbackText");
+      const actionBtn = document.getElementById("lessonActionBtn");
 
-      const fb = document.getElementById("arenaFeedbackBox");
-      fb.style.display = "block";
-      const cogSec = Math.max(0.5, rawTimeSec - motorBaselineSec).toFixed(2);
-      fb.innerHTML = `
-        <div style="font-weight:800; font-size:16px; margin-bottom:6px; color:${isCorrect ? '#4ADE80' : '#FDA4AF'};">
-          ${isCorrect
-            ? `✓ Correct! Cognitive Speed: ${cogSec}s (Raw ${rawTimeSec}s - Motor ${motorBaselineSec}s)`
-            : isRapidGuess
-            ? `⚠️ Rapid Guess Detected (${rawTimeSec}s < 1.2s)! 2-Second Cooldown Activated — Read Carefully!`
-            : `✗ Not quite! Queued for Intra-Session Expanding Retrieval (Lag +2, +5, +10)`}
-        </div>
-        <div style="font-size:14px; opacity:0.92; margin-bottom:10px;">
-          <strong>Explanation:</strong> ${q.explanation}
-        </div>
-        <button class="btn-3d amber" onclick="nextArenaQuestion()">Next Question →</button>
-      `;
+      if (isCorrect) {
+        sessionStreak += 1;
+        playSound("/assets/sounds/sfx_chime_correct.wav");
+        bottomBar.className = "lesson-bottom-bar correct-bg";
+        fb.innerHTML = `
+          <div style="color:#2B6600; font-size:19px; font-weight:900;">🎉 Awesome! Cognitive Speed: ${cogSec}s (Target ≤ ${sessionTargetSpeedSec}s)</div>
+          <div style="color:#387600; font-size:14px; font-weight:700;">${q.explanation}</div>
+        `;
+        actionBtn.textContent = "CONTINUE →";
+        actionBtn.className = "duo-btn";
+      } else {
+        sessionStreak = 0;
+        playSound("/assets/sounds/sfx_gentle_nudge.wav");
+        bottomBar.className = "lesson-bottom-bar wrong-bg";
+        fb.innerHTML = `
+          <div style="color:#B80000; font-size:19px; font-weight:900;">💡 Almost! Correct Answer: ${q.correctAnswer}</div>
+          <div style="color:#900000; font-size:14px; font-weight:700;">${q.explanation} (Re-queued via Expanding Retrieval Lag +2)</div>
+        `;
+        actionBtn.textContent = "GOT IT →";
+        actionBtn.className = "duo-btn coral";
+
+        // Scientific Intra-Session Expanding Retrieval: re-insert missed problem 2 items later
+        if (sessionProblems.length < 15) {
+          const insertAt = Math.min(sessionProblems.length, sessionIndex + 3);
+          sessionProblems.splice(insertAt, 0, {
+            ...q,
+            prompt: `[Spaced Retry] ${q.prompt}`
+          });
+        }
+      }
     }
 
-    function nextArenaQuestion() {
-      arenaIndex += 1;
-      renderArenaQuestion();
+    async function finishSessionAndGrade() {
+      document.getElementById("lessonProgressBar").style.width = "100%";
+      const stage = document.getElementById("lessonStageCenter");
+      const bottomBar = document.getElementById("lessonBottomBar");
+      bottomBar.className = "lesson-bottom-bar";
+
+      if (sessionMode === "topic") {
+        const res = await fetch(`${API_BASE}/api/practice/topic/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: loggedInStudent.studentId,
+            unitId: sessionUnitId,
+            topicCode: sessionTopicCode,
+            motorBaselineSec: loggedInStudent.motorBaselineSec,
+            responses: sessionResponses
+          })
+        });
+        const data = await res.json();
+        loggedInStudent = data.student;
+        studentSummary = data.summary;
+        updateStudentHud();
+        renderJourneyPath();
+        if (data.passedTopic) playSound("/assets/sounds/sfx_star_fanfare.wav");
+
+        stage.innerHTML = `
+          <div style="text-align:center; padding:24px;">
+            <div style="font-size:64px; margin-bottom:10px;">${data.passedTopic ? "🎉" : "💪"}</div>
+            <h2 style="font-size:30px; color:${data.passedTopic ? 'var(--duo-green-dark)' : 'var(--duo-orange-dark)'}; margin-bottom:8px;">
+              ${data.passedTopic ? `Topic ${sessionTopicCode} Complete!` : `Keep Practicing Topic ${sessionTopicCode}!`}
+            </h2>
+            <p style="font-size:16px; font-weight:800; color:var(--duo-muted); margin-bottom:22px;">
+              ${data.passedTopic
+                ? `You earned ${"👑".repeat(data.crownsAwarded)} Crowns and unlocked the next stepping stone on your journey!`
+                : `Reach at least 80% accuracy to unlock the next stepping stone.`}
+            </p>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; max-width:520px; margin:0 auto;">
+              <div class="side-card" style="border-color:var(--duo-gold);">
+                <div style="font-size:12px; font-weight:900; color:var(--duo-muted);">ACCURACY</div>
+                <div style="font-size:24px; font-weight:900; color:var(--duo-gold-dark);">${data.accuracyPct}%</div>
+              </div>
+              <div class="side-card" style="border-color:var(--duo-blue);">
+                <div style="font-size:12px; font-weight:900; color:var(--duo-muted);">MEDIAN SPEED</div>
+                <div style="font-size:24px; font-weight:900; color:var(--duo-blue-dark);">${data.medianCogSpeedSec}s</div>
+              </div>
+              <div class="side-card" style="border-color:var(--duo-green);">
+                <div style="font-size:12px; font-weight:900; color:var(--duo-muted);">MEMORY STABILITY</div>
+                <div style="font-size:24px; font-weight:900; color:var(--duo-green-dark);">${data.spacedRepetition.stabilityDays}d</div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        const res = await fetch(`${API_BASE}/api/gate/evaluate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: loggedInStudent.studentId,
+            unitId: sessionUnitId,
+            motorBaselineSec: loggedInStudent.motorBaselineSec,
+            responses: sessionResponses
+          })
+        });
+        const data = await res.json();
+        loggedInStudent = data.student;
+        studentSummary = data.summary;
+        updateStudentHud();
+        renderJourneyPath();
+        const ev = data.evaluation;
+        if (ev.passed) playSound("/assets/sounds/sfx_star_fanfare.wav");
+
+        stage.innerHTML = `
+          <div style="text-align:center; padding:24px;">
+            <div style="font-size:64px; margin-bottom:10px;">${ev.passed ? "🏆" : "🔄"}</div>
+            <h2 style="font-size:28px; color:${ev.passed ? 'var(--duo-green-dark)' : 'var(--duo-coral)'}; margin-bottom:8px;">
+              ${ev.passed ? `${sessionUnitId} Boss Gate Passed! Next Unit Unlocked!` : `${sessionUnitId} Boss Gate Not Yet Passed`}
+            </h2>
+            <p style="font-size:15px; font-weight:800; color:var(--duo-muted); margin-bottom:20px;">
+              ${ev.remediationPrescription}
+            </p>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; max-width:540px; margin:0 auto;">
+              <div class="side-card">
+                <div style="font-size:11px; font-weight:900; color:var(--duo-muted);">ACCURACY (REQ ≥${ev.requiredAccuracyPct}%)</div>
+                <div style="font-size:22px; font-weight:900;">${ev.overallAccuracyPct}% ${ev.conditions.overallAccuracyPassed ? "✅" : "❌"}</div>
+              </div>
+              <div class="side-card">
+                <div style="font-size:11px; font-weight:900; color:var(--duo-muted);">SPEED (TARGET ≤${ev.targetSpeedSec}s)</div>
+                <div style="font-size:22px; font-weight:900;">${ev.medianCogSpeedSec}s ${ev.conditions.medianSpeedPassed ? "✅" : "❌"}</div>
+              </div>
+              <div class="side-card">
+                <div style="font-size:11px; font-weight:900; color:var(--duo-muted);">KEY AWARDED</div>
+                <div style="font-size:20px; font-weight:900;">${ev.keyAwarded || "Retry Gate"}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      document.getElementById("lessonFeedbackText").textContent = " Progress saved to your student profile!";
+      const actionBtn = document.getElementById("lessonActionBtn");
+      actionBtn.textContent = "CONTINUE TO JOURNEY MAP →";
+      actionBtn.className = "duo-btn";
+      actionBtn.onclick = () => {
+        actionBtn.onclick = handleCheckOrContinue;
+        closeLessonOverlay();
+      };
     }
 
-    async function finishArenaSession() {
-      const res = await fetch(`${API_BASE}/api/gate/evaluate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: activeStudent ? activeStudent.studentId : undefined,
-          unitId: activeUnit.unitId,
-          motorBaselineSec,
-          responses: arenaResponses
-        })
-      });
-      const result = await res.json();
-      const ev = result.evaluation;
-      const sr = result.spacedRepetition;
-
-      if (result.studentProgress) {
-        studentUnitProgress = result.studentProgress;
-      }
-      if (result.studentSummary) {
-        updateHeaderStudentStats(result.studentSummary);
-        allStudentsList = allStudentsList.map((s) =>
-          s.studentId === result.studentSummary.studentId ? result.studentSummary : s
-        );
-        renderStudentSwitcher();
-      }
-
-      if (ev.passed) {
-        playSound("/assets/sounds/sfx_star_fanfare.wav");
-      }
-      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
-      renderUnitList(gradeObj.subjects[activeSubjectKey].units);
-
-      const report = document.getElementById("gateSummaryReport");
-      report.style.display = "block";
-      report.innerHTML = `
-        <h3 style="font-size:22px; color:${ev.passed ? '#166534' : '#BE123C'}; margin-bottom:8px;">
-          ${ev.passed ? '🏆 UNIT BOSS GATE PASSED! (Silver Key Awarded & Next Unit Unlocked)' : '🔄 REMEDIATION PRESCRIBED BEFORE NEXT UNIT UNLOCKS'}
-        </h3>
-        <p style="font-size:14px; font-weight:700; color:var(--ink-700); margin-bottom:14px;">
-          ${ev.remediationPrescription}
-        </p>
-        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:14px;">
-          <div class="asset-box">
-            <h4>1. Overall Accuracy</h4>
-            <div class="mono" style="font-size:18px; font-weight:800;">${ev.overallAccuracyPct}% (Req ≥${ev.requiredAccuracyPct}%)</div>
-            <div>${ev.conditions.overallAccuracyPassed ? '✅ Passed' : '❌ Below Threshold'}</div>
-          </div>
-          <div class="asset-box">
-            <h4>2. Median Cognitive Speed</h4>
-            <div class="mono" style="font-size:18px; font-weight:800;">${ev.medianCogSpeedSec}s (Target ≤${ev.targetSpeedSec}s)</div>
-            <div>${ev.conditions.medianSpeedPassed ? '✅ Fluent Automaticity' : '❌ Too Slow (Needs Fluency Sprint)'}</div>
-          </div>
-          <div class="asset-box">
-            <h4>3. Spaced Repetition &amp; CPA</h4>
-            <div class="mono" style="font-size:16px; font-weight:800;">Stability: ${sr.stabilityDays} days</div>
-            <div>Next CPA Mode: <code>${sr.cpaStage}</code></div>
-          </div>
-        </div>
-        <button class="btn-3d" onclick="switchStage(1)">Return to Unit Studio</button>
-      `;
-    }
-
-    function openMotorCalibration() {
+    function openSpacedRepetitionModal() {
       const modal = document.getElementById("appModal");
-      document.getElementById("modalTitle").textContent = "🎈 3-Tap Motor-Latency Calibration";
-      let taps = [];
-      let tapStart = performance.now();
+      document.getElementById("modalTitle").textContent = "🌱 Daily Brain Boost (Spaced Repetition)";
+      document.getElementById("modalBody").innerHTML = `
+        <p style="font-size:15px; font-weight:700; color:var(--duo-muted); margin-bottom:16px;">
+          Our Child-Calibrated Spaced Repetition Engine schedules reviews at <strong>1d -> 2d -> 4d -> 8d -> 15d -> 30d</strong> and re-tests missed items at <strong>Lag +2, +5, and +10</strong> so you never forget what you learned!
+        </p>
+        <button class="duo-btn" style="width:100%;" onclick="closeModal(); startTopicPracticeSession('${activeGradeId === 'pre-k' ? 'PK-M1' : 'K-M1'}', 'A')">
+          🚀 START 3-MINUTE BRAIN BOOST REVIEW
+        </button>
+      `;
+      modal.classList.add("open");
+    }
 
-      window.recordCalibrationTap = () => {
-        const dt = (performance.now() - tapStart) / 1000;
+    function openCalibrationModal() {
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = "🎈 3-Tap Speed Calibration";
+      let taps = [];
+      let t0 = performance.now();
+      window.tapCalibBalloon = () => {
+        const dt = (performance.now() - t0) / 1000;
         taps.push(Math.min(1.2, Math.max(0.18, dt)));
         playSound("/assets/sounds/sfx_count_pop.wav");
-        tapStart = performance.now();
+        t0 = performance.now();
         if (taps.length >= 3) {
           taps.sort((a, b) => a - b);
-          motorBaselineSec = Number(taps[1].toFixed(2));
-          document.getElementById("motorPill").textContent = `⚡ Motor: ${motorBaselineSec}s`;
-          if (activeStudent) {
-            fetch(`${API_BASE}/api/students/${activeStudent.studentId}/calibrate`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ warmupTapTimesSec: taps })
-            });
-          }
-          document.getElementById("calibStatus").innerHTML = `
-            <strong style="color:#166534;">✓ Saved for ${activeStudent ? activeStudent.nickname : 'Student'}! Median Motor Latency = ${motorBaselineSec}s.</strong><br>
-            All Boss Gate response times will subtract ${motorBaselineSec}s so only pure cognitive thinking speed is graded!
-          `;
+          loggedInStudent.motorBaselineSec = Number(taps[1].toFixed(2));
+          updateStudentHud();
+          document.getElementById("calibMsg").innerHTML = `<strong style="color:var(--duo-green-dark);">✓ Saved! Your tap speed baseline is ${loggedInStudent.motorBaselineSec}s.</strong>`;
         } else {
-          document.getElementById("calibStatus").textContent = `Popped ${taps.length} / 3 Star Balloons... Tap the next balloon fast!`;
+          document.getElementById("calibMsg").textContent = `Popped ${taps.length} / 3 Balloons! Tap again fast!`;
         }
       };
-
       document.getElementById("modalBody").innerHTML = `
-        <p style="margin-bottom:16px; color:var(--ink-700);">
-          Young children have different touch/mouse motor speeds. Pop 3 Star Balloons as fast as you can to calibrate your personal motor baseline ($T_{\\text{motor}}$):
+        <p style="font-size:14px; font-weight:700; color:var(--duo-muted); margin-bottom:16px;">
+          Pop 3 balloons as fast as you can so we subtract your finger tap time ($T_{\\text{motor}}$) when measuring your thinking speed!
         </p>
-        <div style="text-align:center; padding:24px; background:var(--bg-warm); border-radius:18px;">
-          <button class="btn-3d coral" style="font-size:22px; padding:18px 32px;" onclick="recordCalibrationTap()">
-            🎈 POP STAR BALLOON!
-          </button>
-          <div id="calibStatus" style="margin-top:14px; font-weight:800;">Waiting for Tap 1 of 3...</div>
+        <div style="text-align:center; padding:20px;">
+          <button class="duo-btn coral" style="font-size:20px; padding:18px 28px;" onclick="tapCalibBalloon()">🎈 POP BALLOON!</button>
+          <div id="calibMsg" style="margin-top:14px; font-weight:800;">Tap 1 of 3...</div>
         </div>
       `;
       modal.classList.add("open");
     }
 
-    function openDailyBrainBoost() {
+    function openStudentProfileModal() {
+      const tm = Object.entries(loggedInStudent?.topicMastery || {});
       const modal = document.getElementById("appModal");
-      document.getElementById("modalTitle").textContent = "🧠 Scientific Spaced Repetition & Knowledge Garden";
+      document.getElementById("modalTitle").textContent = `${loggedInStudent.avatar} ${loggedInStudent.nickname}'s Mastery Progress`;
       document.getElementById("modalBody").innerHTML = `
-        <p style="margin-bottom:14px; color:var(--ink-700);">
-          <strong>6 Cognitive Science Pillars Active for Ages 3–9:</strong>
-        </p>
-        <div class="quadrant-grid">
-          <div class="quad-cell" style="background:#F0FDFA; border-color:#14B8A6;">
-            <h4>1. Intra-Session Expanding Retrieval</h4>
-            <p style="font-size:13px; margin-top:4px;">Missed items automatically re-appear at <strong>Lag +2, Lag +5, and Lag +10</strong> within the same session.</p>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:16px; text-align:center;">
+          <div class="side-card">
+            <div style="font-size:11px; font-weight:900; color:var(--duo-muted);">TOPICS COMPLETED</div>
+            <div style="font-size:22px; font-weight:900; color:var(--duo-green);">${studentSummary.completedTopicsCount}</div>
           </div>
-          <div class="quad-cell" style="background:#FEF3C7; border-color:#F59E0B;">
-            <h4>2. Two-Key Overnight Sleep Consolidation</h4>
-            <p style="font-size:13px; margin-top:4px;">Day 1 Boss Gate awards a <strong>Silver Key</strong>. A 60-sec 5-item verification the next morning (≥14h later) upgrades to a <strong>Gold Key</strong>.</p>
+          <div class="side-card">
+            <div style="font-size:11px; font-weight:900; color:var(--duo-muted);">UNITS MASTERED</div>
+            <div style="font-size:22px; font-weight:900; color:var(--duo-blue);">${studentSummary.masteredUnitsCount}</div>
           </div>
-          <div class="quad-cell" style="background:#EFF6FF; border-color:#3B82F6;">
-            <h4>3. Speed-Weighted Child FSRS</h4>
-            <p style="font-size:13px; margin-top:4px;">Slow finger-counted answers ($r_i > 1.25$) receive minimal stability growth ($1.2\\times$). Max caps: 21d (Pre-K), 30d (K), 45d (G1), 60d (G2–G3).</p>
-          </div>
-          <div class="quad-cell" style="background:#FDF2F8; border-color:#EC4899;">
-            <h4>4. 70/20/10 Interleaving &amp; FIRe DAG Credit</h4>
-            <p style="font-size:13px; margin-top:4px;">Games mix 70% current unit, 20% contrastive prerequisites, 10% due reviews, and propagate $0.40\\times$ credit downward in the DAG.</p>
+          <div class="side-card">
+            <div style="font-size:11px; font-weight:900; color:var(--duo-muted);">GOLD / SILVER KEYS</div>
+            <div style="font-size:22px; font-weight:900; color:var(--duo-gold-dark);">${studentSummary.goldKeysCount}🥇 ${studentSummary.silverKeysCount}🥈</div>
           </div>
         </div>
-        <button class="btn-3d indigo" onclick="closeModal(); switchStage(3);">🚀 Launch 3-Minute Fluency &amp; Spaced Review Sprint</button>
+        <h4 style="margin-bottom:8px;">Completed Topic Stepping Stones:</h4>
+        <div style="max-height:260px; overflow-y:auto; display:grid; gap:8px;">
+          ${tm.map(([k, v]) => `
+            <div style="padding:10px 14px; border:2px solid var(--duo-gray); border-radius:12px; display:flex; justify-content:space-between; font-size:13px; font-weight:800;">
+              <span>${k} (${"👑".repeat(v.crowns || 1)})</span>
+              <span>Acc: ${v.accuracyPct}% • Speed: ${v.medianSpeedSec}s • Stability: ${v.stabilityDays}d</span>
+            </div>
+          `).join("") || "<p>No topics completed yet. Click the ★ START node on your path!</p>"}
+        </div>
       `;
       modal.classList.add("open");
     }
 
-    async function openParentPortal(targetStudentId) {
-      const sid = targetStudentId || (activeStudent && activeStudent.studentId) || "";
-      const res = await fetch(`${API_BASE}/api/parent/analytics?studentId=${encodeURIComponent(sid)}`);
-      const data = await res.json();
-      const modal = document.getElementById("appModal");
-      document.getElementById("modalTitle").textContent = "🔒 Multi-Student Parent & Educator Analytics Portal";
-      const misconceptions = Object.entries(data.misconceptionCounts || {});
-      document.getElementById("modalBody").innerHTML = `
-        <div style="margin-bottom:18px; background:#F8FAFC; padding:14px; border-radius:16px; border:2px solid #E2E8F0;">
-          <h4 style="margin-bottom:8px; font-size:14px; color:var(--ink-700);">
-            👨‍👩‍👧‍👦 All Student Profiles (Click Any Student to Inspect Detailed Progress)
-          </h4>
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
-            ${(data.allStudentsComparison || []).map((s) => `
-              <div onclick="openParentPortal('${s.studentId}')"
-                   style="cursor:pointer; padding:12px; border-radius:12px; background:${s.studentId === data.profile.studentId ? '#CCFBF1' : '#FFFFFF'}; border:2px solid ${s.studentId === data.profile.studentId ? '#0D9488' : '#CBD5E1'};">
-                <div style="font-weight:800; font-size:15px;">${s.avatar} ${s.nickname} <span style="font-size:12px; opacity:0.75;">(${s.ageYears}y • ${s.currentGrade})</span></div>
-                <div style="font-size:12px; margin-top:4px;">
-                  Mastered: <strong>${s.masteredUnitsCount} units</strong> • Keys: <strong>${s.goldKeysCount}🥇 ${s.silverKeysCount}🥈</strong>
-                </div>
-                <div style="font-size:12px; color:var(--teal-700); font-weight:700;">
-                  Avg Acc: ${s.avgAccuracyPct}% • Garden: ${s.gardenHealthPct}% (${s.dueSpacedReviewsCount} due)
-                </div>
-              </div>
-            `).join("")}
-          </div>
-        </div>
-
-        <h3 style="font-size:18px; margin-bottom:8px;">
-          ${data.profile.avatar} ${data.profile.nickname}'s 2D Accuracy-vs-Speed Automaticity Quadrants
-        </h3>
-        <p style="margin-bottom:12px; font-size:13px; color:var(--ink-700);">
-          <strong>Motor Baseline:</strong> ${data.profile.motorBaselineSec}s •
-          <strong>Streak:</strong> ${data.profile.streakDays} Days •
-          <strong>Star Coins:</strong> ${data.profile.starCoins} •
-          <strong>Spaced Reviews Due:</strong> ${data.profile.dueSpacedReviewsCount}
-        </p>
-
-        <div class="quadrant-grid">
-          ${data.quadrants.map((q) => `
-            <div class="quad-cell">
-              <div style="display:flex; justify-content:space-between; font-weight:800;">
-                <span>${q.unitId}: ${q.unitTitle}</span>
-                <span class="mono">${q.keyState || q.status}</span>
-              </div>
-              <div style="font-size:13px; margin-top:6px;">
-                Best Accuracy: <strong>${q.bestAccuracyPct}%</strong> | Best Median Speed: <strong>${q.bestMedianSpeedSec}s</strong> (Target ≤${q.targetSpeedSec}s) | Attempts: ${q.attemptsCount}
-              </div>
-              <div style="font-size:12px; margin-top:4px; color:var(--teal-700); font-weight:800;">
-                Quadrant: ${q.quadrant} • Retrievability R(t): ${q.retrievabilityPct}% (Stability: ${q.stabilityDays}d • CPA: ${q.cpaStage})
-              </div>
-            </div>
-          `).join("")}
-        </div>
-
-        ${misconceptions.length > 0 ? `
-          <div style="margin-top:14px; padding:12px; border-radius:12px; background:#FFF1F2; border:1.5px solid #FECDD3;">
-            <h4 style="font-size:14px; color:#9F1239; margin-bottom:6px;">🎯 Diagnostic Misconception Tags Logged for ${data.profile.nickname}</h4>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              ${misconceptions.map(([tag, cnt]) => `<span class="pill" style="font-size:12px;">${tag}: ${cnt}x</span>`).join("")}
-            </div>
-          </div>
-        ` : ""}
-      `;
-      modal.classList.add("open");
+    function switchMainTab(tab) {
+      document.querySelectorAll(".nav-item").forEach((el) => el.classList.remove("active"));
+      document.getElementById("navLearn").classList.add("active");
     }
 
     function closeModal() {
       document.getElementById("appModal").classList.remove("open");
     }
 
-    initApp();
+    boot();
   </script>
 </body>
 </html>

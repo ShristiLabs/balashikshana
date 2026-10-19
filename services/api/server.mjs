@@ -3,13 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  median,
   computeMotorBaselineSec,
+  computeCognitiveTimeSec,
   evaluateMasteryGateAttempt,
   computeFluencyGrade,
   updateTopicMemoryStability,
   computeRetrievabilityPct,
   propagateImplicitDagCredit,
-  generateProceduralQuestion
+  generateProceduralQuestion,
+  generateTopicPracticeSet
 } from "../../packages/core-engine/src/index.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,14 +27,11 @@ if (!fs.existsSync(DATA_DIR)) {
 
 const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
 
-// Build fast lookup maps for all 130 units and 614 topics
 const unitMap = {};
 const gradeMap = {};
-const entryUnitsByGrade = {};
 
 for (const g of registry.grades) {
   gradeMap[g.gradeId] = g;
-  entryUnitsByGrade[g.gradeId] = [];
   for (const [subjKey, subj] of Object.entries(g.subjects)) {
     for (const u of subj.units) {
       unitMap[u.unitId] = {
@@ -40,9 +40,6 @@ for (const g of registry.grades) {
         subject: subjKey,
         spacedRepetitionPolicy: g.spacedRepetitionPolicy
       };
-      if (u.sequenceOrder === 1) {
-        entryUnitsByGrade[g.gradeId].push(u.unitId);
-      }
     }
   }
 }
@@ -51,8 +48,46 @@ function createDefaultStore() {
   return {
     activeStudentId: "stu-aarav-k",
     students: {
+      "stu-aarav-k": {
+        studentId: "stu-aarav-k",
+        username: "aarav",
+        pin: "1234",
+        nickname: "Aarav",
+        avatar: "🦁",
+        ageYears: 5,
+        currentGrade: "kindergarten",
+        motorBaselineSec: 0.42,
+        streakDays: 7,
+        starCoins: 340,
+        hearts: 5,
+        createdAt: "2026-09-20T10:00:00Z",
+        unitProgress: {
+          "PK-M7": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 93.0, bestMedianSpeedSec: 4.5, attemptsCount: 1, stabilityDays: 21.0, lastReviewedDaysAgo: 2, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
+          "K-M1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 93.3, bestMedianSpeedSec: 3.4, attemptsCount: 2, stabilityDays: 8.0, lastReviewedDaysAgo: 2, cpaStage: "PICTORIAL_GHOST_FLASH_1S" },
+          "K-M2": { status: "IN_PROGRESS", keyState: null, bestAccuracyPct: 90.0, bestMedianSpeedSec: 4.1, attemptsCount: 1, stabilityDays: 2.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_STATIC" }
+        },
+        topicMastery: {
+          "K-M1-A": { completed: true, crowns: 3, masteryScore: 100, accuracyPct: 100, medianSpeedSec: 3.0, fluencyGrade: 4, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M1-B": { completed: true, crowns: 3, masteryScore: 95, accuracyPct: 95, medianSpeedSec: 3.2, fluencyGrade: 4, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M1-C": { completed: true, crowns: 3, masteryScore: 92, accuracyPct: 92, medianSpeedSec: 3.5, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M1-D": { completed: true, crowns: 3, masteryScore: 90, accuracyPct: 90, medianSpeedSec: 3.6, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M1-E": { completed: true, crowns: 3, masteryScore: 94, accuracyPct: 94, medianSpeedSec: 3.4, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M1-F": { completed: true, crowns: 3, masteryScore: 91, accuracyPct: 91, medianSpeedSec: 3.7, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M1-AAA": { completed: true, crowns: 3, masteryScore: 96, accuracyPct: 96, medianSpeedSec: 3.3, fluencyGrade: 4, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
+          "K-M2-G": { completed: true, crowns: 3, masteryScore: 92, accuracyPct: 92, medianSpeedSec: 3.8, fluencyGrade: 3, stabilityDays: 4.0, lastReviewedDaysAgo: 1 },
+          "K-M2-H": { completed: true, crowns: 2, masteryScore: 88, accuracyPct: 88, medianSpeedSec: 4.2, fluencyGrade: 3, stabilityDays: 3.0, lastReviewedDaysAgo: 1 }
+        },
+        misconceptionCounts: {
+          "forgot_to_reduce_second_addend_after_making_10": 2
+        },
+        gateHistory: [
+          { timestamp: "2026-10-15T16:00:00Z", unitId: "K-M1", passed: true, overallAccuracyPct: 93.3, medianCogSpeedSec: 3.4, keyAwarded: "GOLD_KEY" }
+        ]
+      },
       "stu-maya-pk": {
         studentId: "stu-maya-pk",
+        username: "maya",
+        pin: "1234",
         nickname: "Maya",
         avatar: "🦊",
         ageYears: 4,
@@ -60,61 +95,22 @@ function createDefaultStore() {
         motorBaselineSec: 0.55,
         streakDays: 4,
         starCoins: 140,
+        hearts: 5,
         createdAt: "2026-10-01T10:00:00Z",
         unitProgress: {
-          "PK-M1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 91.7, bestMedianSpeedSec: 4.2, attemptsCount: 2, stabilityDays: 7.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_GHOST_FLASH_1S" },
-          "PK-M2": { status: "MASTERED", keyState: "SILVER_KEY", bestAccuracyPct: 86.0, bestMedianSpeedSec: 5.1, attemptsCount: 1, stabilityDays: 2.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_STATIC" },
-          "PK-M3": { status: "GATE_UNLOCKED", keyState: null, bestAccuracyPct: 78.0, bestMedianSpeedSec: 6.2, attemptsCount: 1, stabilityDays: 0.5, lastReviewedDaysAgo: 0, cpaStage: "CONCRETE_INTERACTIVE" },
-          "PK-E1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 92.9, bestMedianSpeedSec: 3.9, attemptsCount: 1, stabilityDays: 12.0, lastReviewedDaysAgo: 2, cpaStage: "PURE_ABSTRACT_SYMBOLIC" }
+          "PK-M1": { status: "IN_PROGRESS", keyState: null, bestAccuracyPct: 90.0, bestMedianSpeedSec: 4.2, attemptsCount: 1, stabilityDays: 4.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_STATIC" }
         },
         topicMastery: {
-          "PK-M1-A": { masteryScore: 100, accuracyPct: 100, medianSpeedSec: 3.8, fluencyGrade: 4, stabilityDays: 7.0 },
-          "PK-M1-B": { masteryScore: 92, accuracyPct: 90, medianSpeedSec: 4.2, fluencyGrade: 3, stabilityDays: 7.0 },
-          "PK-M2-E": { masteryScore: 88, accuracyPct: 86, medianSpeedSec: 5.1, fluencyGrade: 3, stabilityDays: 2.0 }
+          "PK-M1-A": { completed: true, crowns: 3, masteryScore: 100, accuracyPct: 100, medianSpeedSec: 3.8, fluencyGrade: 4, stabilityDays: 4.0, lastReviewedDaysAgo: 1 },
+          "PK-M1-B": { completed: true, crowns: 3, masteryScore: 90, accuracyPct: 90, medianSpeedSec: 4.2, fluencyGrade: 3, stabilityDays: 4.0, lastReviewedDaysAgo: 1 }
         },
-        misconceptionCounts: {
-          "one_to_one_correspondence_slip": 2,
-          "alligator_symbol_direction_reversal": 1
-        },
-        gateHistory: [
-          { timestamp: "2026-10-16T14:20:00Z", unitId: "PK-M1", passed: true, overallAccuracyPct: 91.7, medianCogSpeedSec: 4.2, keyAwarded: "GOLD_KEY" },
-          { timestamp: "2026-10-17T15:10:00Z", unitId: "PK-M2", passed: true, overallAccuracyPct: 86.0, medianCogSpeedSec: 5.1, keyAwarded: "SILVER_KEY" }
-        ]
-      },
-      "stu-aarav-k": {
-        studentId: "stu-aarav-k",
-        nickname: "Aarav",
-        avatar: "🦁",
-        ageYears: 5,
-        currentGrade: "kindergarten",
-        motorBaselineSec: 0.42,
-        streakDays: 7,
-        starCoins: 320,
-        createdAt: "2026-09-20T10:00:00Z",
-        unitProgress: {
-          "PK-M7": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 93.0, bestMedianSpeedSec: 4.5, attemptsCount: 1, stabilityDays: 21.0, lastReviewedDaysAgo: 5, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
-          "K-M1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 93.3, bestMedianSpeedSec: 3.4, attemptsCount: 2, stabilityDays: 8.0, lastReviewedDaysAgo: 3, cpaStage: "PICTORIAL_GHOST_FLASH_1S" },
-          "K-M2": { status: "MASTERED", keyState: "SILVER_KEY", bestAccuracyPct: 91.0, bestMedianSpeedSec: 4.1, attemptsCount: 1, stabilityDays: 2.0, lastReviewedDaysAgo: 2, cpaStage: "PICTORIAL_STATIC" },
-          "K-M3": { status: "FLUENCY_READY", keyState: null, bestAccuracyPct: 92.0, bestMedianSpeedSec: 4.8, attemptsCount: 1, stabilityDays: 1.5, lastReviewedDaysAgo: 0, cpaStage: "PICTORIAL_STATIC" },
-          "K-E1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 94.0, bestMedianSpeedSec: 3.5, attemptsCount: 1, stabilityDays: 15.0, lastReviewedDaysAgo: 2, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
-          "K-S1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90.0, bestMedianSpeedSec: 4.8, attemptsCount: 1, stabilityDays: 8.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_GHOST_FLASH_1S" }
-        },
-        topicMastery: {
-          "K-M1-A": { masteryScore: 100, accuracyPct: 100, medianSpeedSec: 3.1, fluencyGrade: 4, stabilityDays: 8.0 },
-          "K-M2-G": { masteryScore: 90, accuracyPct: 91, medianSpeedSec: 4.1, fluencyGrade: 3, stabilityDays: 2.0 },
-          "K-M3-O": { masteryScore: 85, accuracyPct: 92, medianSpeedSec: 4.8, fluencyGrade: 2, stabilityDays: 1.5 }
-        },
-        misconceptionCounts: {
-          "forgot_to_reduce_second_addend_after_making_10": 3,
-          "confused_sh_and_ch_digraphs": 1
-        },
-        gateHistory: [
-          { timestamp: "2026-10-15T16:00:00Z", unitId: "K-M1", passed: true, overallAccuracyPct: 93.3, medianCogSpeedSec: 3.4, keyAwarded: "GOLD_KEY" },
-          { timestamp: "2026-10-17T17:30:00Z", unitId: "K-M2", passed: true, overallAccuracyPct: 91.0, medianCogSpeedSec: 4.1, keyAwarded: "SILVER_KEY" }
-        ]
+        misconceptionCounts: {},
+        gateHistory: []
       },
       "stu-liam-g2": {
         studentId: "stu-liam-g2",
+        username: "liam",
+        pin: "1234",
         nickname: "Liam",
         avatar: "🚀",
         ageYears: 8,
@@ -122,40 +118,33 @@ function createDefaultStore() {
         motorBaselineSec: 0.31,
         streakDays: 12,
         starCoins: 590,
+        hearts: 5,
         createdAt: "2026-09-10T10:00:00Z",
         unitProgress: {
           "G1-M9": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 95.0, bestMedianSpeedSec: 4.0, attemptsCount: 1, stabilityDays: 30.0, lastReviewedDaysAgo: 4, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
-          "G2-M1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 94.4, bestMedianSpeedSec: 4.2, attemptsCount: 1, stabilityDays: 15.0, lastReviewedDaysAgo: 2, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
-          "G2-M2": { status: "MASTERED", keyState: "SILVER_KEY", bestAccuracyPct: 90.0, bestMedianSpeedSec: 3.2, attemptsCount: 2, stabilityDays: 3.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_STATIC" },
-          "G2-M3": { status: "REMEDIATION_REQUIRED", keyState: null, bestAccuracyPct: 93.8, bestMedianSpeedSec: 12.4, attemptsCount: 1, stabilityDays: 1.0, lastReviewedDaysAgo: 0, cpaStage: "CONCRETE_INTERACTIVE" },
-          "G2-E1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 94.4, bestMedianSpeedSec: 3.9, attemptsCount: 1, stabilityDays: 15.0, lastReviewedDaysAgo: 3, cpaStage: "PURE_ABSTRACT_SYMBOLIC" }
+          "G2-M1": { status: "IN_PROGRESS", keyState: null, bestAccuracyPct: 94.0, bestMedianSpeedSec: 4.1, attemptsCount: 1, stabilityDays: 7.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_GHOST_FLASH_1S" }
         },
         topicMastery: {
-          "G2-M1-L": { masteryScore: 96, accuracyPct: 95, medianSpeedSec: 4.0, fluencyGrade: 4, stabilityDays: 15.0 },
-          "G2-M2-G": { masteryScore: 90, accuracyPct: 90, medianSpeedSec: 3.2, fluencyGrade: 3, stabilityDays: 3.0 },
-          "G2-M3-N": { masteryScore: 78, accuracyPct: 93.8, medianSpeedSec: 12.4, fluencyGrade: 2, stabilityDays: 1.0 }
+          "G2-M1-A": { completed: true, crowns: 3, masteryScore: 95, accuracyPct: 95, medianSpeedSec: 3.5, fluencyGrade: 4, stabilityDays: 7.0, lastReviewedDaysAgo: 1 },
+          "G2-M1-B": { completed: true, crowns: 3, masteryScore: 92, accuracyPct: 92, medianSpeedSec: 3.9, fluencyGrade: 3, stabilityDays: 7.0, lastReviewedDaysAgo: 1 }
         },
-        misconceptionCounts: {
-          "subtracted_smaller_from_larger_0_minus_7_equals_7": 2,
-          "swapped_hour_and_minute_hands": 2
-        },
-        gateHistory: [
-          { timestamp: "2026-10-14T18:00:00Z", unitId: "G2-M1", passed: true, overallAccuracyPct: 94.4, medianCogSpeedSec: 4.2, keyAwarded: "GOLD_KEY" },
-          { timestamp: "2026-10-17T18:20:00Z", unitId: "G2-M2", passed: true, overallAccuracyPct: 90.0, medianCogSpeedSec: 3.2, keyAwarded: "SILVER_KEY" },
-          { timestamp: "2026-10-18T11:00:00Z", unitId: "G2-M3", passed: false, overallAccuracyPct: 93.8, medianCogSpeedSec: 12.4, keyAwarded: null }
-        ]
+        misconceptionCounts: {},
+        gateHistory: []
       }
     }
   };
 }
 
 function loadStore() {
+  const initial = createDefaultStore();
   if (fs.existsSync(STORE_PATH)) {
     try {
-      return JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
+      const loaded = JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
+      if (loaded && loaded.students && loaded.students["stu-aarav-k"]?.topicMastery?.["K-M1-C"]) {
+        return loaded;
+      }
     } catch (e) {}
   }
-  const initial = createDefaultStore();
   saveStore(initial);
   return initial;
 }
@@ -168,37 +157,36 @@ const store = loadStore();
 
 function summarizeStudent(stu) {
   const progs = Object.entries(stu.unitProgress || {});
+  const topics = Object.values(stu.topicMastery || {});
+  const completedTopicsCount = topics.filter((t) => t.completed).length;
   const masteredCount = progs.filter(([, p]) => p.status === "MASTERED").length;
   const goldKeys = progs.filter(([, p]) => p.keyState === "GOLD_KEY").length;
   const silverKeys = progs.filter(([, p]) => p.keyState === "SILVER_KEY").length;
-  const accuracies = progs.map(([, p]) => p.bestAccuracyPct).filter((v) => typeof v === "number");
-  const avgAccuracyPct = accuracies.length > 0
-    ? Number((accuracies.reduce((a, b) => a + b, 0) / accuracies.length).toFixed(1))
-    : 0;
 
   let dueReviews = 0;
   let totalRetrievability = 0;
-  for (const [, p] of progs) {
-    const r = computeRetrievabilityPct(p.lastReviewedDaysAgo || 0, p.stabilityDays || 1);
+  for (const t of topics) {
+    const r = computeRetrievabilityPct(t.lastReviewedDaysAgo || 0, t.stabilityDays || 2);
     totalRetrievability += r;
-    if (r < 80 || p.keyState === "SILVER_KEY") dueReviews += 1;
+    if (r < 80) dueReviews += 1;
   }
-  const gardenHealthPct = progs.length > 0 ? Math.round(totalRetrievability / progs.length) : 100;
+  const gardenHealthPct = topics.length > 0 ? Math.round(totalRetrievability / topics.length) : 100;
 
   return {
     studentId: stu.studentId,
+    username: stu.username || stu.nickname.toLowerCase(),
     nickname: stu.nickname,
     avatar: stu.avatar,
     ageYears: stu.ageYears,
     currentGrade: stu.currentGrade,
     motorBaselineSec: stu.motorBaselineSec,
-    streakDays: stu.streakDays,
-    starCoins: stu.starCoins,
+    streakDays: stu.streakDays || 1,
+    starCoins: stu.starCoins || 100,
+    hearts: stu.hearts || 5,
+    completedTopicsCount,
     masteredUnitsCount: masteredCount,
-    totalUnitsTracked: progs.length,
     goldKeysCount: goldKeys,
     silverKeysCount: silverKeys,
-    avgAccuracyPct,
     dueSpacedReviewsCount: dueReviews,
     gardenHealthPct
   };
@@ -238,29 +226,58 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // GET /api/students -> List all student profiles + active student
+  // POST /api/auth/login -> Single student login by studentId or username
+  if (req.method === "POST" && pathname === "/api/auth/login") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const payload = JSON.parse(body || "{}");
+        let found = null;
+        if (payload.studentId && store.students[payload.studentId]) {
+          found = store.students[payload.studentId];
+        } else if (payload.username) {
+          const uname = payload.username.trim().toLowerCase();
+          found = Object.values(store.students).find(
+            (s) => (s.username || "").toLowerCase() === uname || s.nickname.toLowerCase() === uname
+          );
+        }
+        if (!found) return sendJson(res, 404, { error: "Student account not found" });
+        store.activeStudentId = found.studentId;
+        saveStore(store);
+        return sendJson(res, 200, {
+          student: found,
+          summary: summarizeStudent(found)
+        });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    });
+    return;
+  }
+
+  // GET /api/students -> List available student accounts for login screen
   if (req.method === "GET" && pathname === "/api/students") {
-    const list = Object.values(store.students).map(summarizeStudent);
     return sendJson(res, 200, {
       activeStudentId: store.activeStudentId,
-      students: list
+      students: Object.values(store.students).map(summarizeStudent)
     });
   }
 
-  // POST /api/students -> Create a new student profile
+  // POST /api/students -> Sign up a new student account
   if (req.method === "POST" && pathname === "/api/students") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
-        const nickname = (payload.nickname || "New Explorer").trim();
+        const nickname = (payload.nickname || "Explorer").trim();
+        const username = (payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "");
         const gradeId = gradeMap[payload.currentGrade] ? payload.currentGrade : "kindergarten";
-        const ageYears = Number(payload.ageYears) || (gradeId === "pre-k" ? 4 : gradeId === "kindergarten" ? 5 : gradeId === "grade-1" ? 6 : gradeId === "grade-2" ? 7 : 8);
+        const ageYears = Number(payload.ageYears) || 5;
         const avatar = payload.avatar || "🐼";
-        const studentId = `stu-${nickname.toLowerCase().replace(/[^a-z0-9]/g, "")}-${Date.now().toString().slice(-4)}`;
+        const studentId = `stu-${username}-${Date.now().toString().slice(-4)}`;
 
-        // Seed entry prerequisite units if starting above Pre-K so the student's grade entry units are unlocked
         const seededProgress = {};
         if (gradeId === "kindergarten") {
           seededProgress["PK-M7"] = { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90, bestMedianSpeedSec: 5.0, attemptsCount: 1, stabilityDays: 14, lastReviewedDaysAgo: 1, cpaStage: "PURE_ABSTRACT_SYMBOLIC" };
@@ -281,6 +298,8 @@ const server = http.createServer((req, res) => {
 
         const newStu = {
           studentId,
+          username,
+          pin: payload.pin || "1234",
           nickname,
           avatar,
           ageYears,
@@ -288,6 +307,7 @@ const server = http.createServer((req, res) => {
           motorBaselineSec: ageYears <= 4 ? 0.55 : ageYears <= 6 ? 0.44 : 0.34,
           streakDays: 1,
           starCoins: 50,
+          hearts: 5,
           createdAt: new Date().toISOString(),
           unitProgress: seededProgress,
           topicMastery: {},
@@ -310,7 +330,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // GET /api/students/:studentId -> Get full student state & set active
+  // GET /api/students/:studentId -> Get full student state
   if (req.method === "GET" && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "");
     const stu = store.students[studentId];
@@ -323,23 +343,110 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // POST /api/students/:studentId/calibrate -> Update student motor baseline
-  if (req.method === "POST" && pathname.endsWith("/calibrate") && pathname.startsWith("/api/students/")) {
-    const studentId = pathname.replace("/api/students/", "").replace("/calibrate", "");
-    const stu = store.students[studentId];
-    if (!stu) return sendJson(res, 404, { error: "Student not found" });
+  // GET /api/practice/topic/:unitId/:topicCode -> Generate 8 Duolingo-style interactive practice problems for a specific topic
+  if (req.method === "GET" && pathname.startsWith("/api/practice/topic/")) {
+    const parts = pathname.replace("/api/practice/topic/", "").split("/");
+    const unitId = parts[0];
+    const topicCode = parts[1];
+    const unit = unitMap[unitId];
+    if (!unit) return sendJson(res, 404, { error: `Unit ${unitId} not found` });
+    const topic = unit.skillTopics.find((t) => t.code === topicCode) || unit.skillTopics[0];
+    const count = Number(url.searchParams.get("count") || 8);
+    const problems = generateTopicPracticeSet(unit, topic, count);
+    return sendJson(res, 200, {
+      unitId: unit.unitId,
+      unitTitle: unit.title,
+      targetSpeedSec: unit.masteryGate.maxMedianResponseTimeSec,
+      minAccuracyPercent: 80,
+      topic: {
+        code: topic.code,
+        name: topic.name,
+        assets: topic.assets
+      },
+      practiceProblems: problems
+    });
+  }
+
+  // POST /api/practice/topic/complete -> Complete a topic practice node on the journey path
+  if (req.method === "POST" && pathname === "/api/practice/topic/complete") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
-        if (Array.isArray(payload.warmupTapTimesSec)) {
-          stu.motorBaselineSec = computeMotorBaselineSec(payload.warmupTapTimesSec);
-        } else if (typeof payload.motorBaselineSec === "number") {
-          stu.motorBaselineSec = payload.motorBaselineSec;
+        const studentId = payload.studentId || store.activeStudentId;
+        const stu = store.students[studentId] || Object.values(store.students)[0];
+        const unit = unitMap[payload.unitId];
+        if (!unit) return sendJson(res, 404, { error: "Unit not found" });
+
+        const topicCode = payload.topicCode;
+        const responses = payload.responses || [];
+        const motorSec = payload.motorBaselineSec || stu.motorBaselineSec || 0.42;
+        const total = Math.max(1, responses.length);
+        const correct = responses.filter((r) => r.isCorrect).length;
+        const accPct = Number(((correct / total) * 100).toFixed(1));
+        const cogTimes = responses.map((r) => computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0));
+        const medSpeed = Number(median(cogTimes).toFixed(2));
+        const targetSpeed = unit.masteryGate.maxMedianResponseTimeSec;
+
+        const passedTopic = accPct >= 80;
+        const crowns = accPct >= 95 && medSpeed <= targetSpeed ? 3 : accPct >= 85 ? 2 : passedTopic ? 1 : 0;
+
+        const srPolicy = unit.spacedRepetitionPolicy || { stabilityGrowthFactor: 2.0, maxIntervalCapDays: 45 };
+        const fullKey = `${unit.unitId}-${topicCode}`;
+        const prevTopic = stu.topicMastery[fullKey] || { stabilityDays: 1.0, crowns: 0 };
+        const fg = computeFluencyGrade(passedTopic, medSpeed, targetSpeed);
+        const srUpdate = updateTopicMemoryStability({
+          currentStabilityDays: prevTopic.stabilityDays,
+          fluencyGrade: fg,
+          gradeGrowthFactor: srPolicy.stabilityGrowthFactor,
+          maxIntervalCapDays: srPolicy.maxIntervalCapDays
+        });
+
+        if (passedTopic) {
+          stu.topicMastery[fullKey] = {
+            completed: true,
+            crowns: Math.max(prevTopic.crowns || 0, crowns),
+            masteryScore: Math.round(accPct),
+            accuracyPct: accPct,
+            medianSpeedSec: medSpeed,
+            fluencyGrade: fg,
+            stabilityDays: srUpdate.stabilityDays,
+            lastReviewedDaysAgo: 0
+          };
+          stu.starCoins = (stu.starCoins || 0) + 15 + crowns * 5;
         }
+
+        // Check if all topics in this unit are now completed -> unlock Boss Gate
+        const allTopicsDone = unit.skillTopics.every((t) => stu.topicMastery[`${unit.unitId}-${t.code}`]?.completed);
+        if (!stu.unitProgress[unit.unitId]) {
+          stu.unitProgress[unit.unitId] = {
+            status: allTopicsDone ? "GATE_UNLOCKED" : "IN_PROGRESS",
+            keyState: null,
+            bestAccuracyPct: accPct,
+            bestMedianSpeedSec: medSpeed,
+            attemptsCount: 1,
+            stabilityDays: srUpdate.stabilityDays,
+            lastReviewedDaysAgo: 0,
+            cpaStage: srUpdate.cpaStage
+          };
+        } else if (stu.unitProgress[unit.unitId].status !== "MASTERED" && allTopicsDone) {
+          stu.unitProgress[unit.unitId].status = "GATE_UNLOCKED";
+        }
+
         saveStore(store);
-        return sendJson(res, 200, { student: stu, summary: summarizeStudent(stu) });
+
+        return sendJson(res, 200, {
+          passedTopic,
+          crownsAwarded: crowns,
+          accuracyPct: accPct,
+          medianCogSpeedSec: medSpeed,
+          targetSpeedSec: targetSpeed,
+          bossGateUnlocked: allTopicsDone,
+          spacedRepetition: srUpdate,
+          student: stu,
+          summary: summarizeStudent(stu)
+        });
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
       }
@@ -385,52 +492,9 @@ const server = http.createServer((req, res) => {
     const questions = [];
     for (let i = 0; i < count; i++) {
       const topic = unit.skillTopics[i % unit.skillTopics.length];
-      questions.push(generateProceduralQuestion(unit, topic, Date.now() + i * 17));
+      questions.push(generateProceduralQuestion(unit, topic, i));
     }
     return sendJson(res, 200, { unit, generatedQuestions: questions });
-  }
-
-  if (pathname === "/api/parent/analytics") {
-    const studentId = url.searchParams.get("studentId") || store.activeStudentId;
-    const stu = store.students[studentId] || Object.values(store.students)[0];
-
-    const quadrants = Object.entries(stu.unitProgress || {}).map(([uid, prog]) => {
-      const u = unitMap[uid];
-      const targetSpeed = u ? u.masteryGate.maxMedianResponseTimeSec : 5.0;
-      const minAcc = u ? u.masteryGate.minAccuracyPercent : 90;
-      const accOk = prog.bestAccuracyPct >= minAcc;
-      const speedOk = prog.bestMedianSpeedSec <= targetSpeed;
-      let quadrant = "FLUENT_MASTERY";
-      if (accOk && !speedOk) quadrant = "ACCURATE_BUT_SLOW_NEEDS_FLUENCY";
-      else if (!accOk && speedOk) quadrant = "IMPULSIVE_RUSHING";
-      else if (!accOk && !speedOk) quadrant = "CONCEPTUAL_GAP";
-
-      const retrievabilityPct = computeRetrievabilityPct(prog.lastReviewedDaysAgo || 0, prog.stabilityDays || 1);
-      return {
-        unitId: uid,
-        unitTitle: u ? u.title : uid,
-        status: prog.status,
-        keyState: prog.keyState,
-        bestAccuracyPct: prog.bestAccuracyPct,
-        bestMedianSpeedSec: prog.bestMedianSpeedSec,
-        targetSpeedSec: targetSpeed,
-        attemptsCount: prog.attemptsCount || 1,
-        cpaStage: prog.cpaStage || "CONCRETE_INTERACTIVE",
-        quadrant,
-        stabilityDays: prog.stabilityDays,
-        retrievabilityPct,
-        needsGardenWatering: retrievabilityPct < 80
-      };
-    });
-
-    return sendJson(res, 200, {
-      profile: summarizeStudent(stu),
-      allStudentsComparison: Object.values(store.students).map(summarizeStudent),
-      quadrants,
-      topicMastery: stu.topicMastery || {},
-      misconceptionCounts: stu.misconceptionCounts || {},
-      gateHistory: (stu.gateHistory || []).slice(-15)
-    });
   }
 
   if (req.method === "POST" && pathname === "/api/gate/evaluate") {
@@ -461,43 +525,25 @@ const server = http.createServer((req, res) => {
           maxIntervalCapDays: srPolicy.maxIntervalCapDays
         });
 
-        // Upgrade SILVER_KEY -> GOLD_KEY if already held SILVER_KEY and passed verification
         const nextKeyState = evalResult.passed
           ? (prevProg.keyState === "SILVER_KEY" || prevProg.keyState === "GOLD_KEY" ? "GOLD_KEY" : "SILVER_KEY")
           : prevProg.keyState;
 
-        const implicitCredits = evalResult.passed
-          ? propagateImplicitDagCredit(unit.unitId, srUpdate.stabilityDays - prevProg.stabilityDays, unitMap, 0.4)
-          : [];
-
-        // Apply FIRe implicit credit to prerequisite units in this student's profile
-        for (const cred of implicitCredits) {
-          if (stu.unitProgress[cred.prerequisiteUnitId]) {
-            stu.unitProgress[cred.prerequisiteUnitId].stabilityDays = Number(
-              Math.min(srPolicy.maxIntervalCapDays, (stu.unitProgress[cred.prerequisiteUnitId].stabilityDays || 1) + Math.max(0.5, cred.implicitStabilityBoostDays)).toFixed(2)
-            );
+        if (evalResult.passed) {
+          for (const t of unit.skillTopics) {
+            const fullKey = `${unit.unitId}-${t.code}`;
+            stu.topicMastery[fullKey] = {
+              completed: true,
+              crowns: 3,
+              masteryScore: 100,
+              accuracyPct: evalResult.overallAccuracyPct,
+              medianSpeedSec: evalResult.medianCogSpeedSec,
+              fluencyGrade: fg,
+              stabilityDays: srUpdate.stabilityDays,
+              lastReviewedDaysAgo: 0
+            };
           }
-        }
-
-        // Update per-topic mastery breakdown for this student
-        for (const tb of evalResult.topicBreakdown || []) {
-          const fullTopicKey = `${unit.unitId}-${tb.code}`;
-          stu.topicMastery[fullTopicKey] = {
-            masteryScore: Math.round(tb.accuracyPct),
-            accuracyPct: tb.accuracyPct,
-            medianSpeedSec: tb.medianSpeedSec,
-            fluencyGrade: computeFluencyGrade(tb.accuracyPct >= 75, tb.medianSpeedSec, unit.masteryGate.maxMedianResponseTimeSec),
-            stabilityDays: srUpdate.stabilityDays
-          };
-        }
-
-        // Track misconceptions if any errors occurred
-        for (const r of payload.responses || []) {
-          if (!r.isCorrect && Array.isArray(r.misconceptionTags)) {
-            for (const tag of r.misconceptionTags) {
-              stu.misconceptionCounts[tag] = (stu.misconceptionCounts[tag] || 0) + 1;
-            }
-          }
+          stu.starCoins = (stu.starCoins || 0) + 50;
         }
 
         stu.unitProgress[unit.unitId] = {
@@ -513,25 +559,13 @@ const server = http.createServer((req, res) => {
           cpaStage: srUpdate.cpaStage
         };
 
-        if (evalResult.passed) {
-          stu.starCoins = (stu.starCoins || 0) + (nextKeyState === "GOLD_KEY" ? 50 : 30);
-        }
-
-        stu.gateHistory.push({
-          timestamp: new Date().toISOString(),
-          unitId: unit.unitId,
-          ...evalResult,
-          keyAwarded: nextKeyState
-        });
-
         saveStore(store);
 
         return sendJson(res, 200, {
-          studentSummary: summarizeStudent(stu),
-          studentProgress: stu.unitProgress,
+          student: stu,
+          summary: summarizeStudent(stu),
           evaluation: { ...evalResult, keyAwarded: nextKeyState },
-          spacedRepetition: srUpdate,
-          implicitDagCredits: implicitCredits
+          spacedRepetition: srUpdate
         });
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
