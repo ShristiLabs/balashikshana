@@ -37,7 +37,7 @@ Every unit progresses through four stages:
 
 ```text
 balashikshana/
-├── AGENT.md                                  # AI Agent architecture, pedagogical & schema guide
+├── AGENTS.md                                 # AI Agent architecture, pedagogical & schema guide
 ├── README.md                                 # Project overview, curriculum summary & architecture
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Mathematics Curriculum Guide
 ├── .gitignore                                # Git ignore rules for mobile, Node, and build artifacts
@@ -63,7 +63,7 @@ balashikshana/
 ```
 
 ### Detailed Documentation Links
-1. **[AI Agent Guide (`AGENT.md`)](./AGENT.md)** — Non-negotiable pedagogical invariants, 9-asset schema contract, and development rules for AI agents.
+1. **[AI Agent Guide (`AGENTS.md`)](./AGENTS.md)** — Non-negotiable pedagogical invariants, 9-asset schema contract, and development rules for AI agents.
 2. **[Full US Curriculum & Assets JSON Registry (`docs/us-curriculum-registry.json`)](./docs/us-curriculum-registry.json)** — Complete DAG of all 130 units and 614 skill topics with embedded 9-category asset definitions.
 3. **[US Curriculum & Unit Mapping (`docs/us-curriculum-mapping.md`)](./docs/us-curriculum-mapping.md)** — Grade-by-grade tables mapping every Math, ELA, Science, and Social Studies skill topic to sequential units.
 4. **[Skill Topic Assets Catalog (`docs/skill-topic-assets-catalog.md`)](./docs/skill-topic-assets-catalog.md)** — Overview of the Sounds, Images, Videos, Interactive Elements, Voice Narration, Animations, Games, Quizzes, and Assessments generated for all 614 skill topics.

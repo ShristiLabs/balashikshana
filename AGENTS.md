@@ -1,4 +1,4 @@
-# AGENT.md — AI Agent Development & Curriculum Guide for Balashikshana
+# AGENTS.md — AI Agent Development & Curriculum Guide for Balashikshana
 
 This document provides context, architectural invariants, pedagogical rules, and workflow guidelines for AI coding and curriculum agents working on **Balashikshana** (Pre-K to Grade 3 Interactive Learning Games & Study Platform for iOS and Android).
 
@@ -30,7 +30,7 @@ This document provides context, architectural invariants, pedagogical rules, and
 
 ```text
 balashikshana/
-├── AGENT.md                                  # This agent guide (invariants, schemas & workflows)
+├── AGENTS.md                                 # This agent guide (invariants, schemas & workflows)
 ├── README.md                                 # Project overview & documentation index
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Math Curriculum Guide
 ├── docs/
