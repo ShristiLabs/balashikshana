@@ -2,8 +2,8 @@
   "name": "@balashikshana/core-engine",
   "version": "1.0.0",
   "type": "module",
-  "main": "./dist/index.mjs",
+  "main": "./src/index.mjs",
   "scripts": {
-    "build": "node ./dist/verify-engine.mjs"
+    "build": "node ./src/verify-engine.mjs"
   }
 }

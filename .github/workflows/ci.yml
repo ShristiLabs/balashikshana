@@ -28,7 +28,7 @@ jobs:
         run: python3 scripts/validate-curriculum.py
 
       - name: Validate Core Mastery & Spaced Repetition Engine
-        run: node packages/core-engine/dist/verify-engine.mjs
+        run: node packages/core-engine/src/verify-engine.mjs
 
       - name: Smoke-Test Sync & Curriculum API Server
         run: |

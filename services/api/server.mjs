@@ -10,7 +10,7 @@ import {
   computeRetrievabilityPct,
   propagateImplicitDagCredit,
   generateProceduralQuestion
-} from "../../packages/core-engine/dist/index.mjs";
+} from "../../packages/core-engine/src/index.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "../..");
