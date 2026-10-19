@@ -41,3 +41,4 @@ tmp/
 temp/
 .pids/
 logs/
+services/api/data/

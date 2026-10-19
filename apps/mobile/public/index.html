@@ -282,11 +282,14 @@
     </div>
 
     <div class="stats-bar">
-      <span class="pill teal" id="motorPill">⚡ Motor Baseline: 0.42s</span>
-      <span class="pill gold" id="keysPill">🔑 2 Gold • 2 Silver Keys</span>
-      <span class="pill" id="gardenPill">🌱 Knowledge Garden: 88% Blooming</span>
-      <button class="btn-3d amber" onclick="openMotorCalibration()">🎈 Calibrate Tap Speed</button>
-      <button class="btn-3d indigo" onclick="openDailyBrainBoost()">🧠 Daily Brain Boost</button>
+      <div id="studentSwitcherBar" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"></div>
+      <button class="btn-3d" style="padding:7px 12px; font-size:13px;" onclick="openNewStudentModal()">+ Add Student</button>
+      <span class="pill teal" id="motorPill">⚡ Motor: 0.42s</span>
+      <span class="pill gold" id="keysPill">🔑 Keys: 0</span>
+      <span class="pill" id="coinsPill">⭐ 0 Coins</span>
+      <span class="pill" id="gardenPill">🌱 Garden: 100%</span>
+      <button class="btn-3d amber" onclick="openMotorCalibration()">🎈 Calibrate Tap</button>
+      <button class="btn-3d indigo" onclick="openDailyBrainBoost()">🧠 Brain Boost</button>
       <button class="btn-3d secondary" onclick="openParentPortal()">🔒 Parent Analytics</button>
     </div>
   </header>
@@ -447,10 +450,11 @@
     let motorBaselineSec = 0.42;
     let tenFrameState = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0];
 
-    // Unlocked units state (tracks mastery progression across the DAG)
-    const masteredUnits = new Set(["PK-M1", "PK-E1", "K-M1", "K-E1", "K-S1", "K-SS1", "G1-M1", "G1-E1", "G1-S1", "G1-SS1", "G2-M1", "G2-E1", "G2-S1", "G2-SS1", "G3-M1", "G3-E1", "G3-S1", "G3-SS1"]);
-    const silverKeyUnits = new Set(["PK-M1", "K-M1"]);
-    const goldKeyUnits = new Set(["PK-E1", "G1-M1"]);
+    // Multi-Student Profile & Per-Student Progress State
+    let allStudentsList = [];
+    let activeStudent = null;
+    let studentUnitProgress = {};
+    let studentTopicMastery = {};
 
     // Active Game / Gate state
     let arenaQuestions = [];
@@ -495,11 +499,115 @@
     }
 
     async function initApp() {
-      const res = await fetch(`${API_BASE}/api/curriculum/summary`);
-      curriculumSummary = await res.json();
-      renderGradeTabs();
-      await selectGrade("pre-k");
+      const [currRes, stuRes] = await Promise.all([
+        fetch(`${API_BASE}/api/curriculum/summary`),
+        fetch(`${API_BASE}/api/students`)
+      ]);
+      curriculumSummary = await currRes.json();
+      const stuData = await stuRes.json();
+      allStudentsList = stuData.students || [];
       renderInteractiveTenFrame();
+      await switchStudentProfile(stuData.activeStudentId || (allStudentsList[0] && allStudentsList[0].studentId));
+    }
+
+    function renderStudentSwitcher() {
+      const bar = document.getElementById("studentSwitcherBar");
+      bar.innerHTML = allStudentsList.map((s) => {
+        const isCurrent = activeStudent && activeStudent.studentId === s.studentId;
+        return `
+          <button class="tab-btn ${isCurrent ? 'active' : ''}"
+                  style="padding:6px 11px; font-size:13px; border-radius:999px;"
+                  onclick="switchStudentProfile('${s.studentId}')">
+            ${s.avatar} ${s.nickname} <span style="font-size:11px; opacity:0.8;">(${s.masteredUnitsCount}✓)</span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function updateHeaderStudentStats(summary) {
+      motorBaselineSec = summary.motorBaselineSec || 0.42;
+      document.getElementById("motorPill").textContent = `⚡ Motor: ${motorBaselineSec}s`;
+      document.getElementById("keysPill").textContent = `🔑 ${summary.goldKeysCount}🥇 ${summary.silverKeysCount}🥈`;
+      document.getElementById("coinsPill").textContent = `⭐ ${summary.starCoins} Coins (🔥${summary.streakDays}d)`;
+      document.getElementById("gardenPill").textContent = `🌱 Garden: ${summary.gardenHealthPct}% (${summary.dueSpacedReviewsCount} Due)`;
+    }
+
+    async function switchStudentProfile(studentId) {
+      if (!studentId) return;
+      const [detailRes, listRes] = await Promise.all([
+        fetch(`${API_BASE}/api/students/${studentId}`),
+        fetch(`${API_BASE}/api/students`)
+      ]);
+      const detail = await detailRes.json();
+      const listData = await listRes.json();
+      allStudentsList = listData.students || [];
+      activeStudent = detail.student;
+      studentUnitProgress = activeStudent.unitProgress || {};
+      studentTopicMastery = activeStudent.topicMastery || {};
+      updateHeaderStudentStats(detail.summary);
+      renderStudentSwitcher();
+      await selectGrade(activeStudent.currentGrade || "kindergarten");
+    }
+
+    function openNewStudentModal() {
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = "👧👦 Create New Student Profile";
+      document.getElementById("modalBody").innerHTML = `
+        <p style="margin-bottom:14px; color:var(--ink-700); font-size:14px;">
+          Each student gets an independent Mastery DAG, personal Motor-Latency Baseline ($T_{\\text{motor}}$), Silver/Gold Sleep-Consolidation Keys, and FSRS Spaced-Repetition Queue.
+        </p>
+        <div style="display:grid; gap:12px; max-width:480px;">
+          <label style="font-weight:800; font-size:13px;">
+            Student Nickname:
+            <input id="newStuName" type="text" placeholder="e.g., Sofia" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;" />
+          </label>
+          <label style="font-weight:800; font-size:13px;">
+            Choose Avatar:
+            <select id="newStuAvatar" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;">
+              <option value="🐼">🐼 Panda</option>
+              <option value="🦁">🦁 Lion</option>
+              <option value="🦊">🦊 Fox</option>
+              <option value="🚀">🚀 Rocket Explorer</option>
+              <option value="🦄">🦄 Unicorn</option>
+              <option value="🦖">🦖 Dino</option>
+              <option value="🦉">🦉 Wise Owl</option>
+              <option value="🐬">🐬 Dolphin</option>
+            </select>
+          </label>
+          <label style="font-weight:800; font-size:13px;">
+            Age (Years):
+            <input id="newStuAge" type="number" min="3" max="9" value="6" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;" />
+          </label>
+          <label style="font-weight:800; font-size:13px;">
+            Assigned Starting Grade:
+            <select id="newStuGrade" style="width:100%; padding:10px; border-radius:10px; border:2px solid #CBD5E1; margin-top:4px; font-size:15px;">
+              <option value="pre-k">Pre-K (3–4 yrs)</option>
+              <option value="kindergarten">Kindergarten (5–6 yrs)</option>
+              <option value="grade-1" selected>Grade 1 (6–7 yrs)</option>
+              <option value="grade-2">Grade 2 (7–8 yrs)</option>
+              <option value="grade-3">Grade 3 (8–9 yrs)</option>
+            </select>
+          </label>
+          <button class="btn-3d" onclick="createNewStudentProfile()">✓ Create Student &amp; Start Learning</button>
+        </div>
+      `;
+      modal.classList.add("open");
+    }
+
+    async function createNewStudentProfile() {
+      const nickname = document.getElementById("newStuName").value.trim() || "Explorer";
+      const avatar = document.getElementById("newStuAvatar").value;
+      const ageYears = Number(document.getElementById("newStuAge").value) || 6;
+      const currentGrade = document.getElementById("newStuGrade").value;
+      const res = await fetch(`${API_BASE}/api/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nickname, avatar, ageYears, currentGrade })
+      });
+      const created = await res.json();
+      closeModal();
+      playSound("/assets/sounds/sfx_star_fanfare.wav");
+      await switchStudentProfile(created.student.studentId);
     }
 
     function renderGradeTabs() {
@@ -539,7 +647,10 @@
     function isUnitUnlocked(unit) {
       if (!unit.prerequisiteUnitIds || unit.prerequisiteUnitIds.length === 0) return true;
       if (unit.sequenceOrder === 1) return true;
-      return unit.prerequisiteUnitIds.every((pid) => masteredUnits.has(pid));
+      return unit.prerequisiteUnitIds.every((pid) => {
+        const p = studentUnitProgress[pid];
+        return p && p.status === "MASTERED";
+      });
     }
 
     function selectSubject(subjKey) {
@@ -547,7 +658,8 @@
       const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
       renderSubjectTabs(Object.keys(gradeObj.subjects));
       const subj = gradeObj.subjects[subjKey];
-      document.getElementById("unitListHeading").textContent = `${gradeObj.gradeName} ${SUBJECT_LABELS[subjKey]}`;
+      const stuName = activeStudent ? `${activeStudent.avatar} ${activeStudent.nickname} — ` : "";
+      document.getElementById("unitListHeading").textContent = `${stuName}${gradeObj.gradeName} ${SUBJECT_LABELS[subjKey]}`;
       document.getElementById("unitCountBadge").textContent = `${subj.totalUnits} Units • ${subj.totalSkillTopics} Topics`;
       renderUnitList(subj.units);
       selectUnit(subj.units[0].unitId);
@@ -557,11 +669,19 @@
       const container = document.getElementById("unitListContainer");
       container.innerHTML = units.map((u) => {
         const unlocked = isUnitUnlocked(u);
-        const mastered = masteredUnits.has(u.unitId);
-        const keyBadge = goldKeyUnits.has(u.unitId)
-          ? "🥇 Gold Key"
-          : silverKeyUnits.has(u.unitId)
-          ? "🥈 Silver Key (Sleep Check Due)"
+        const prog = studentUnitProgress[u.unitId];
+        const mastered = prog && prog.status === "MASTERED";
+        const keyBadge = prog && prog.keyState === "GOLD_KEY"
+          ? "🥇 Gold Key (Sleep-Consolidated)"
+          : prog && prog.keyState === "SILVER_KEY"
+          ? "🥈 Silver Key (Day-2 Check Ready)"
+          : prog && prog.status === "REMEDIATION_REQUIRED"
+          ? "🔄 Remediation Prescribed"
+          : "";
+        const perfStats = prog
+          ? `<div style="margin-top:4px; font-size:11px; color:var(--teal-700); font-weight:800;">
+               Student Best: ${prog.bestAccuracyPct}% Acc • ${prog.bestMedianSpeedSec}s Speed (${prog.attemptsCount || 1}x)
+             </div>`
           : "";
         return `
           <div class="unit-node ${activeUnit && activeUnit.unitId === u.unitId ? 'selected' : ''} ${!unlocked ? 'locked' : ''}"
@@ -577,7 +697,8 @@
               <span>${u.skillTopics.length} Skill Topics</span>
               <span>Gate: ≥${u.masteryGate.minAccuracyPercent}% &amp; ≤${u.masteryGate.maxMedianResponseTimeSec}s</span>
             </div>
-            ${keyBadge ? `<div style="margin-top:6px; font-size:11px; font-weight:800; color:#B45309;">${keyBadge}</div>` : ""}
+            ${perfStats}
+            ${keyBadge ? `<div style="margin-top:4px; font-size:11px; font-weight:800; color:#B45309;">${keyBadge}</div>` : ""}
           </div>
         `;
       }).join("");
@@ -792,7 +913,8 @@
       arenaResponses.push({
         topicCode: q.topicCode,
         isCorrect,
-        rawTimeSec
+        rawTimeSec,
+        misconceptionTags: q.misconceptionTags || []
       });
 
       const btn = document.getElementById(`choiceBtn_${btnIdx}`);
@@ -826,6 +948,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          studentId: activeStudent ? activeStudent.studentId : undefined,
           unitId: activeUnit.unitId,
           motorBaselineSec,
           responses: arenaResponses
@@ -835,13 +958,22 @@
       const ev = result.evaluation;
       const sr = result.spacedRepetition;
 
-      if (ev.passed) {
-        masteredUnits.add(activeUnit.unitId);
-        silverKeyUnits.add(activeUnit.unitId);
-        playSound("/assets/sounds/sfx_star_fanfare.wav");
-        const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
-        renderUnitList(gradeObj.subjects[activeSubjectKey].units);
+      if (result.studentProgress) {
+        studentUnitProgress = result.studentProgress;
       }
+      if (result.studentSummary) {
+        updateHeaderStudentStats(result.studentSummary);
+        allStudentsList = allStudentsList.map((s) =>
+          s.studentId === result.studentSummary.studentId ? result.studentSummary : s
+        );
+        renderStudentSwitcher();
+      }
+
+      if (ev.passed) {
+        playSound("/assets/sounds/sfx_star_fanfare.wav");
+      }
+      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
+      renderUnitList(gradeObj.subjects[activeSubjectKey].units);
 
       const report = document.getElementById("gateSummaryReport");
       report.style.display = "block";
@@ -887,9 +1019,16 @@
         if (taps.length >= 3) {
           taps.sort((a, b) => a - b);
           motorBaselineSec = Number(taps[1].toFixed(2));
-          document.getElementById("motorPill").textContent = `⚡ Motor Baseline: ${motorBaselineSec}s`;
+          document.getElementById("motorPill").textContent = `⚡ Motor: ${motorBaselineSec}s`;
+          if (activeStudent) {
+            fetch(`${API_BASE}/api/students/${activeStudent.studentId}/calibrate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ warmupTapTimesSec: taps })
+            });
+          }
           document.getElementById("calibStatus").innerHTML = `
-            <strong style="color:#166534;">✓ Calibrated! Median Motor Latency = ${motorBaselineSec}s.</strong><br>
+            <strong style="color:#166534;">✓ Saved for ${activeStudent ? activeStudent.nickname : 'Student'}! Median Motor Latency = ${motorBaselineSec}s.</strong><br>
             All Boss Gate response times will subtract ${motorBaselineSec}s so only pure cognitive thinking speed is graded!
           `;
         } else {
@@ -941,15 +1080,44 @@
       modal.classList.add("open");
     }
 
-    async function openParentPortal() {
-      const res = await fetch(`${API_BASE}/api/parent/analytics`);
+    async function openParentPortal(targetStudentId) {
+      const sid = targetStudentId || (activeStudent && activeStudent.studentId) || "";
+      const res = await fetch(`${API_BASE}/api/parent/analytics?studentId=${encodeURIComponent(sid)}`);
       const data = await res.json();
       const modal = document.getElementById("appModal");
-      document.getElementById("modalTitle").textContent = "🔒 Parent & Educator Analytics Portal (Accuracy vs. Speed Quadrants)";
+      document.getElementById("modalTitle").textContent = "🔒 Multi-Student Parent & Educator Analytics Portal";
+      const misconceptions = Object.entries(data.misconceptionCounts || {});
       document.getElementById("modalBody").innerHTML = `
-        <p style="margin-bottom:12px; font-size:14px; color:var(--ink-700);">
-          <strong>Learner:</strong> ${data.profile.nickname} • <strong>Motor Baseline:</strong> ${motorBaselineSec}s • <strong>Streak:</strong> ${data.profile.streakDays} Days
+        <div style="margin-bottom:18px; background:#F8FAFC; padding:14px; border-radius:16px; border:2px solid #E2E8F0;">
+          <h4 style="margin-bottom:8px; font-size:14px; color:var(--ink-700);">
+            👨‍👩‍👧‍👦 All Student Profiles (Click Any Student to Inspect Detailed Progress)
+          </h4>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+            ${(data.allStudentsComparison || []).map((s) => `
+              <div onclick="openParentPortal('${s.studentId}')"
+                   style="cursor:pointer; padding:12px; border-radius:12px; background:${s.studentId === data.profile.studentId ? '#CCFBF1' : '#FFFFFF'}; border:2px solid ${s.studentId === data.profile.studentId ? '#0D9488' : '#CBD5E1'};">
+                <div style="font-weight:800; font-size:15px;">${s.avatar} ${s.nickname} <span style="font-size:12px; opacity:0.75;">(${s.ageYears}y • ${s.currentGrade})</span></div>
+                <div style="font-size:12px; margin-top:4px;">
+                  Mastered: <strong>${s.masteredUnitsCount} units</strong> • Keys: <strong>${s.goldKeysCount}🥇 ${s.silverKeysCount}🥈</strong>
+                </div>
+                <div style="font-size:12px; color:var(--teal-700); font-weight:700;">
+                  Avg Acc: ${s.avgAccuracyPct}% • Garden: ${s.gardenHealthPct}% (${s.dueSpacedReviewsCount} due)
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+
+        <h3 style="font-size:18px; margin-bottom:8px;">
+          ${data.profile.avatar} ${data.profile.nickname}'s 2D Accuracy-vs-Speed Automaticity Quadrants
+        </h3>
+        <p style="margin-bottom:12px; font-size:13px; color:var(--ink-700);">
+          <strong>Motor Baseline:</strong> ${data.profile.motorBaselineSec}s •
+          <strong>Streak:</strong> ${data.profile.streakDays} Days •
+          <strong>Star Coins:</strong> ${data.profile.starCoins} •
+          <strong>Spaced Reviews Due:</strong> ${data.profile.dueSpacedReviewsCount}
         </p>
+
         <div class="quadrant-grid">
           ${data.quadrants.map((q) => `
             <div class="quad-cell">
@@ -958,14 +1126,23 @@
                 <span class="mono">${q.keyState || q.status}</span>
               </div>
               <div style="font-size:13px; margin-top:6px;">
-                Accuracy: <strong>${q.bestAccuracyPct}%</strong> | Median Speed: <strong>${q.bestMedianSpeedSec}s</strong> (Target ≤${q.targetSpeedSec}s)
+                Best Accuracy: <strong>${q.bestAccuracyPct}%</strong> | Best Median Speed: <strong>${q.bestMedianSpeedSec}s</strong> (Target ≤${q.targetSpeedSec}s) | Attempts: ${q.attemptsCount}
               </div>
               <div style="font-size:12px; margin-top:4px; color:var(--teal-700); font-weight:800;">
-                Quadrant: ${q.quadrant} • Retrievability R(t): ${q.retrievabilityPct}% (Stability: ${q.stabilityDays}d)
+                Quadrant: ${q.quadrant} • Retrievability R(t): ${q.retrievabilityPct}% (Stability: ${q.stabilityDays}d • CPA: ${q.cpaStage})
               </div>
             </div>
           `).join("")}
         </div>
+
+        ${misconceptions.length > 0 ? `
+          <div style="margin-top:14px; padding:12px; border-radius:12px; background:#FFF1F2; border:1.5px solid #FECDD3;">
+            <h4 style="font-size:14px; color:#9F1239; margin-bottom:6px;">🎯 Diagnostic Misconception Tags Logged for ${data.profile.nickname}</h4>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              ${misconceptions.map(([tag, cnt]) => `<span class="pill" style="font-size:12px;">${tag}: ${cnt}x</span>`).join("")}
+            </div>
+          </div>
+        ` : ""}
       `;
       modal.classList.add("open");
     }

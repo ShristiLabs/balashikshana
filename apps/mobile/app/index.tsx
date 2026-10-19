@@ -3,6 +3,13 @@ import { ScrollView, View, Text, Pressable } from "react-native";
 
 export default function HomeScreen() {
   const [selectedGrade, setSelectedGrade] = useState("kindergarten");
+  const [activeStudentId, setActiveStudentId] = useState("stu-aarav-k");
+
+  const students = [
+    { studentId: "stu-maya-pk", nickname: "Maya", avatar: "🦊", grade: "pre-k", mastered: 3 },
+    { studentId: "stu-aarav-k", nickname: "Aarav", avatar: "🦁", grade: "kindergarten", mastered: 5 },
+    { studentId: "stu-liam-g2", nickname: "Liam", avatar: "🚀", grade: "grade-2", mastered: 4 }
+  ];
 
   const grades = [
     { id: "pre-k", label: "Pre-K (3–4 yrs)" },
