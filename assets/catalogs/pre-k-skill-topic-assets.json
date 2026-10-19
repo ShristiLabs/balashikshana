@@ -104,6 +104,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Numbers to 3'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -190,49 +195,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Numbers to 3] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M1-A: Numbers to 3] Count the counters on the frame: there are 3 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "3",
+                "2",
+                "2",
+                "5"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Touch each counter once as you count in order from 1 up to 3. The last number said (3) tells the total cardinality."
             },
             {
-              "prompt": "[Numbers to 3] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M1-A: Numbers to 3] Start at 2 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
-                "6",
+                "3",
+                "1",
                 "4",
-                "21"
+                "2"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 2 + 1 = 3."
             },
             {
-              "prompt": "[Numbers to 3] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M1-A: Numbers to 3] If we rearrange 3 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "Still 3 cubes (conservation of number)",
+                "4 cubes",
+                "2 cubes",
+                "0 cubes"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "Still 3 cubes (conservation of number)",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "conservation_of_cardinality_error"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "The total number of objects (3) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -364,6 +370,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Counting to 3'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -450,49 +461,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Counting to 3] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M1-B: Counting to 3] Count the counters on the frame: there are 3 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "3",
+                "2",
+                "2",
+                "5"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Touch each counter once as you count in order from 1 up to 3. The last number said (3) tells the total cardinality."
             },
             {
-              "prompt": "[Counting to 3] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M1-B: Counting to 3] Start at 2 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
-                "6",
+                "3",
+                "1",
                 "4",
-                "21"
+                "2"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 2 + 1 = 3."
             },
             {
-              "prompt": "[Counting to 3] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M1-B: Counting to 3] If we rearrange 3 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "Still 3 cubes (conservation of number)",
+                "4 cubes",
+                "2 cubes",
+                "0 cubes"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "Still 3 cubes (conservation of number)",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "conservation_of_cardinality_error"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "The total number of objects (3) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -624,6 +636,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Numbers to 5'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -710,49 +727,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Numbers to 5] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M1-C: Numbers to 5] Count the counters on the frame: there are 4 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
-              ],
-              "correctAnswer": "10 + 4 = 14",
-              "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
-              ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
-            },
-            {
-              "prompt": "[Numbers to 5] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
-              "choices": [
-                "5",
-                "6",
                 "4",
-                "21"
+                "5",
+                "3",
+                "6"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "4",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Touch each counter once as you count in order from 1 up to 4. The last number said (4) tells the total cardinality."
             },
             {
-              "prompt": "[Numbers to 5] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M1-C: Numbers to 5] Start at 3 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "4",
+                "2",
+                "5",
+                "3"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "4",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 3 + 1 = 4."
+            },
+            {
+              "prompt": "[PK-M1-C: Numbers to 5] If we rearrange 4 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
+              "choices": [
+                "Still 4 cubes (conservation of number)",
+                "5 cubes",
+                "3 cubes",
+                "0 cubes"
+              ],
+              "correctAnswer": "Still 4 cubes (conservation of number)",
+              "misconceptionTags": [
+                "conservation_of_cardinality_error"
+              ],
+              "explanation": "The total number of objects (4) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -884,6 +902,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Counting to 5'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -970,49 +993,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Counting to 5] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M1-D: Counting to 5] Count the counters on the frame: there are 2 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "2",
+                "3",
+                "1",
+                "4"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "2",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Touch each counter once as you count in order from 1 up to 2. The last number said (2) tells the total cardinality."
             },
             {
-              "prompt": "[Counting to 5] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M1-D: Counting to 5] Start at 1 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
-                "6",
-                "4",
-                "21"
+                "2",
+                "0",
+                "3",
+                "1"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "2",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 1 + 1 = 2."
             },
             {
-              "prompt": "[Counting to 5] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M1-D: Counting to 5] If we rearrange 2 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "Still 2 cubes (conservation of number)",
+                "3 cubes",
+                "1 cubes",
+                "0 cubes"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "Still 2 cubes (conservation of number)",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "conservation_of_cardinality_error"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "The total number of objects (2) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -1144,6 +1168,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how GearedJudyClock models 'Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)'.",
+            "Step 2 (Manipulate): Use 'rotate-linked-minute-and-hour-hands' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -1230,50 +1259,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)] The short hour hand is between 3 and 4, and the long minute hand points to 6. What time is it?",
+              "prompt": "[PK-M1-AA: Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)] Count the counters on the frame: there are 3 counters. Which numeral matches this quantity?",
               "visualAid": "geared_judy_clock.svg",
               "choices": [
-                "3:30",
-                "3:06",
-                "6:15",
-                "4:30"
+                "3",
+                "4",
+                "2",
+                "5"
               ],
-              "correctAnswer": "3:30",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "swapped_hour_and_minute_hands",
-                "read_face_number_instead_of_skip_5"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Skip-count by 5s to the 6 (30 minutes). The hour hand has passed 3, so it is 3:30."
+              "explanation": "Touch each counter once as you count in order from 1 up to 3. The last number said (3) tells the total cardinality."
             },
             {
-              "prompt": "[Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)] Soccer practice starts at 4:15 PM and lasts 45 minutes. When does it end?",
-              "visualAid": "elapsed_time_number_line.svg",
+              "prompt": "[PK-M1-AA: Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)] Start at 2 and count forward 1 more. What number comes next?",
+              "visualAid": "geared_judy_clock.svg",
               "choices": [
-                "5:00 PM",
-                "4:50 PM",
-                "4:60 PM",
-                "5:15 PM"
+                "3",
+                "1",
+                "4",
+                "2"
               ],
-              "correctAnswer": "5:00 PM",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "base_100_time_addition_error"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Hop +45 minutes on the time number line from 4:15: 15 + 45 = 60 minutes (1 full hour), reaching 5:00 PM."
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 2 + 1 = 3."
             },
             {
-              "prompt": "[Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)] How many minutes are in 1 whole hour?",
-              "visualAid": "analog_clock_minute_5min_ring.svg",
+              "prompt": "[PK-M1-AA: Daily calendar routines, seasonal counting sets, number puzzles & syllable-clap counting (MA.1-4)] If we rearrange 3 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "geared_judy_clock.svg",
               "choices": [
-                "60 minutes",
-                "100 minutes",
-                "24 minutes",
-                "12 minutes"
+                "Still 3 cubes (conservation of number)",
+                "4 cubes",
+                "2 cubes",
+                "0 cubes"
               ],
-              "correctAnswer": "60 minutes",
+              "correctAnswer": "Still 3 cubes (conservation of number)",
               "misconceptionTags": [
-                "confused_hours_in_day_with_minutes"
+                "conservation_of_cardinality_error"
               ],
-              "explanation": "There are 12 numbers on the clock face with 5 minutes between each: 12 × 5 = 60 minutes."
+              "explanation": "The total number of objects (3) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -1405,6 +1434,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Numbers and counting to 7'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -1491,49 +1525,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Numbers and counting to 7] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M2-E: Numbers and counting to 7] Count the counters on the frame: there are 4 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
-              ],
-              "correctAnswer": "10 + 4 = 14",
-              "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
-              ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
-            },
-            {
-              "prompt": "[Numbers and counting to 7] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
-              "choices": [
-                "5",
-                "6",
                 "4",
-                "21"
+                "5",
+                "3",
+                "6"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "4",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Touch each counter once as you count in order from 1 up to 4. The last number said (4) tells the total cardinality."
             },
             {
-              "prompt": "[Numbers and counting to 7] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M2-E: Numbers and counting to 7] Start at 3 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "4",
+                "2",
+                "5",
+                "3"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "4",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 3 + 1 = 4."
+            },
+            {
+              "prompt": "[PK-M2-E: Numbers and counting to 7] If we rearrange 4 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
+              "choices": [
+                "Still 4 cubes (conservation of number)",
+                "5 cubes",
+                "3 cubes",
+                "0 cubes"
+              ],
+              "correctAnswer": "Still 4 cubes (conservation of number)",
+              "misconceptionTags": [
+                "conservation_of_cardinality_error"
+              ],
+              "explanation": "The total number of objects (4) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -1665,6 +1700,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Numbers and counting to 9'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -1751,49 +1791,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Numbers and counting to 9] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M2-F: Numbers and counting to 9] Count the counters on the frame: there are 3 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
-              ],
-              "correctAnswer": "10 + 4 = 14",
-              "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
-              ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
-            },
-            {
-              "prompt": "[Numbers and counting to 9] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
-              "choices": [
-                "5",
-                "6",
+                "3",
                 "4",
-                "21"
+                "2",
+                "5"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Touch each counter once as you count in order from 1 up to 3. The last number said (3) tells the total cardinality."
             },
             {
-              "prompt": "[Numbers and counting to 9] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M2-F: Numbers and counting to 9] Start at 2 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "3",
+                "1",
+                "4",
+                "2"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "3",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 2 + 1 = 3."
+            },
+            {
+              "prompt": "[PK-M2-F: Numbers and counting to 9] If we rearrange 3 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
+              "choices": [
+                "Still 3 cubes (conservation of number)",
+                "4 cubes",
+                "2 cubes",
+                "0 cubes"
+              ],
+              "correctAnswer": "Still 3 cubes (conservation of number)",
+              "misconceptionTags": [
+                "conservation_of_cardinality_error"
+              ],
+              "explanation": "The total number of objects (3) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -1925,6 +1966,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Numbers to 10'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -2011,49 +2057,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Numbers to 10] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M2-G: Numbers to 10] Count the counters on the frame: there are 4 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
-              ],
-              "correctAnswer": "10 + 4 = 14",
-              "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
-              ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
-            },
-            {
-              "prompt": "[Numbers to 10] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
-              "choices": [
-                "5",
-                "6",
                 "4",
-                "21"
+                "5",
+                "3",
+                "6"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "4",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Touch each counter once as you count in order from 1 up to 4. The last number said (4) tells the total cardinality."
             },
             {
-              "prompt": "[Numbers to 10] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M2-G: Numbers to 10] Start at 3 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "4",
+                "2",
+                "5",
+                "3"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "4",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 3 + 1 = 4."
+            },
+            {
+              "prompt": "[PK-M2-G: Numbers to 10] If we rearrange 4 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
+              "choices": [
+                "Still 4 cubes (conservation of number)",
+                "5 cubes",
+                "3 cubes",
+                "0 cubes"
+              ],
+              "correctAnswer": "Still 4 cubes (conservation of number)",
+              "misconceptionTags": [
+                "conservation_of_cardinality_error"
+              ],
+              "explanation": "The total number of objects (4) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -2185,6 +2232,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Counting to 10'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -2271,49 +2323,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Counting to 10] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M2-H: Counting to 10] Count the counters on the frame: there are 7 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
-              ],
-              "correctAnswer": "10 + 4 = 14",
-              "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
-              ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
-            },
-            {
-              "prompt": "[Counting to 10] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
-              "choices": [
-                "5",
+                "7",
+                "8",
                 "6",
-                "4",
-                "21"
+                "9"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "7",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Touch each counter once as you count in order from 1 up to 7. The last number said (7) tells the total cardinality."
             },
             {
-              "prompt": "[Counting to 10] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M2-H: Counting to 10] Start at 6 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "7",
+                "5",
+                "8",
+                "6"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "7",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 6 + 1 = 7."
+            },
+            {
+              "prompt": "[PK-M2-H: Counting to 10] If we rearrange 7 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
+              "choices": [
+                "Still 7 cubes (conservation of number)",
+                "8 cubes",
+                "6 cubes",
+                "0 cubes"
+              ],
+              "correctAnswer": "Still 7 cubes (conservation of number)",
+              "misconceptionTags": [
+                "conservation_of_cardinality_error"
+              ],
+              "explanation": "The total number of objects (7) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -2445,6 +2498,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'One more and one less'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -2531,49 +2589,49 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[One more and one less] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M3-I: One more and one less] Compare the two numbers using >, <, or =: 4 ___ 2",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "4 > 2",
+                "4 < 2",
+                "4 = 2",
+                "Cannot compare"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "4 > 2",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "alligator_symbol_direction_reversal"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Compare the highest place-value digits first: 4 is greater than 2, so 4 > 2."
             },
             {
-              "prompt": "[One more and one less] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M3-I: One more and one less] Group A has 4 items and Group B has 2 items. How many MORE items does Group A have?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
+                "2",
                 "6",
-                "4",
-                "21"
+                "2",
+                "3"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "2",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "added_both_groups_on_how_many_more"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Match 1-to-1 or subtract to find the difference: 4 - 2 = 2 more."
             },
             {
-              "prompt": "[One more and one less] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M3-I: One more and one less] Put these numbers in order from least to greatest: 7, 2, 4",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "2, 4, 7",
+                "7, 4, 2",
+                "4, 2, 7",
+                "2, 7, 4"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "2, 4, 7",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "ordered_greatest_to_least_instead"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Moving left to right on the number line gives 2 < 4 < 7."
             }
           ]
         },
@@ -2705,6 +2763,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Compare groups'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -2791,49 +2854,49 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Compare groups] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M3-K: Compare groups] Compare the two numbers using >, <, or =: 5 ___ 3",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "5 > 3",
+                "5 < 3",
+                "5 = 3",
+                "Cannot compare"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "5 > 3",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "alligator_symbol_direction_reversal"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Compare the highest place-value digits first: 5 is greater than 3, so 5 > 3."
             },
             {
-              "prompt": "[Compare groups] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M3-K: Compare groups] Group A has 5 items and Group B has 3 items. How many MORE items does Group A have?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
-                "6",
-                "4",
-                "21"
+                "2",
+                "8",
+                "3",
+                "3"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "2",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "added_both_groups_on_how_many_more"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Match 1-to-1 or subtract to find the difference: 5 - 3 = 2 more."
             },
             {
-              "prompt": "[Compare groups] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M3-K: Compare groups] Put these numbers in order from least to greatest: 8, 3, 5",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "3, 5, 8",
+                "8, 5, 3",
+                "5, 3, 8",
+                "3, 8, 5"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "3, 5, 8",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "ordered_greatest_to_least_instead"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Moving left to right on the number line gives 3 < 5 < 8."
             }
           ]
         },
@@ -2965,6 +3028,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Compare numbers'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -3051,49 +3119,49 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Compare numbers] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M3-L: Compare numbers] Compare the two numbers using >, <, or =: 3 ___ 1",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "3 > 1",
+                "3 < 1",
+                "3 = 1",
+                "Cannot compare"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "3 > 1",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "alligator_symbol_direction_reversal"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Compare the highest place-value digits first: 3 is greater than 1, so 3 > 1."
             },
             {
-              "prompt": "[Compare numbers] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M3-L: Compare numbers] Group A has 3 items and Group B has 1 items. How many MORE items does Group A have?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
-                "6",
+                "2",
                 "4",
-                "21"
+                "1",
+                "3"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "2",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "added_both_groups_on_how_many_more"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Match 1-to-1 or subtract to find the difference: 3 - 1 = 2 more."
             },
             {
-              "prompt": "[Compare numbers] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M3-L: Compare numbers] Put these numbers in order from least to greatest: 6, 1, 3",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "1, 3, 6",
+                "6, 3, 1",
+                "3, 1, 6",
+                "1, 6, 3"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "1, 3, 6",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "ordered_greatest_to_least_instead"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Moving left to right on the number line gives 1 < 3 < 6."
             }
           ]
         },
@@ -3225,6 +3293,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Numbers and counting to 20'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -3311,49 +3384,50 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Numbers and counting to 20] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M4-J: Numbers and counting to 20] Count the counters on the frame: there are 19 counters. Which numeral matches this quantity?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
-              ],
-              "correctAnswer": "10 + 4 = 14",
-              "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
-              ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
-            },
-            {
-              "prompt": "[Numbers and counting to 20] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
-              "choices": [
-                "5",
-                "6",
-                "4",
+                "19",
+                "20",
+                "18",
                 "21"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "19",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "one_to_one_correspondence_slip",
+                "skipped_last_object"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Touch each counter once as you count in order from 1 up to 19. The last number said (19) tells the total cardinality."
             },
             {
-              "prompt": "[Numbers and counting to 20] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M4-J: Numbers and counting to 20] Start at 18 and count forward 1 more. What number comes next?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "19",
+                "17",
+                "20",
+                "18"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "19",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "counted_backward_instead_of_forward"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Each successive number name refers to a quantity that is exactly 1 larger: 18 + 1 = 19."
+            },
+            {
+              "prompt": "[PK-M4-J: Numbers and counting to 20] If we rearrange 19 cubes from a straight line into a circle, how many cubes are there now?",
+              "visualAid": "ten_frame_and_number_line.svg",
+              "choices": [
+                "Still 19 cubes (conservation of number)",
+                "20 cubes",
+                "18 cubes",
+                "0 cubes"
+              ],
+              "correctAnswer": "Still 19 cubes (conservation of number)",
+              "misconceptionTags": [
+                "conservation_of_cardinality_error"
+              ],
+              "explanation": "The total number of objects (19) stays the same regardless of their arrangement."
             }
           ]
         },
@@ -3485,6 +3559,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Patterns'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -3571,7 +3650,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Patterns] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M4-M: Patterns] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -3586,7 +3665,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Patterns] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M4-M: Patterns] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -3601,7 +3680,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Patterns] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M4-M: Patterns] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -3745,6 +3824,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Positions'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -3831,7 +3915,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Positions] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M5-N: Positions] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -3846,7 +3930,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Positions] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M5-N: Positions] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -3861,7 +3945,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Positions] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M5-N: Positions] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -4005,6 +4089,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Classify'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -4091,7 +4180,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Classify] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M5-O: Classify] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -4106,7 +4195,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Classify] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M5-O: Classify] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -4121,7 +4210,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Classify] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M5-O: Classify] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -4265,6 +4354,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Size'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -4351,7 +4445,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Size] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M5-T: Size] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -4366,7 +4460,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Size] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M5-T: Size] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -4381,7 +4475,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Size] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M5-T: Size] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -4525,6 +4619,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -4611,49 +4710,49 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
-              "visualAid": "ten_frame_two_color_counters.svg",
+              "prompt": "[PK-M5-Z: Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)] Compare the two numbers using >, <, or =: 5 ___ 3",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "10 + 4 = 14",
-                "10 + 6 = 16",
-                "10 + 2 = 12",
-                "8 + 10 = 18"
+                "5 > 3",
+                "5 < 3",
+                "5 = 3",
+                "Cannot compare"
               ],
-              "correctAnswer": "10 + 4 = 14",
+              "correctAnswer": "5 > 3",
               "misconceptionTags": [
-                "forgot_to_reduce_second_addend_after_making_10"
+                "alligator_symbol_direction_reversal"
               ],
-              "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
+              "explanation": "Compare the highest place-value digits first: 5 is greater than 3, so 5 > 3."
             },
             {
-              "prompt": "[Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
-              "visualAid": "number_bond_part_whole.svg",
+              "prompt": "[PK-M5-Z: Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)] Group A has 5 items and Group B has 3 items. How many MORE items does Group A have?",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "5",
-                "6",
-                "4",
-                "21"
+                "2",
+                "8",
+                "3",
+                "3"
               ],
-              "correctAnswer": "5",
+              "correctAnswer": "2",
               "misconceptionTags": [
-                "added_instead_of_finding_missing_part"
+                "added_both_groups_on_how_many_more"
               ],
-              "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
+              "explanation": "Match 1-to-1 or subtract to find the difference: 5 - 3 = 2 more."
             },
             {
-              "prompt": "[Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
-              "visualAid": "bidirectional_number_line_0_20.svg",
+              "prompt": "[PK-M5-Z: Opinion polls, weather graphing, object bar graphs & correcting more/fewer group spots (MA.5)] Put these numbers in order from least to greatest: 8, 3, 5",
+              "visualAid": "ten_frame_and_number_line.svg",
               "choices": [
-                "7 + 5 = 10 + 2",
-                "7 + 5 = 12 + 5",
-                "8 - 3 = 8 + 3",
-                "6 + 4 = 10 + 4"
+                "3, 5, 8",
+                "8, 5, 3",
+                "5, 3, 8",
+                "3, 8, 5"
               ],
-              "correctAnswer": "7 + 5 = 10 + 2",
+              "correctAnswer": "3, 5, 8",
               "misconceptionTags": [
-                "operator_view_of_equal_sign_7_plus_5_equals_12"
+                "ordered_greatest_to_least_instead"
               ],
-              "explanation": "Left side: 7 + 5 = 12. Right side: 10 + 2 = 12. Since 12 = 12, the scale is balanced!"
+              "explanation": "Moving left to right on the number line gives 3 < 5 < 8."
             }
           ]
         },
@@ -4786,6 +4885,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TwoSidedCoinRegister models 'Flat shapes'.",
+            "Step 2 (Manipulate): Use 'drag-coins-to-tray-and-flip-sides' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -4872,7 +4976,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Flat shapes] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
+              "prompt": "[PK-M6-P: Flat shapes] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
               "visualAid": "quarter_25c_heads_tails.svg",
               "choices": [
                 "63¢",
@@ -4888,7 +4992,7 @@
               "explanation": "Start with quarters: 25¢, 50¢. Add 1 dime: 60¢. Add 3 pennies: 61¢, 62¢, 63¢."
             },
             {
-              "prompt": "[Flat shapes] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
+              "prompt": "[PK-M6-P: Flat shapes] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
               "visualAid": "penny_1c_heads_tails.svg",
               "choices": [
                 "Penny",
@@ -4903,7 +5007,7 @@
               "explanation": "The copper penny features Abraham Lincoln and equals 1 cent (1¢)."
             },
             {
-              "prompt": "[Flat shapes] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
+              "prompt": "[PK-M6-P: Flat shapes] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
               "visualAid": "us_coins_and_bills.svg",
               "choices": [
                 "5¢ (1 nickel)",
@@ -5048,6 +5152,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TwoSidedCoinRegister models 'Describe flat shapes'.",
+            "Step 2 (Manipulate): Use 'drag-coins-to-tray-and-flip-sides' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -5134,7 +5243,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Describe flat shapes] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
+              "prompt": "[PK-M6-Q: Describe flat shapes] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
               "visualAid": "quarter_25c_heads_tails.svg",
               "choices": [
                 "63¢",
@@ -5150,7 +5259,7 @@
               "explanation": "Start with quarters: 25¢, 50¢. Add 1 dime: 60¢. Add 3 pennies: 61¢, 62¢, 63¢."
             },
             {
-              "prompt": "[Describe flat shapes] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
+              "prompt": "[PK-M6-Q: Describe flat shapes] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
               "visualAid": "penny_1c_heads_tails.svg",
               "choices": [
                 "Penny",
@@ -5165,7 +5274,7 @@
               "explanation": "The copper penny features Abraham Lincoln and equals 1 cent (1¢)."
             },
             {
-              "prompt": "[Describe flat shapes] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
+              "prompt": "[PK-M6-Q: Describe flat shapes] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
               "visualAid": "us_coins_and_bills.svg",
               "choices": [
                 "5¢ (1 nickel)",
@@ -5310,6 +5419,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TwoSidedCoinRegister models 'Solid shapes'.",
+            "Step 2 (Manipulate): Use 'drag-coins-to-tray-and-flip-sides' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -5396,7 +5510,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Solid shapes] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
+              "prompt": "[PK-M6-R: Solid shapes] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
               "visualAid": "quarter_25c_heads_tails.svg",
               "choices": [
                 "63¢",
@@ -5412,7 +5526,7 @@
               "explanation": "Start with quarters: 25¢, 50¢. Add 1 dime: 60¢. Add 3 pennies: 61¢, 62¢, 63¢."
             },
             {
-              "prompt": "[Solid shapes] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
+              "prompt": "[PK-M6-R: Solid shapes] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
               "visualAid": "penny_1c_heads_tails.svg",
               "choices": [
                 "Penny",
@@ -5427,7 +5541,7 @@
               "explanation": "The copper penny features Abraham Lincoln and equals 1 cent (1¢)."
             },
             {
-              "prompt": "[Solid shapes] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
+              "prompt": "[PK-M6-R: Solid shapes] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
               "visualAid": "us_coins_and_bills.svg",
               "choices": [
                 "5¢ (1 nickel)",
@@ -5572,6 +5686,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TwoSidedCoinRegister models 'Shapes in the real world'.",
+            "Step 2 (Manipulate): Use 'drag-coins-to-tray-and-flip-sides' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -5658,7 +5777,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Shapes in the real world] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
+              "prompt": "[PK-M6-S: Shapes in the real world] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
               "visualAid": "quarter_25c_heads_tails.svg",
               "choices": [
                 "63¢",
@@ -5674,7 +5793,7 @@
               "explanation": "Start with quarters: 25¢, 50¢. Add 1 dime: 60¢. Add 3 pennies: 61¢, 62¢, 63¢."
             },
             {
-              "prompt": "[Shapes in the real world] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
+              "prompt": "[PK-M6-S: Shapes in the real world] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
               "visualAid": "penny_1c_heads_tails.svg",
               "choices": [
                 "Penny",
@@ -5689,7 +5808,7 @@
               "explanation": "The copper penny features Abraham Lincoln and equals 1 cent (1¢)."
             },
             {
-              "prompt": "[Shapes in the real world] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
+              "prompt": "[PK-M6-S: Shapes in the real world] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
               "visualAid": "us_coins_and_bills.svg",
               "choices": [
                 "5¢ (1 nickel)",
@@ -5834,6 +5953,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TwoSidedCoinRegister models 'Money'.",
+            "Step 2 (Manipulate): Use 'drag-coins-to-tray-and-flip-sides' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -5920,7 +6044,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Money] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
+              "prompt": "[PK-M6-U: Money] Count the mixed coins: 2 quarters, 1 dime, and 3 pennies. What is the total?",
               "visualAid": "quarter_25c_heads_tails.svg",
               "choices": [
                 "63¢",
@@ -5936,7 +6060,7 @@
               "explanation": "Start with quarters: 25¢, 50¢. Add 1 dime: 60¢. Add 3 pennies: 61¢, 62¢, 63¢."
             },
             {
-              "prompt": "[Money] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
+              "prompt": "[PK-M6-U: Money] Which coin shows Abraham Lincoln on the front (heads) and is worth 1¢?",
               "visualAid": "penny_1c_heads_tails.svg",
               "choices": [
                 "Penny",
@@ -5951,7 +6075,7 @@
               "explanation": "The copper penny features Abraham Lincoln and equals 1 cent (1¢)."
             },
             {
-              "prompt": "[Money] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
+              "prompt": "[PK-M6-U: Money] An apple costs 45¢. You pay with 2 quarters (50¢). How much change do you get?",
               "visualAid": "us_coins_and_bills.svg",
               "choices": [
                 "5¢ (1 nickel)",
@@ -6095,6 +6219,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Addition up to 5'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -6181,7 +6310,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Addition up to 5] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M7-V: Addition up to 5] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -6196,7 +6325,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Addition up to 5] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M7-V: Addition up to 5] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -6211,7 +6340,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Addition up to 5] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M7-V: Addition up to 5] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -6355,6 +6484,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Addition up to 10'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -6441,7 +6575,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Addition up to 10] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M7-W: Addition up to 10] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -6456,7 +6590,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Addition up to 10] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M7-W: Addition up to 10] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -6471,7 +6605,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Addition up to 10] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M7-W: Addition up to 10] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -6615,6 +6749,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Subtraction up to 5'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -6701,7 +6840,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Subtraction up to 5] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M7-X: Subtraction up to 5] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -6716,7 +6855,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Subtraction up to 5] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M7-X: Subtraction up to 5] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -6731,7 +6870,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Subtraction up to 5] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M7-X: Subtraction up to 5] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -6875,6 +7014,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how TenFrameAndNumberLineLab models 'Subtraction up to 10'.",
+            "Step 2 (Manipulate): Use 'drag-counters-to-make-10-and-hop-number-line' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -6961,7 +7105,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Subtraction up to 10] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
+              "prompt": "[PK-M7-Y: Subtraction up to 10] Use the Make-a-Ten strategy to solve 8 + 6: move 2 from 6 to make 10 + ? = ?",
               "visualAid": "ten_frame_two_color_counters.svg",
               "choices": [
                 "10 + 4 = 14",
@@ -6976,7 +7120,7 @@
               "explanation": "Decompose 6 into 2 + 4. Combine 8 + 2 = 10, then add the remaining 4: 10 + 4 = 14."
             },
             {
-              "prompt": "[Subtraction up to 10] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
+              "prompt": "[PK-M7-Y: Subtraction up to 10] Use addition to solve the unknown-addend subtraction: 13 - 8 = ? (Think: 8 + ? = 13)",
               "visualAid": "number_bond_part_whole.svg",
               "choices": [
                 "5",
@@ -6991,7 +7135,7 @@
               "explanation": "Hop from 8 to 10 (+2) and from 10 to 13 (+3): 2 + 3 = 5, so 13 - 8 = 5."
             },
             {
-              "prompt": "[Subtraction up to 10] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
+              "prompt": "[PK-M7-Y: Subtraction up to 10] Which equation is TRUE? (Remember: the equal sign means both sides have the same value!)",
               "visualAid": "bidirectional_number_line_0_20.svg",
               "choices": [
                 "7 + 5 = 10 + 2",
@@ -7135,6 +7279,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Learn letters: A–H'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -7221,7 +7370,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Learn letters: A–H] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E1-A: Learn letters: A–H] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -7236,7 +7385,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Learn letters: A–H] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E1-A: Learn letters: A–H] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -7251,7 +7400,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Learn letters: A–H] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E1-A: Learn letters: A–H] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -7395,6 +7544,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Learn letters: I–P'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -7481,7 +7635,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Learn letters: I–P] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E1-B: Learn letters: I–P] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -7496,7 +7650,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Learn letters: I–P] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E1-B: Learn letters: I–P] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -7511,7 +7665,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Learn letters: I–P] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E1-B: Learn letters: I–P] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -7655,6 +7809,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Learn letters: Q–Z'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -7741,7 +7900,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Learn letters: Q–Z] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E2-C: Learn letters: Q–Z] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -7756,7 +7915,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Learn letters: Q–Z] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E2-C: Learn letters: Q–Z] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -7771,7 +7930,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Learn letters: Q–Z] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E2-C: Learn letters: Q–Z] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -7915,6 +8074,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Letter identification'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -8001,7 +8165,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Letter identification] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E2-D: Letter identification] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -8016,7 +8180,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Letter identification] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E2-D: Letter identification] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -8031,7 +8195,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Letter identification] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E2-D: Letter identification] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -8175,6 +8339,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Lowercase and uppercase letters'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -8261,7 +8430,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Lowercase and uppercase letters] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E2-E: Lowercase and uppercase letters] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -8276,7 +8445,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Lowercase and uppercase letters] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E2-E: Lowercase and uppercase letters] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -8291,7 +8460,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Lowercase and uppercase letters] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E2-E: Lowercase and uppercase letters] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -8435,6 +8604,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Word recognition'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -8521,7 +8695,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Word recognition] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E3-F: Word recognition] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -8536,7 +8710,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Word recognition] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E3-F: Word recognition] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -8551,7 +8725,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Word recognition] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E3-F: Word recognition] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -8695,6 +8869,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Rhyming'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -8781,7 +8960,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Rhyming] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E3-G: Rhyming] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -8796,7 +8975,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Rhyming] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E3-G: Rhyming] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -8811,7 +8990,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Rhyming] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E3-G: Rhyming] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -8955,6 +9134,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Syllables'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -9041,7 +9225,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Syllables] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E3-H: Syllables] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -9056,7 +9240,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Syllables] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E3-H: Syllables] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -9071,7 +9255,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Syllables] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E3-H: Syllables] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -9215,6 +9399,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Book features'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -9301,7 +9490,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Book features] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E3-T: Book features] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -9316,7 +9505,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Book features] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E3-T: Book features] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -9331,7 +9520,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Book features] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E3-T: Book features] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -9475,6 +9664,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Phoneme blending and segmenting'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -9561,7 +9755,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Phoneme blending and segmenting] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E4-I: Phoneme blending and segmenting] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -9576,7 +9770,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Phoneme blending and segmenting] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E4-I: Phoneme blending and segmenting] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -9591,7 +9785,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Phoneme blending and segmenting] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E4-I: Phoneme blending and segmenting] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -9735,6 +9929,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Beginning and ending sounds'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -9821,7 +10020,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Beginning and ending sounds] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E4-J: Beginning and ending sounds] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -9836,7 +10035,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Beginning and ending sounds] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E4-J: Beginning and ending sounds] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -9851,7 +10050,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Beginning and ending sounds] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E4-J: Beginning and ending sounds] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -9995,6 +10194,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Letter-sound associations: uppercase'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -10081,7 +10285,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Letter-sound associations: uppercase] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E4-K: Letter-sound associations: uppercase] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -10096,7 +10300,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Letter-sound associations: uppercase] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E4-K: Letter-sound associations: uppercase] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -10111,7 +10315,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Letter-sound associations: uppercase] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E4-K: Letter-sound associations: uppercase] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -10255,6 +10459,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Letter-sound associations: lowercase'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -10341,7 +10550,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Letter-sound associations: lowercase] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E4-L: Letter-sound associations: lowercase] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -10356,7 +10565,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Letter-sound associations: lowercase] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E4-L: Letter-sound associations: lowercase] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -10371,7 +10580,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Letter-sound associations: lowercase] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E4-L: Letter-sound associations: lowercase] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -10515,6 +10724,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Vowel sounds'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -10601,7 +10815,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Vowel sounds] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-M: Vowel sounds] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -10616,7 +10830,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Vowel sounds] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-M: Vowel sounds] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -10631,7 +10845,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Vowel sounds] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-M: Vowel sounds] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -10775,6 +10989,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Short a'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -10861,7 +11080,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Short a] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-N: Short a] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -10876,7 +11095,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Short a] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-N: Short a] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -10891,7 +11110,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Short a] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-N: Short a] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -11035,6 +11254,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Short e'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -11121,7 +11345,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Short e] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-O: Short e] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -11136,7 +11360,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Short e] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-O: Short e] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -11151,7 +11375,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Short e] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-O: Short e] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -11295,6 +11519,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Short i'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -11381,7 +11610,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Short i] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-P: Short i] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -11396,7 +11625,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Short i] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-P: Short i] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -11411,7 +11640,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Short i] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-P: Short i] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -11555,6 +11784,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Short o'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -11641,7 +11875,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Short o] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-Q: Short o] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -11656,7 +11890,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Short o] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-Q: Short o] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -11671,7 +11905,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Short o] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-Q: Short o] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -11815,6 +12049,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'Short u'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -11901,7 +12140,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Short u] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-R: Short u] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -11916,7 +12155,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[Short u] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-R: Short u] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -11931,7 +12170,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[Short u] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-R: Short u] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -12075,6 +12314,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how ContinuousPhonemeSliderAndElkoninBoxes models 'High-frequency and irregular words'.",
+            "Step 2 (Manipulate): Use 'slide-finger-across-phoneme-tiles-to-blend' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -12161,7 +12405,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[High-frequency and irregular words] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
+              "prompt": "[PK-E5-S: High-frequency and irregular words] Tap the 3 sound boxes as you segment the word SHIP: /sh/ - /i/ - /p/. Which digraph makes the first sound?",
               "visualAid": "elkonin_3_sound_boxes.svg",
               "choices": [
                 "sh",
@@ -12176,7 +12420,7 @@
               "explanation": "The letters s and h team up to make one continuous sound: /sh/."
             },
             {
-              "prompt": "[High-frequency and irregular words] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
+              "prompt": "[PK-E5-S: High-frequency and irregular words] Add Silent-e to the closed-syllable word TAP. What new long-vowel word is formed?",
               "visualAid": "magic_e_wand_transformer.svg",
               "choices": [
                 "tape (long a)",
@@ -12191,7 +12435,7 @@
               "explanation": "Silent-e at the end jumps over one consonant and makes the vowel say its long name: /t/ - /ā/ - /p/."
             },
             {
-              "prompt": "[High-frequency and irregular words] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
+              "prompt": "[PK-E5-S: High-frequency and irregular words] Break the multisyllabic word CABLE into its two syllables and identify the second syllable type.",
               "visualAid": "six_syllable_types_wheel.svg",
               "choices": [
                 "ca | ble (Open + Consonant-le)",
@@ -12335,6 +12579,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Color and number words'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -12421,7 +12670,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Color and number words] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-W: Color and number words] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -12437,7 +12686,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Color and number words] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-W: Color and number words] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -12452,7 +12701,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Color and number words] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-W: Color and number words] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -12596,6 +12845,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Nouns'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -12682,7 +12936,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Nouns] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-X: Nouns] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -12698,7 +12952,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Nouns] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-X: Nouns] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -12713,7 +12967,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Nouns] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-X: Nouns] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -12857,6 +13111,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Verbs'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -12943,7 +13202,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Verbs] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-Y: Verbs] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -12959,7 +13218,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Verbs] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-Y: Verbs] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -12974,7 +13233,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Verbs] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-Y: Verbs] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -13118,6 +13377,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Adjectives'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -13204,7 +13468,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Adjectives] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-Z: Adjectives] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -13220,7 +13484,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Adjectives] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-Z: Adjectives] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -13235,7 +13499,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Adjectives] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-Z: Adjectives] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -13379,6 +13643,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Location words'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -13465,7 +13734,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Location words] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-AA: Location words] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -13481,7 +13750,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Location words] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-AA: Location words] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -13496,7 +13765,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Location words] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-AA: Location words] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -13640,6 +13909,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Antonyms'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -13726,7 +14000,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Antonyms] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-BB: Antonyms] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -13742,7 +14016,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Antonyms] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-BB: Antonyms] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -13757,7 +14031,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Antonyms] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-BB: Antonyms] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -13901,6 +14175,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how SentenceAndMorphologyArchitect models 'Categories'.",
+            "Step 2 (Manipulate): Use 'snap-affixes-to-roots-and-combine-clauses' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -13987,7 +14266,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Categories] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
+              "prompt": "[PK-E6-CC: Categories] Combine the two simple sentences into a compound sentence: The rain fell. + We played inside.",
               "visualAid": "conjunction_fanboys_bridge.svg",
               "choices": [
                 "The rain fell, so we played inside.",
@@ -14003,7 +14282,7 @@
               "explanation": "Use a comma followed by the coordinating conjunction so to show cause and effect between two complete thoughts."
             },
             {
-              "prompt": "[Categories] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
+              "prompt": "[PK-E6-CC: Categories] The Latin root PORT means to carry and the prefix TRANS- means across. What does TRANSPORT mean?",
               "visualAid": "greek_latin_root_tree.svg",
               "choices": [
                 "To carry across from one place to another",
@@ -14018,7 +14297,7 @@
               "explanation": "Trans- (across) + port (carry) = to carry goods or people across distances."
             },
             {
-              "prompt": "[Categories] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
+              "prompt": "[PK-E6-CC: Categories] Choose the correct homophone: The dogs wagged _____ tails when _____ owner arrived.",
               "visualAid": "parts_of_speech_color_blocks.svg",
               "choices": [
                 "their / their",
@@ -14162,6 +14441,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how AnnotatedPassageAndGraphicOrganizer models 'Reality vs. fiction'.",
+            "Step 2 (Manipulate): Use 'tap-sentence-evidence-and-drag-to-organizer' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -14248,7 +14532,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Reality vs. fiction] Read: Leo zipped up his heavy coat, pulled on wool mittens, and watched his breath turn into white puffs. What can you INFER about the setting?",
+              "prompt": "[PK-E7-U: Reality vs. fiction] Read: Leo zipped up his heavy coat, pulled on wool mittens, and watched his breath turn into white puffs. What can you INFER about the setting?",
               "visualAid": "interactive_story_detective.svg",
               "choices": [
                 "It is a freezing winter day outside.",
@@ -14263,7 +14547,7 @@
               "explanation": "Clues: heavy coat + wool mittens + breath turning into white puffs = freezing cold weather."
             },
             {
-              "prompt": "[Reality vs. fiction] Which text structure does an article use when it explains why soil erodes and then describes three ways farmers stop erosion?",
+              "prompt": "[PK-E7-U: Reality vs. fiction] Which text structure does an article use when it explains why soil erodes and then describes three ways farmers stop erosion?",
               "visualAid": "cause_and_effect_chain.svg",
               "choices": [
                 "Problem and Solution",
@@ -14407,6 +14691,11 @@
               "mode": "PURE_SYMBOLIC_ABSTRACT",
               "description": "No visual scaffold; pure automatic recall"
             }
+          ],
+          "guidedStudySteps": [
+            "Step 1 (Explore): Observe how AnnotatedPassageAndGraphicOrganizer models 'Inference and analysis'.",
+            "Step 2 (Manipulate): Use 'tap-sentence-evidence-and-drag-to-organizer' to test 3 examples hands-on.",
+            "Step 3 (Bridge to Symbolic): Watch the concrete model fade into pictorial and symbolic form before starting the Stage 2 Game."
           ]
         },
         "voiceNarration": {
@@ -14493,7 +14782,7 @@
           ],
           "sampleQuestions": [
             {
-              "prompt": "[Inference and analysis] Read: Leo zipped up his heavy coat, pulled on wool mittens, and watched his breath turn into white puffs. What can you INFER about the setting?",
+              "prompt": "[PK-E7-V: Inference and analysis] Read: Leo zipped up his heavy coat, pulled on wool mittens, and watched his breath turn into white puffs. What can you INFER about the setting?",
               "visualAid": "interactive_story_detective.svg",
               "choices": [
                 "It is a freezing winter day outside.",
@@ -14508,7 +14797,7 @@
               "explanation": "Clues: heavy coat + wool mittens + breath turning into white puffs = freezing cold weather."
             },
             {
-              "prompt": "[Inference and analysis] Which text structure does an article use when it explains why soil erodes and then describes three ways farmers stop erosion?",
+              "prompt": "[PK-E7-V: Inference and analysis] Which text structure does an article use when it explains why soil erodes and then describes three ways farmers stop erosion?",
               "visualAid": "cause_and_effect_chain.svg",
               "choices": [
                 "Problem and Solution",

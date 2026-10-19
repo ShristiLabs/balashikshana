@@ -1,0 +1,9 @@
+{
+  "name": "@balashikshana/core-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "scripts": {
+    "build": "node ./dist/verify-engine.mjs"
+  }
+}

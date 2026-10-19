@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balashikshana — Pre-K to Grade 3 Interactive Learning & Mastery Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@500;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-cream: #FFFDF7;
+      --bg-warm: #FFF6E0;
+      --ink-900: #182232;
+      --ink-700: #334155;
+      --ink-500: #64748B;
+      --teal-600: #0D9488;
+      --teal-700: #0F766E;
+      --amber-500: #F59E0B;
+      --amber-600: #D97706;
+      --coral-500: #F43F5E;
+      --indigo-600: #4F46E5;
+      --emerald-600: #16A34A;
+      --card-border: #E2E8F0;
+      --shadow-tactile: 0 6px 0 #CBD5E1, 0 10px 20px rgba(24, 34, 50, 0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Nunito', sans-serif;
+      background-color: var(--bg-cream);
+      background-image:
+        radial-gradient(circle at 12% 18%, rgba(245, 158, 11, 0.10) 0%, transparent 28%),
+        radial-gradient(circle at 88% 80%, rgba(13, 148, 136, 0.10) 0%, transparent 32%);
+      color: var(--ink-900);
+      min-height: 100vh;
+    }
+    h1, h2, h3, h4, .display-font { font-family: 'Fredoka', sans-serif; letter-spacing: 0.01em; }
+    .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+    /* Top Header */
+    header {
+      background: #FFFFFF;
+      border-bottom: 3px solid #E2E8F0;
+      padding: 14px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-badge {
+      width: 44px; height: 44px; border-radius: 14px;
+      background: linear-gradient(135deg, #0D9488, #14B8A6);
+      color: #FFF; display: grid; place-items: center;
+      font-family: 'Fredoka', sans-serif; font-size: 22px; font-weight: 700;
+      box-shadow: 0 4px 0 #0F766E;
+    }
+    .stats-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 13px; border-radius: 999px; font-weight: 800; font-size: 13px;
+      background: #F1F5F9; border: 2px solid #CBD5E1; color: var(--ink-900);
+    }
+    .pill.gold { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
+    .pill.teal { background: #CCFBF1; border-color: #14B8A6; color: #115E59; }
+    .btn-3d {
+      cursor: pointer; border: none; font-family: 'Fredoka', sans-serif;
+      font-weight: 600; font-size: 15px; padding: 10px 18px; border-radius: 14px;
+      background: var(--teal-600); color: #FFF;
+      box-shadow: 0 4px 0 var(--teal-700);
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .btn-3d:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--teal-700); }
+    .btn-3d.amber { background: var(--amber-500); box-shadow: 0 4px 0 var(--amber-600); }
+    .btn-3d.coral { background: var(--coral-500); box-shadow: 0 4px 0 #BE123C; }
+    .btn-3d.indigo { background: var(--indigo-600); box-shadow: 0 4px 0 #3730A3; }
+    .btn-3d.secondary { background: #F1F5F9; color: var(--ink-900); box-shadow: 0 4px 0 #CBD5E1; }
+
+    /* Layout */
+    .container { max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; }
+    .selector-bar {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px;
+      background: #FFFFFF; padding: 16px; border-radius: 20px;
+      border: 2px solid var(--card-border); box-shadow: var(--shadow-tactile);
+      margin-bottom: 22px;
+    }
+    .tab-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tab-btn {
+      cursor: pointer; border: 2px solid #E2E8F0; background: #F8FAFC;
+      padding: 9px 16px; border-radius: 12px; font-weight: 800; font-size: 14px;
+      color: var(--ink-700); transition: all 0.15s ease;
+    }
+    .tab-btn.active {
+      background: var(--ink-900); color: #FFFFFF; border-color: var(--ink-900);
+      transform: translateY(-1px);
+    }
+    .tab-btn.subj-active {
+      background: var(--teal-600); color: #FFFFFF; border-color: var(--teal-700);
+    }
+
+    /* Main Grid */
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 1024px) {
+      .workspace-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Unit Progression Column */
+    .unit-list-card {
+      background: #FFFFFF; border: 2px solid var(--card-border);
+      border-radius: 22px; padding: 18px; box-shadow: var(--shadow-tactile);
+      max-height: 82vh; overflow-y: auto;
+    }
+    .unit-node {
+      border: 2px solid #E2E8F0; border-radius: 16px; padding: 14px;
+      margin-bottom: 12px; cursor: pointer; position: relative;
+      transition: all 0.15s ease; background: #FFFFFF;
+    }
+    .unit-node:hover { border-color: var(--teal-600); }
+    .unit-node.selected {
+      border-color: var(--teal-600); background: #F0FDFA;
+      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18);
+    }
+    .unit-node.locked {
+      background: #F8FAFC; opacity: 0.72; border-style: dashed;
+    }
+    .unit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .unit-code {
+      font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px;
+      padding: 3px 8px; border-radius: 8px; background: #E2E8F0; color: var(--ink-900);
+    }
+    .status-badge {
+      font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 99px;
+    }
+    .status-MASTERED { background: #DCFCE7; color: #166534; }
+    .status-READY { background: #FEF3C7; color: #92400E; }
+    .status-LOCKED { background: #E2E8F0; color: #475569; }
+
+    /* Right Active Stage Area */
+    .stage-card {
+      background: #FFFFFF; border: 2px solid var(--card-border);
+      border-radius: 24px; padding: 24px; box-shadow: var(--shadow-tactile);
+    }
+    .stage-stepper {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+      margin: 18px 0 22px;
+    }
+    .step-pill {
+      cursor: pointer; padding: 12px; border-radius: 14px;
+      border: 2px solid #E2E8F0; background: #F8FAFC; text-align: center;
+      font-weight: 800; font-size: 13px; transition: all 0.15s;
+    }
+    .step-pill.active {
+      background: var(--indigo-600); color: #FFF; border-color: #3730A3;
+      box-shadow: 0 4px 0 #312E81;
+    }
+
+    /* Topic Pills */
+    .topic-strip {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px;
+      padding: 12px; background: #F8FAFC; border-radius: 14px; border: 1px solid #E2E8F0;
+    }
+    .topic-chip {
+      cursor: pointer; padding: 6px 12px; border-radius: 10px;
+      font-size: 13px; font-weight: 700; border: 2px solid #CBD5E1; background: #FFF;
+    }
+    .topic-chip.active {
+      background: var(--amber-500); color: #FFF; border-color: var(--amber-600);
+    }
+
+    /* Interactive Manipulative & SVG Stage */
+    .manipulative-stage {
+      display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px;
+      background: var(--bg-warm); border: 2px solid #FDE68A;
+      border-radius: 20px; padding: 20px; margin-bottom: 20px;
+    }
+    @media (max-width: 900px) { .manipulative-stage { grid-template-columns: 1fr; } }
+    .svg-preview-box {
+      background: #FFFFFF; border-radius: 16px; padding: 14px;
+      border: 2px solid #E2E8F0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; min-height: 250px;
+    }
+    .svg-preview-box img { max-width: 100%; height: auto; border-radius: 10px; }
+
+    /* Interactive Ten-Frame Widget */
+    .ten-frame-grid {
+      display: grid; grid-template-columns: repeat(5, 48px); gap: 6px;
+      margin: 12px auto; justify-content: center;
+    }
+    .tf-cell {
+      width: 48px; height: 48px; border: 2px solid #334155; border-radius: 8px;
+      background: #FFF; display: grid; place-items: center; cursor: pointer;
+    }
+    .tf-token {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--coral-500); box-shadow: inset 0 -3px 0 rgba(0,0,0,0.2);
+      transition: transform 0.15s ease;
+    }
+    .tf-token.blue { background: #3B82F6; }
+
+    /* 9-Asset Inspector Grid */
+    .asset-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px;
+    }
+    @media (max-width: 900px) { .asset-grid { grid-template-columns: 1fr; } }
+    .asset-box {
+      background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 14px;
+      padding: 13px; font-size: 13px;
+    }
+    .asset-box h4 {
+      font-size: 14px; color: var(--teal-700); margin-bottom: 6px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    /* Game & Boss Gate Arena */
+    .arena-box {
+      background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
+      color: #FFFFFF; border-radius: 22px; padding: 26px; margin-top: 12px;
+    }
+    .hud-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 12px; padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.15); margin-bottom: 20px;
+    }
+    .question-prompt {
+      font-size: 21px; font-weight: 700; line-height: 1.4;
+      background: rgba(255,255,255,0.08); padding: 18px; border-radius: 16px;
+      margin-bottom: 18px; border-left: 5px solid var(--amber-500);
+    }
+    .choices-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
+    }
+    @media (max-width: 640px) { .choices-grid { grid-template-columns: 1fr; } }
+    .choice-btn {
+      cursor: pointer; padding: 16px 18px; border-radius: 16px;
+      border: 2px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.10);
+      color: #FFFFFF; font-family: 'Nunito', sans-serif; font-size: 17px;
+      font-weight: 800; text-align: left; transition: all 0.12s ease;
+    }
+    .choice-btn:hover { background: rgba(255,255,255,0.20); border-color: #38BDF8; }
+    .choice-btn.correct { background: #16A34A; border-color: #4ADE80; }
+    .choice-btn.wrong { background: #E11D48; border-color: #FDA4AF; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65);
+      display: none; place-items: center; z-index: 100; padding: 20px;
+    }
+    .modal-backdrop.open { display: grid; }
+    .modal-card {
+      background: #FFFFFF; border-radius: 24px; max-width: 900px; width: 100%;
+      padding: 26px; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+    }
+    .quadrant-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 16px 0;
+    }
+    .quad-cell {
+      padding: 14px; border-radius: 14px; border: 2px solid #E2E8F0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-badge">B</div>
+      <div>
+        <h1 style="font-size: 21px; color: var(--ink-900);">Balashikshana</h1>
+        <p style="font-size: 12px; font-weight: 700; color: var(--ink-500);">
+          US Curriculum (Pre-K to Grade 3) • 130 Units • 614 Skill Topics • Accuracy + Speed Mastery Gates
+        </p>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <span class="pill teal" id="motorPill">⚡ Motor Baseline: 0.42s</span>
+      <span class="pill gold" id="keysPill">🔑 2 Gold • 2 Silver Keys</span>
+      <span class="pill" id="gardenPill">🌱 Knowledge Garden: 88% Blooming</span>
+      <button class="btn-3d amber" onclick="openMotorCalibration()">🎈 Calibrate Tap Speed</button>
+      <button class="btn-3d indigo" onclick="openDailyBrainBoost()">🧠 Daily Brain Boost</button>
+      <button class="btn-3d secondary" onclick="openParentPortal()">🔒 Parent Analytics</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Grade & Subject Selector Bar -->
+    <div class="selector-bar">
+      <div>
+        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-500); margin-bottom: 6px;">
+          1. Select Grade Level (Pre-K to 3rd Grade)
+        </div>
+        <div class="tab-group" id="gradeTabs"></div>
+      </div>
+      <div>
+        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink-500); margin-bottom: 6px;">
+          2. Select Curriculum Track
+        </div>
+        <div class="tab-group" id="subjectTabs"></div>
+      </div>
+    </div>
+
+    <div class="workspace-grid">
+      <!-- Left Column: Sequential Units of Work (DAG) -->
+      <div class="unit-list-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+          <h2 style="font-size: 18px;" id="unitListHeading">Sequential Units</h2>
+          <span class="mono" style="font-size: 12px; font-weight: 700; color: var(--teal-700);" id="unitCountBadge"></span>
+        </div>
+        <p style="font-size: 12px; color: var(--ink-500); margin-bottom: 14px;">
+          Units progress gradually. <strong>Unit N+1 stays locked</strong> until Unit N's Boss Gate is passed with target Accuracy (%) and Speed (sec/item).
+        </p>
+        <div id="unitListContainer"></div>
+      </div>
+
+      <!-- Right Column: Active Unit 4-Stage Loop & 9-Asset Explorer -->
+      <div class="stage-card" id="activeUnitPanel">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span class="unit-code" id="activeUnitIdBadge">PK-M1</span>
+              <span class="pill teal" id="activePrereqBadge" style="font-size:11px; padding:3px 10px;">Prereq: None</span>
+              <span class="pill gold" id="activeGateBadge" style="font-size:11px; padding:3px 10px;">Gate: ≥85% & ≤5.5s</span>
+            </div>
+            <h2 style="font-size: 24px;" id="activeUnitTitle">Loading curriculum...</h2>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-3d secondary" onclick="speakCurrentTopicIntro()">🔊 Narrate Lesson</button>
+            <button class="btn-3d amber" onclick="playSound('/assets/sounds/sfx_star_fanfare.wav')">🎵 Test Audio SFX</button>
+          </div>
+        </div>
+
+        <!-- 4-Stage Pedagogical Loop Stepper -->
+        <div class="stage-stepper">
+          <div class="step-pill active" id="stageTab1" onclick="switchStage(1)">
+            1. Study &amp; Explore<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Manipulatives &amp; 9 Assets</span>
+          </div>
+          <div class="step-pill" id="stageTab2" onclick="switchStage(2)">
+            2. Guided Practice<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Untimed + CPA Hints</span>
+          </div>
+          <div class="step-pill" id="stageTab3" onclick="switchStage(3)">
+            3. Fluency Zone<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Timed 70/20/10 Spiral</span>
+          </div>
+          <div class="step-pill" id="stageTab4" onclick="switchStage(4)">
+            4. Unit Boss Gate<br><span style="font-size:11px; font-weight:600; opacity:0.85;">Accuracy + Speed Lock</span>
+          </div>
+        </div>
+
+        <!-- Skill Topics Selector within Active Unit -->
+        <div>
+          <div style="font-size: 12px; font-weight: 800; color: var(--ink-500); margin-bottom: 6px;">
+            SKILL TOPICS IN THIS UNIT (CLICK ANY TOPIC TO INSPECT ITS 9 ASSETS &amp; PRACTICE):
+          </div>
+          <div class="topic-strip" id="topicStripContainer"></div>
+        </div>
+
+        <!-- Stage 1 View: Interactive Manipulative + 9 Asset Categories -->
+        <div id="stage1View">
+          <div class="manipulative-stage">
+            <div class="svg-preview-box">
+              <img id="topicSvgImage" src="/assets/images/ten_frame_and_number_line.svg" alt="Topic Vector Illustration" />
+              <div style="margin-top:10px; font-size:12px; font-weight:700; color:var(--ink-500);" id="cpaModeCaption">
+                CPA Mode: CONCRETE_INTERACTIVE -> PICTORIAL -> GHOST_FLASH -> ABSTRACT
+              </div>
+            </div>
+            <div>
+              <h3 style="font-size: 18px; margin-bottom: 8px;" id="manipWidgetTitle">Interactive Manipulative Playground</h3>
+              <p style="font-size: 13px; color: var(--ink-700); margin-bottom: 10px;" id="manipStepsText"></p>
+              <div style="background:#FFFFFF; border:2px solid #E2E8F0; border-radius:14px; padding:12px; text-align:center;">
+                <div style="font-size:12px; font-weight:800; color:var(--teal-700); margin-bottom:4px;">
+                  HANDS-ON TEN-FRAME COUNTER (TAP CELLS TO ADD/REMOVE COUNTERS)
+                </div>
+                <div class="ten-frame-grid" id="interactiveTenFrame"></div>
+                <div class="mono" style="font-size:15px; font-weight:700; margin-top:6px;" id="tenFrameCountLabel">
+                  Count: 5 (5 + 0 = 5 | Make-10 Needs: 5 more)
+                </div>
+              </div>
+              <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-3d" onclick="switchStage(2)">▶ Start Guided Practice Game</button>
+                <button class="btn-3d coral" onclick="switchStage(4)">⚔️ Take Unit Boss Gate Exam</button>
+              </div>
+            </div>
+          </div>
+
+          <h3 style="font-size: 17px; margin-bottom: 4px;">Complete 9-Category Asset Bundle for Selected Skill Topic</h3>
+          <p style="font-size: 12px; color: var(--ink-500);">
+            Every single one of the 614 Skill Topics includes dedicated Sounds, Images, Videos, Interactive Elements, Voice Narration, Animations, Games, Quizzes, and Assessments.
+          </p>
+          <div class="asset-grid" id="nineAssetsContainer"></div>
+        </div>
+
+        <!-- Stage 2, 3 & 4 Interactive Game / Quiz / Boss Gate Arena -->
+        <div id="arenaView" style="display:none;">
+          <div class="arena-box">
+            <div class="hud-bar">
+              <div>
+                <span class="pill gold" id="arenaModeLabel">Stage 4: Unit Boss Gate</span>
+                <span class="mono" style="margin-left:10px; font-size:14px;" id="arenaProgressLabel">Question 1 / 12</span>
+              </div>
+              <div style="display:flex; gap:12px; align-items:center;">
+                <span class="mono pill" id="arenaTimerPill">⏱️ 0.0s (Target ≤ 5.0s)</span>
+                <span class="mono pill teal" id="arenaStreakPill">🔥 Streak: 0</span>
+                <span class="mono pill" id="arenaLagQueuePill">🔄 Lag +2/+5/+10 Queue: 0</span>
+              </div>
+            </div>
+
+            <div class="question-prompt" id="arenaPromptText">Loading question...</div>
+            <div class="choices-grid" id="arenaChoicesContainer"></div>
+
+            <div id="arenaFeedbackBox" style="display:none; margin-top:18px; padding:16px; border-radius:14px; background:rgba(255,255,255,0.12);"></div>
+
+            <div id="gateSummaryReport" style="display:none; margin-top:20px; padding:20px; border-radius:16px; background:#FFFFFF; color:var(--ink-900);"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Motor Calibration / Daily Brain Boost / Parent Analytics -->
+  <div class="modal-backdrop" id="appModal">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h2 id="modalTitle">Modal</h2>
+        <button class="btn-3d secondary" onclick="closeModal()">✕ Close</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.protocol + "//" + window.location.hostname + ":4000";
+    let curriculumSummary = null;
+    let activeGradeId = "pre-k";
+    let activeSubjectKey = "math";
+    let gradeCatalogCache = {};
+    let activeUnit = null;
+    let activeTopicIdx = 0;
+    let activeStage = 1;
+    let motorBaselineSec = 0.42;
+    let tenFrameState = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0];
+
+    // Unlocked units state (tracks mastery progression across the DAG)
+    const masteredUnits = new Set(["PK-M1", "PK-E1", "K-M1", "K-E1", "K-S1", "K-SS1", "G1-M1", "G1-E1", "G1-S1", "G1-SS1", "G2-M1", "G2-E1", "G2-S1", "G2-SS1", "G3-M1", "G3-E1", "G3-S1", "G3-SS1"]);
+    const silverKeyUnits = new Set(["PK-M1", "K-M1"]);
+    const goldKeyUnits = new Set(["PK-E1", "G1-M1"]);
+
+    // Active Game / Gate state
+    let arenaQuestions = [];
+    let arenaIndex = 0;
+    let arenaStartTimeMs = 0;
+    let arenaTimerInterval = null;
+    let arenaResponses = [];
+    let arenaStreak = 0;
+    let expandingLagQueue = [];
+
+    const SUBJECT_LABELS = {
+      math: "📐 Mathematics",
+      ela: "📖 Language Arts (ELA)",
+      science: "🔬 Science (NGSS)",
+      socialStudies: "🌎 Social Studies (C3)"
+    };
+
+    function playSound(url) {
+      try {
+        const audio = new Audio(url);
+        audio.volume = 0.6;
+        audio.play().catch(() => {});
+      } catch (e) {}
+    }
+
+    function speakText(text) {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const clean = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.rate = activeGradeId === "pre-k" ? 0.9 : 1.0;
+      utter.pitch = 1.08;
+      window.speechSynthesis.speak(utter);
+    }
+
+    function speakCurrentTopicIntro() {
+      if (!activeUnit) return;
+      const t = activeUnit.skillTopics[activeTopicIdx] || activeUnit.skillTopics[0];
+      if (t && t.assets && t.assets.voiceNarration) {
+        speakText(t.assets.voiceNarration.introPromptSsml);
+      }
+    }
+
+    async function initApp() {
+      const res = await fetch(`${API_BASE}/api/curriculum/summary`);
+      curriculumSummary = await res.json();
+      renderGradeTabs();
+      await selectGrade("pre-k");
+      renderInteractiveTenFrame();
+    }
+
+    function renderGradeTabs() {
+      const container = document.getElementById("gradeTabs");
+      container.innerHTML = curriculumSummary.grades.map((g) => `
+        <button class="tab-btn ${g.gradeId === activeGradeId ? 'active' : ''}" onclick="selectGrade('${g.gradeId}')">
+          ${g.gradeName} <span style="font-size:11px; opacity:0.8;">(${g.targetAgeYears}y)</span>
+        </button>
+      `).join("");
+    }
+
+    async function selectGrade(gradeId) {
+      activeGradeId = gradeId;
+      renderGradeTabs();
+      if (!gradeCatalogCache[gradeId]) {
+        const res = await fetch(`/assets/catalogs/${gradeId}-skill-topic-assets.json`);
+        gradeCatalogCache[gradeId] = await res.json();
+      }
+      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === gradeId);
+      const availSubjects = Object.keys(gradeObj.subjects);
+      if (!availSubjects.includes(activeSubjectKey)) {
+        activeSubjectKey = availSubjects[0];
+      }
+      renderSubjectTabs(availSubjects);
+      selectSubject(activeSubjectKey);
+    }
+
+    function renderSubjectTabs(availSubjects) {
+      const container = document.getElementById("subjectTabs");
+      container.innerHTML = availSubjects.map((s) => `
+        <button class="tab-btn ${s === activeSubjectKey ? 'subj-active' : ''}" onclick="selectSubject('${s}')">
+          ${SUBJECT_LABELS[s] || s}
+        </button>
+      `).join("");
+    }
+
+    function isUnitUnlocked(unit) {
+      if (!unit.prerequisiteUnitIds || unit.prerequisiteUnitIds.length === 0) return true;
+      if (unit.sequenceOrder === 1) return true;
+      return unit.prerequisiteUnitIds.every((pid) => masteredUnits.has(pid));
+    }
+
+    function selectSubject(subjKey) {
+      activeSubjectKey = subjKey;
+      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
+      renderSubjectTabs(Object.keys(gradeObj.subjects));
+      const subj = gradeObj.subjects[subjKey];
+      document.getElementById("unitListHeading").textContent = `${gradeObj.gradeName} ${SUBJECT_LABELS[subjKey]}`;
+      document.getElementById("unitCountBadge").textContent = `${subj.totalUnits} Units • ${subj.totalSkillTopics} Topics`;
+      renderUnitList(subj.units);
+      selectUnit(subj.units[0].unitId);
+    }
+
+    function renderUnitList(units) {
+      const container = document.getElementById("unitListContainer");
+      container.innerHTML = units.map((u) => {
+        const unlocked = isUnitUnlocked(u);
+        const mastered = masteredUnits.has(u.unitId);
+        const keyBadge = goldKeyUnits.has(u.unitId)
+          ? "🥇 Gold Key"
+          : silverKeyUnits.has(u.unitId)
+          ? "🥈 Silver Key (Sleep Check Due)"
+          : "";
+        return `
+          <div class="unit-node ${activeUnit && activeUnit.unitId === u.unitId ? 'selected' : ''} ${!unlocked ? 'locked' : ''}"
+               onclick="handleUnitClick('${u.unitId}', ${unlocked})">
+            <div class="unit-header">
+              <span class="unit-code">${u.unitId}</span>
+              <span class="status-badge status-${mastered ? 'MASTERED' : unlocked ? 'READY' : 'LOCKED'}">
+                ${mastered ? '✓ MASTERED' : unlocked ? 'UNLOCKED' : '🔒 LOCKED BY GATE'}
+              </span>
+            </div>
+            <div style="font-weight:800; font-size:15px; margin-bottom:4px;">${u.title}</div>
+            <div style="font-size:12px; color:var(--ink-500); display:flex; justify-content:space-between;">
+              <span>${u.skillTopics.length} Skill Topics</span>
+              <span>Gate: ≥${u.masteryGate.minAccuracyPercent}% &amp; ≤${u.masteryGate.maxMedianResponseTimeSec}s</span>
+            </div>
+            ${keyBadge ? `<div style="margin-top:6px; font-size:11px; font-weight:800; color:#B45309;">${keyBadge}</div>` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function handleUnitClick(unitId, unlocked) {
+      if (!unlocked) {
+        playSound("/assets/sounds/sfx_gentle_nudge.wav");
+        alert("🔒 Mastery Gate Locked!\n\nYou must complete the prerequisite Unit Assessment with the required Accuracy (%) and Fluency Speed (sec/item) before unlocking this unit.");
+        return;
+      }
+      selectUnit(unitId);
+    }
+
+    async function selectUnit(unitId) {
+      const res = await fetch(`${API_BASE}/api/curriculum/unit/${unitId}`);
+      const data = await res.json();
+      activeUnit = data.unit;
+      activeTopicIdx = 0;
+
+      const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
+      renderUnitList(gradeObj.subjects[activeSubjectKey].units);
+
+      document.getElementById("activeUnitIdBadge").textContent = activeUnit.unitId;
+      document.getElementById("activePrereqBadge").textContent =
+        activeUnit.prerequisiteUnitIds.length > 0 ? `Prereq: ${activeUnit.prerequisiteUnitIds.join(", ")}` : "Entry Unit";
+      document.getElementById("activeGateBadge").textContent =
+        `Gate: ≥${activeUnit.masteryGate.minAccuracyPercent}% Acc & ≤${activeUnit.masteryGate.maxMedianResponseTimeSec}s Speed`;
+      document.getElementById("activeUnitTitle").textContent = activeUnit.title;
+
+      renderTopicStrip();
+      selectTopic(0);
+      switchStage(1);
+    }
+
+    function renderTopicStrip() {
+      const strip = document.getElementById("topicStripContainer");
+      strip.innerHTML = activeUnit.skillTopics.map((t, idx) => `
+        <button class="topic-chip ${idx === activeTopicIdx ? 'active' : ''}" onclick="selectTopic(${idx})">
+          <strong>${t.code}.</strong> ${t.name.length > 42 ? t.name.slice(0, 42) + "…" : t.name}
+        </button>
+      `).join("");
+    }
+
+    function selectTopic(idx) {
+      activeTopicIdx = idx;
+      renderTopicStrip();
+      const topic = activeUnit.skillTopics[idx];
+      const a = topic.assets;
+      playSound("/" + a.sounds.primarySfx);
+
+      document.getElementById("topicSvgImage").src = "/" + a.images.primaryIllustrationSvg;
+      document.getElementById("manipWidgetTitle").textContent = `${a.interactiveElements.widgetType} — Topic ${topic.code}: ${topic.name}`;
+      document.getElementById("manipStepsText").innerHTML = (a.interactiveElements.guidedStudySteps || []).join("<br>");
+
+      const container = document.getElementById("nineAssetsContainer");
+      container.innerHTML = `
+        <div class="asset-box">
+          <h4>1. Sounds <span>🔊</span></h4>
+          <div><strong>Primary SFX:</strong> <code>${a.sounds.primarySfx.split("/").pop()}</code></div>
+          <div><strong>Cues:</strong> ${a.sounds.domainAudioCues.join(", ")}</div>
+          <button class="btn-3d secondary" style="margin-top:8px; padding:5px 10px; font-size:12px;" onclick="playSound('/${a.sounds.primarySfx}')">▶ Play Topic SFX</button>
+        </div>
+        <div class="asset-box">
+          <h4>2. Images (CPA Vector) <span>🖼️</span></h4>
+          <div><strong>SVG:</strong> <code>${a.images.primaryIllustrationSvg.split("/").pop()}</code></div>
+          <div><strong>Cards:</strong> ${a.images.topicFlashcardSvgs.slice(0, 3).join(", ")}</div>
+        </div>
+        <div class="asset-box">
+          <h4>3. Micro-Lesson Video <span>🎬</span></h4>
+          <div><strong>${a.videos.title}</strong> (${a.videos.durationSec}s)</div>
+          <div>3 Scenes: Hook -> Manipulative -> Pause &amp; Predict</div>
+        </div>
+        <div class="asset-box">
+          <h4>4. Interactive Element <span>🧩</span></h4>
+          <div><strong>Widget:</strong> <code>${a.interactiveElements.widgetType}</code></div>
+          <div><strong>Gesture:</strong> ${a.interactiveElements.interactionGesture}</div>
+        </div>
+        <div class="asset-box">
+          <h4>5. Voice Narration (SSML) <span>🎙️</span></h4>
+          <div><strong>Persona:</strong> ${a.voiceNarration.voicePersona} (${a.voiceNarration.speakingRateWpm} WPM)</div>
+          <button class="btn-3d secondary" style="margin-top:8px; padding:5px 10px; font-size:12px;" onclick="speakCurrentTopicIntro()">🔊 Speak Prompt</button>
+        </div>
+        <div class="asset-box">
+          <h4>6. Animations (60-120fps) <span>✨</span></h4>
+          <div><strong>Engine:</strong> ${a.animations.engine}</div>
+          <div><strong>States:</strong> ${a.animations.stateMachineStates.map(s => s.state).slice(0, 4).join(", ")}</div>
+        </div>
+        <div class="asset-box">
+          <h4>7. Stage 2 &amp; 3 Games <span>🎮</span></h4>
+          <div><strong>Guided:</strong> <code>${a.games.guidedPracticeGame.archetype}</code></div>
+          <div><strong>Fluency:</strong> <code>${a.games.fluencySprintGame.archetype}</code> (≤${a.games.fluencySprintGame.targetResponseSpeedSec}s)</div>
+        </div>
+        <div class="asset-box">
+          <h4>8. Formative Quiz <span>📝</span></h4>
+          <div><strong>Items:</strong> ${a.quizzes.itemCount} questions + 3 misconception distractors</div>
+          <div><strong>Micro-Spacing:</strong> Lag +${a.quizzes.intraSessionExpandingLagsOnMiss.join("/+")}</div>
+        </div>
+        <div class="asset-box">
+          <h4>9. Boss Gate Assessment <span>🏆</span></h4>
+          <div><strong>Gate Quota:</strong> ${a.assessments.unitBossGateQuotaItems} items | Floor: ≥${a.assessments.minTopicAccuracyFloorPercent}%</div>
+          <div><strong>FSRS Schedule:</strong> [${a.assessments.spacedRepetitionScheduleDays.join("d, ")}d]</div>
+        </div>
+      `;
+    }
+
+    function renderInteractiveTenFrame() {
+      const grid = document.getElementById("interactiveTenFrame");
+      const count = tenFrameState.reduce((acc, v) => acc + v, 0);
+      grid.innerHTML = tenFrameState.map((val, i) => `
+        <div class="tf-cell" onclick="toggleTenFrameCell(${i})">
+          ${val ? `<div class="tf-token ${i >= 5 ? 'blue' : ''}"></div>` : ""}
+        </div>
+      `).join("");
+      document.getElementById("tenFrameCountLabel").textContent =
+        `Count: ${count} (${Math.min(5, count)} + ${Math.max(0, count - 5)} = ${count} | Make-10 Needs: ${10 - count} more)`;
+    }
+
+    function toggleTenFrameCell(idx) {
+      tenFrameState[idx] = tenFrameState[idx] ? 0 : 1;
+      playSound("/assets/sounds/sfx_count_pop.wav");
+      renderInteractiveTenFrame();
+    }
+
+    async function switchStage(stageNum) {
+      activeStage = stageNum;
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById(`stageTab${i}`).classList.toggle("active", i === stageNum);
+      }
+      if (stageNum === 1) {
+        if (arenaTimerInterval) clearInterval(arenaTimerInterval);
+        document.getElementById("stage1View").style.display = "block";
+        document.getElementById("arenaView").style.display = "none";
+        return;
+      }
+
+      document.getElementById("stage1View").style.display = "none";
+      document.getElementById("arenaView").style.display = "block";
+      document.getElementById("gateSummaryReport").style.display = "none";
+      document.getElementById("arenaFeedbackBox").style.display = "none";
+
+      const count = stageNum === 4 ? activeUnit.masteryGate.questionCount : 6;
+      const res = await fetch(`${API_BASE}/api/curriculum/unit/${activeUnit.unitId}?count=${count}`);
+      const data = await res.json();
+      arenaQuestions = data.generatedQuestions;
+      arenaIndex = 0;
+      arenaResponses = [];
+      arenaStreak = 0;
+      expandingLagQueue = [];
+
+      const labels = {
+        2: `Stage 2: Guided Practice (${activeUnit.skillTopics[activeTopicIdx].assets.games.guidedPracticeGame.archetype})`,
+        3: `Stage 3: Fluency Zone Sprint (70/20/10 Spiral Mix)`,
+        4: `Stage 4: Unit Boss Gate Assessment (Strict Accuracy + Speed Lock)`
+      };
+      document.getElementById("arenaModeLabel").textContent = labels[stageNum];
+      renderArenaQuestion();
+    }
+
+    function renderArenaQuestion() {
+      if (arenaTimerInterval) clearInterval(arenaTimerInterval);
+      if (arenaIndex >= arenaQuestions.length) {
+        finishArenaSession();
+        return;
+      }
+
+      const q = arenaQuestions[arenaIndex];
+      document.getElementById("arenaProgressLabel").textContent = `Question ${arenaIndex + 1} / ${arenaQuestions.length}`;
+      document.getElementById("arenaStreakPill").textContent = `🔥 Streak: ${arenaStreak}`;
+      document.getElementById("arenaLagQueuePill").textContent = `🔄 Lag +2/+5/+10 Queue: ${expandingLagQueue.length}`;
+      document.getElementById("arenaPromptText").textContent = q.prompt;
+      document.getElementById("arenaFeedbackBox").style.display = "none";
+
+      const shuffled = [...q.choices].sort(() => Math.random() - 0.5);
+      document.getElementById("arenaChoicesContainer").innerHTML = shuffled.map((c, i) => `
+        <button class="choice-btn" id="choiceBtn_${i}" onclick="submitArenaAnswer(${i}, ${JSON.stringify(c).replace(/"/g, '&quot;')})">
+          ${c}
+        </button>
+      `).join("");
+
+      arenaStartTimeMs = performance.now();
+      const targetSec = activeUnit.masteryGate.maxMedianResponseTimeSec;
+      arenaTimerInterval = setInterval(() => {
+        const elapsed = ((performance.now() - arenaStartTimeMs) / 1000).toFixed(1);
+        document.getElementById("arenaTimerPill").textContent = `⏱️ ${elapsed}s (Target ≤ ${targetSec}s)`;
+      }, 100);
+    }
+
+    function submitArenaAnswer(btnIdx, chosenValue) {
+      if (arenaTimerInterval) clearInterval(arenaTimerInterval);
+      const rawTimeSec = Number(((performance.now() - arenaStartTimeMs) / 1000).toFixed(2));
+      const q = arenaQuestions[arenaIndex];
+      const isCorrect = chosenValue === q.correctAnswer;
+
+      // Anti-guessing check (< 1.2s wrong answer)
+      const isRapidGuess = !isCorrect && rawTimeSec < 1.2;
+
+      if (isCorrect) {
+        arenaStreak += 1;
+        playSound("/assets/sounds/sfx_chime_correct.wav");
+      } else {
+        arenaStreak = 0;
+        playSound("/assets/sounds/sfx_gentle_nudge.wav");
+        // Intra-session Expanding Retrieval (re-queue at Lag +2)
+        expandingLagQueue.push({ ...q, prompt: `[Lag +2 Retrieval Check] ${q.prompt}` });
+        if (arenaQuestions.length < 18) {
+          const insertPos = Math.min(arenaQuestions.length, arenaIndex + 3);
+          arenaQuestions.splice(insertPos, 0, { ...q, prompt: `[Expanding Retrieval Lag +2] ${q.prompt}` });
+        }
+      }
+
+      arenaResponses.push({
+        topicCode: q.topicCode,
+        isCorrect,
+        rawTimeSec
+      });
+
+      const btn = document.getElementById(`choiceBtn_${btnIdx}`);
+      if (btn) btn.classList.add(isCorrect ? "correct" : "wrong");
+
+      const fb = document.getElementById("arenaFeedbackBox");
+      fb.style.display = "block";
+      const cogSec = Math.max(0.5, rawTimeSec - motorBaselineSec).toFixed(2);
+      fb.innerHTML = `
+        <div style="font-weight:800; font-size:16px; margin-bottom:6px; color:${isCorrect ? '#4ADE80' : '#FDA4AF'};">
+          ${isCorrect
+            ? `✓ Correct! Cognitive Speed: ${cogSec}s (Raw ${rawTimeSec}s - Motor ${motorBaselineSec}s)`
+            : isRapidGuess
+            ? `⚠️ Rapid Guess Detected (${rawTimeSec}s < 1.2s)! 2-Second Cooldown Activated — Read Carefully!`
+            : `✗ Not quite! Queued for Intra-Session Expanding Retrieval (Lag +2, +5, +10)`}
+        </div>
+        <div style="font-size:14px; opacity:0.92; margin-bottom:10px;">
+          <strong>Explanation:</strong> ${q.explanation}
+        </div>
+        <button class="btn-3d amber" onclick="nextArenaQuestion()">Next Question →</button>
+      `;
+    }
+
+    function nextArenaQuestion() {
+      arenaIndex += 1;
+      renderArenaQuestion();
+    }
+
+    async function finishArenaSession() {
+      const res = await fetch(`${API_BASE}/api/gate/evaluate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          unitId: activeUnit.unitId,
+          motorBaselineSec,
+          responses: arenaResponses
+        })
+      });
+      const result = await res.json();
+      const ev = result.evaluation;
+      const sr = result.spacedRepetition;
+
+      if (ev.passed) {
+        masteredUnits.add(activeUnit.unitId);
+        silverKeyUnits.add(activeUnit.unitId);
+        playSound("/assets/sounds/sfx_star_fanfare.wav");
+        const gradeObj = curriculumSummary.grades.find((g) => g.gradeId === activeGradeId);
+        renderUnitList(gradeObj.subjects[activeSubjectKey].units);
+      }
+
+      const report = document.getElementById("gateSummaryReport");
+      report.style.display = "block";
+      report.innerHTML = `
+        <h3 style="font-size:22px; color:${ev.passed ? '#166534' : '#BE123C'}; margin-bottom:8px;">
+          ${ev.passed ? '🏆 UNIT BOSS GATE PASSED! (Silver Key Awarded & Next Unit Unlocked)' : '🔄 REMEDIATION PRESCRIBED BEFORE NEXT UNIT UNLOCKS'}
+        </h3>
+        <p style="font-size:14px; font-weight:700; color:var(--ink-700); margin-bottom:14px;">
+          ${ev.remediationPrescription}
+        </p>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:14px;">
+          <div class="asset-box">
+            <h4>1. Overall Accuracy</h4>
+            <div class="mono" style="font-size:18px; font-weight:800;">${ev.overallAccuracyPct}% (Req ≥${ev.requiredAccuracyPct}%)</div>
+            <div>${ev.conditions.overallAccuracyPassed ? '✅ Passed' : '❌ Below Threshold'}</div>
+          </div>
+          <div class="asset-box">
+            <h4>2. Median Cognitive Speed</h4>
+            <div class="mono" style="font-size:18px; font-weight:800;">${ev.medianCogSpeedSec}s (Target ≤${ev.targetSpeedSec}s)</div>
+            <div>${ev.conditions.medianSpeedPassed ? '✅ Fluent Automaticity' : '❌ Too Slow (Needs Fluency Sprint)'}</div>
+          </div>
+          <div class="asset-box">
+            <h4>3. Spaced Repetition &amp; CPA</h4>
+            <div class="mono" style="font-size:16px; font-weight:800;">Stability: ${sr.stabilityDays} days</div>
+            <div>Next CPA Mode: <code>${sr.cpaStage}</code></div>
+          </div>
+        </div>
+        <button class="btn-3d" onclick="switchStage(1)">Return to Unit Studio</button>
+      `;
+    }
+
+    function openMotorCalibration() {
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = "🎈 3-Tap Motor-Latency Calibration";
+      let taps = [];
+      let tapStart = performance.now();
+
+      window.recordCalibrationTap = () => {
+        const dt = (performance.now() - tapStart) / 1000;
+        taps.push(Math.min(1.2, Math.max(0.18, dt)));
+        playSound("/assets/sounds/sfx_count_pop.wav");
+        tapStart = performance.now();
+        if (taps.length >= 3) {
+          taps.sort((a, b) => a - b);
+          motorBaselineSec = Number(taps[1].toFixed(2));
+          document.getElementById("motorPill").textContent = `⚡ Motor Baseline: ${motorBaselineSec}s`;
+          document.getElementById("calibStatus").innerHTML = `
+            <strong style="color:#166534;">✓ Calibrated! Median Motor Latency = ${motorBaselineSec}s.</strong><br>
+            All Boss Gate response times will subtract ${motorBaselineSec}s so only pure cognitive thinking speed is graded!
+          `;
+        } else {
+          document.getElementById("calibStatus").textContent = `Popped ${taps.length} / 3 Star Balloons... Tap the next balloon fast!`;
+        }
+      };
+
+      document.getElementById("modalBody").innerHTML = `
+        <p style="margin-bottom:16px; color:var(--ink-700);">
+          Young children have different touch/mouse motor speeds. Pop 3 Star Balloons as fast as you can to calibrate your personal motor baseline ($T_{\\text{motor}}$):
+        </p>
+        <div style="text-align:center; padding:24px; background:var(--bg-warm); border-radius:18px;">
+          <button class="btn-3d coral" style="font-size:22px; padding:18px 32px;" onclick="recordCalibrationTap()">
+            🎈 POP STAR BALLOON!
+          </button>
+          <div id="calibStatus" style="margin-top:14px; font-weight:800;">Waiting for Tap 1 of 3...</div>
+        </div>
+      `;
+      modal.classList.add("open");
+    }
+
+    function openDailyBrainBoost() {
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = "🧠 Scientific Spaced Repetition & Knowledge Garden";
+      document.getElementById("modalBody").innerHTML = `
+        <p style="margin-bottom:14px; color:var(--ink-700);">
+          <strong>6 Cognitive Science Pillars Active for Ages 3–9:</strong>
+        </p>
+        <div class="quadrant-grid">
+          <div class="quad-cell" style="background:#F0FDFA; border-color:#14B8A6;">
+            <h4>1. Intra-Session Expanding Retrieval</h4>
+            <p style="font-size:13px; margin-top:4px;">Missed items automatically re-appear at <strong>Lag +2, Lag +5, and Lag +10</strong> within the same session.</p>
+          </div>
+          <div class="quad-cell" style="background:#FEF3C7; border-color:#F59E0B;">
+            <h4>2. Two-Key Overnight Sleep Consolidation</h4>
+            <p style="font-size:13px; margin-top:4px;">Day 1 Boss Gate awards a <strong>Silver Key</strong>. A 60-sec 5-item verification the next morning (≥14h later) upgrades to a <strong>Gold Key</strong>.</p>
+          </div>
+          <div class="quad-cell" style="background:#EFF6FF; border-color:#3B82F6;">
+            <h4>3. Speed-Weighted Child FSRS</h4>
+            <p style="font-size:13px; margin-top:4px;">Slow finger-counted answers ($r_i > 1.25$) receive minimal stability growth ($1.2\\times$). Max caps: 21d (Pre-K), 30d (K), 45d (G1), 60d (G2–G3).</p>
+          </div>
+          <div class="quad-cell" style="background:#FDF2F8; border-color:#EC4899;">
+            <h4>4. 70/20/10 Interleaving &amp; FIRe DAG Credit</h4>
+            <p style="font-size:13px; margin-top:4px;">Games mix 70% current unit, 20% contrastive prerequisites, 10% due reviews, and propagate $0.40\\times$ credit downward in the DAG.</p>
+          </div>
+        </div>
+        <button class="btn-3d indigo" onclick="closeModal(); switchStage(3);">🚀 Launch 3-Minute Fluency &amp; Spaced Review Sprint</button>
+      `;
+      modal.classList.add("open");
+    }
+
+    async function openParentPortal() {
+      const res = await fetch(`${API_BASE}/api/parent/analytics`);
+      const data = await res.json();
+      const modal = document.getElementById("appModal");
+      document.getElementById("modalTitle").textContent = "🔒 Parent & Educator Analytics Portal (Accuracy vs. Speed Quadrants)";
+      document.getElementById("modalBody").innerHTML = `
+        <p style="margin-bottom:12px; font-size:14px; color:var(--ink-700);">
+          <strong>Learner:</strong> ${data.profile.nickname} • <strong>Motor Baseline:</strong> ${motorBaselineSec}s • <strong>Streak:</strong> ${data.profile.streakDays} Days
+        </p>
+        <div class="quadrant-grid">
+          ${data.quadrants.map((q) => `
+            <div class="quad-cell">
+              <div style="display:flex; justify-content:space-between; font-weight:800;">
+                <span>${q.unitId}: ${q.unitTitle}</span>
+                <span class="mono">${q.keyState || q.status}</span>
+              </div>
+              <div style="font-size:13px; margin-top:6px;">
+                Accuracy: <strong>${q.bestAccuracyPct}%</strong> | Median Speed: <strong>${q.bestMedianSpeedSec}s</strong> (Target ≤${q.targetSpeedSec}s)
+              </div>
+              <div style="font-size:12px; margin-top:4px; color:var(--teal-700); font-weight:800;">
+                Quadrant: ${q.quadrant} • Retrievability R(t): ${q.retrievabilityPct}% (Stability: ${q.stabilityDays}d)
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+      modal.classList.add("open");
+    }
+
+    function closeModal() {
+      document.getElementById("appModal").classList.remove("open");
+    }
+
+    initApp();
+  </script>
+</body>
+</html>

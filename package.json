@@ -1,0 +1,19 @@
+{
+  "name": "balashikshana",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mastery-Gated Interactive Learning Games & Study Platform for Kids (Pre-K to Grade 3)",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "validate:curriculum": "python3 scripts/validate-curriculum.py",
+    "start:api": "node services/api/server.mjs",
+    "start:app": "npm --workspace=apps/mobile run web",
+    "start:ios": "npm --workspace=apps/mobile run ios",
+    "start:android": "npm --workspace=apps/mobile run android",
+    "build": "npm --workspace=packages/core-engine run build"
+  }
+}

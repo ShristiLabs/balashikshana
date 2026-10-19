@@ -33,14 +33,51 @@ Every unit progresses through four stages:
 
 ---
 
+## Quick Start & Running the Project
+
+### 1. Run Locally with One Command (`startup.sh` / `stop.sh`)
+```bash
+# Start both the Sync/Mastery API (port 4000) and Interactive Learning App (port 4200)
+./startup.sh
+
+# Stop all running services
+./stop.sh
+```
+- **Interactive Learning App:** `http://localhost:4200`
+- **Sync & Analytics API Health:** `http://localhost:4000/api/health`
+- **Validate Curriculum DAG & Core Engine:**
+  ```bash
+  npm run validate:curriculum
+  npm run build
+  ```
+
+### 2. Run via Docker Compose (`docker/docker-compose.yml`)
+```bash
+docker compose -f docker/docker-compose.yml up --build -d
+```
+
+---
+
 ## Repository Structure & Documentation
 
 ```text
 balashikshana/
 ├── AGENTS.md                                 # AI Agent architecture, pedagogical & schema guide
 ├── README.md                                 # Project overview, curriculum summary & architecture
+├── startup.sh / stop.sh                      # One-command startup and shutdown scripts
+├── package.json                              # Monorepo workspaces configuration
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Mathematics Curriculum Guide
-├── .gitignore                                # Git ignore rules for mobile, Node, and build artifacts
+├── .github/workflows/ci.yml                  # GitHub Actions CI for curriculum DAG & engine build
+├── docker/
+│   ├── docker-compose.yml                    # Postgres, Redis, API & Web container orchestration
+│   ├── Dockerfile.api                        # Backend Sync & Mastery API container
+│   └── Dockerfile.web                        # Interactive Mobile/Web App container
+├── packages/
+│   └── core-engine/                          # DAG Resolver, 5-Condition Mastery Gate, Child FSRS & Question Generator
+├── services/
+│   └── api/                                  # Node.js Sync, Mastery Gate Evaluation & Parent Analytics API
+├── apps/
+│   └── mobile/                               # Cross-Platform Expo/React Native + Web Interactive Learning App
 ├── docs/
 │   ├── us-curriculum-registry.json           # Canonical JSON DAG of all 130 units, 614 topics & 9-asset bundles
 │   ├── us-curriculum-mapping.md              # Complete Pre-K to Grade 3 unit progression & skill-topic mapping

@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Balashikshana",
+    "slug": "balashikshana",
+    "version": "1.0.0",
+    "orientation": "default",
+    "scheme": "balashikshana",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shristilabs.balashikshana"
+    },
+    "android": {
+      "package": "com.shristilabs.balashikshana"
+    },
+    "plugins": ["expo-router", "expo-sqlite", "expo-audio"]
+  }
+}

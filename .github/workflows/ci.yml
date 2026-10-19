@@ -1,0 +1,40 @@
+name: Balashikshana Build & Curriculum CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  validate-and-build:
+    name: Validate Curriculum DAG, 9-Asset Contract & Build Engine
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
+        run: python3 scripts/validate-curriculum.py
+
+      - name: Validate Core Mastery & Spaced Repetition Engine
+        run: node packages/core-engine/dist/verify-engine.mjs
+
+      - name: Smoke-Test Sync & Curriculum API Server
+        run: |
+          node services/api/server.mjs &
+          API_PID=$!
+          sleep 2
+          curl -fsS http://127.0.0.1:4000/api/health
+          curl -fsS http://127.0.0.1:4000/api/curriculum/summary
+          kill $API_PID
