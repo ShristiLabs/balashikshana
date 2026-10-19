@@ -1,7 +1,4 @@
 import http from "node:http";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   median,
   computeMotorBaselineSec,
@@ -9,187 +6,124 @@ import {
   evaluateMasteryGateAttempt,
   computeFluencyGrade,
   updateTopicMemoryStability,
-  computeRetrievabilityPct,
-  propagateImplicitDagCredit,
-  generateProceduralQuestion,
-  generateTopicPracticeSet
+  computeRetrievabilityPct
 } from "../../packages/core-engine/src/index.mjs";
+import { initDatabase, hashPin, createSessionToken } from "./db.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = path.resolve(__dirname, "../..");
-const REGISTRY_PATH = path.join(ROOT_DIR, "docs/us-curriculum-registry.json");
-const DATA_DIR = path.join(__dirname, "data");
-const STORE_PATH = path.join(DATA_DIR, "students-store.json");
+const db = initDatabase();
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8"));
-
-const unitMap = {};
-const gradeMap = {};
-
-for (const g of registry.grades) {
-  gradeMap[g.gradeId] = g;
-  for (const [subjKey, subj] of Object.entries(g.subjects)) {
-    for (const u of subj.units) {
-      unitMap[u.unitId] = {
-        ...u,
-        gradeId: g.gradeId,
-        subject: subjKey,
-        spacedRepetitionPolicy: g.spacedRepetitionPolicy
-      };
-    }
-  }
-}
-
-function createDefaultStore() {
+function mapQuestionRow(row) {
   return {
-    activeStudentId: "stu-aarav-k",
-    students: {
-      "stu-aarav-k": {
-        studentId: "stu-aarav-k",
-        username: "aarav",
-        pin: "1234",
-        nickname: "Aarav",
-        avatar: "🦁",
-        ageYears: 5,
-        currentGrade: "kindergarten",
-        motorBaselineSec: 0.42,
-        streakDays: 7,
-        starCoins: 340,
-        hearts: 5,
-        createdAt: "2026-09-20T10:00:00Z",
-        unitProgress: {
-          "PK-M7": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 93.0, bestMedianSpeedSec: 4.5, attemptsCount: 1, stabilityDays: 21.0, lastReviewedDaysAgo: 2, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
-          "K-M1": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 93.3, bestMedianSpeedSec: 3.4, attemptsCount: 2, stabilityDays: 8.0, lastReviewedDaysAgo: 2, cpaStage: "PICTORIAL_GHOST_FLASH_1S" },
-          "K-M2": { status: "IN_PROGRESS", keyState: null, bestAccuracyPct: 90.0, bestMedianSpeedSec: 4.1, attemptsCount: 1, stabilityDays: 2.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_STATIC" }
-        },
-        topicMastery: {
-          "K-M1-A": { completed: true, crowns: 3, masteryScore: 100, accuracyPct: 100, medianSpeedSec: 3.0, fluencyGrade: 4, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M1-B": { completed: true, crowns: 3, masteryScore: 95, accuracyPct: 95, medianSpeedSec: 3.2, fluencyGrade: 4, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M1-C": { completed: true, crowns: 3, masteryScore: 92, accuracyPct: 92, medianSpeedSec: 3.5, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M1-D": { completed: true, crowns: 3, masteryScore: 90, accuracyPct: 90, medianSpeedSec: 3.6, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M1-E": { completed: true, crowns: 3, masteryScore: 94, accuracyPct: 94, medianSpeedSec: 3.4, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M1-F": { completed: true, crowns: 3, masteryScore: 91, accuracyPct: 91, medianSpeedSec: 3.7, fluencyGrade: 3, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M1-AAA": { completed: true, crowns: 3, masteryScore: 96, accuracyPct: 96, medianSpeedSec: 3.3, fluencyGrade: 4, stabilityDays: 8.0, lastReviewedDaysAgo: 2 },
-          "K-M2-G": { completed: true, crowns: 3, masteryScore: 92, accuracyPct: 92, medianSpeedSec: 3.8, fluencyGrade: 3, stabilityDays: 4.0, lastReviewedDaysAgo: 1 },
-          "K-M2-H": { completed: true, crowns: 2, masteryScore: 88, accuracyPct: 88, medianSpeedSec: 4.2, fluencyGrade: 3, stabilityDays: 3.0, lastReviewedDaysAgo: 1 }
-        },
-        misconceptionCounts: {
-          "forgot_to_reduce_second_addend_after_making_10": 2
-        },
-        gateHistory: [
-          { timestamp: "2026-10-15T16:00:00Z", unitId: "K-M1", passed: true, overallAccuracyPct: 93.3, medianCogSpeedSec: 3.4, keyAwarded: "GOLD_KEY" }
-        ]
-      },
-      "stu-maya-pk": {
-        studentId: "stu-maya-pk",
-        username: "maya",
-        pin: "1234",
-        nickname: "Maya",
-        avatar: "🦊",
-        ageYears: 4,
-        currentGrade: "pre-k",
-        motorBaselineSec: 0.55,
-        streakDays: 4,
-        starCoins: 140,
-        hearts: 5,
-        createdAt: "2026-10-01T10:00:00Z",
-        unitProgress: {
-          "PK-M1": { status: "IN_PROGRESS", keyState: null, bestAccuracyPct: 90.0, bestMedianSpeedSec: 4.2, attemptsCount: 1, stabilityDays: 4.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_STATIC" }
-        },
-        topicMastery: {
-          "PK-M1-A": { completed: true, crowns: 3, masteryScore: 100, accuracyPct: 100, medianSpeedSec: 3.8, fluencyGrade: 4, stabilityDays: 4.0, lastReviewedDaysAgo: 1 },
-          "PK-M1-B": { completed: true, crowns: 3, masteryScore: 90, accuracyPct: 90, medianSpeedSec: 4.2, fluencyGrade: 3, stabilityDays: 4.0, lastReviewedDaysAgo: 1 }
-        },
-        misconceptionCounts: {},
-        gateHistory: []
-      },
-      "stu-liam-g2": {
-        studentId: "stu-liam-g2",
-        username: "liam",
-        pin: "1234",
-        nickname: "Liam",
-        avatar: "🚀",
-        ageYears: 8,
-        currentGrade: "grade-2",
-        motorBaselineSec: 0.31,
-        streakDays: 12,
-        starCoins: 590,
-        hearts: 5,
-        createdAt: "2026-09-10T10:00:00Z",
-        unitProgress: {
-          "G1-M9": { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 95.0, bestMedianSpeedSec: 4.0, attemptsCount: 1, stabilityDays: 30.0, lastReviewedDaysAgo: 4, cpaStage: "PURE_ABSTRACT_SYMBOLIC" },
-          "G2-M1": { status: "IN_PROGRESS", keyState: null, bestAccuracyPct: 94.0, bestMedianSpeedSec: 4.1, attemptsCount: 1, stabilityDays: 7.0, lastReviewedDaysAgo: 1, cpaStage: "PICTORIAL_GHOST_FLASH_1S" }
-        },
-        topicMastery: {
-          "G2-M1-A": { completed: true, crowns: 3, masteryScore: 95, accuracyPct: 95, medianSpeedSec: 3.5, fluencyGrade: 4, stabilityDays: 7.0, lastReviewedDaysAgo: 1 },
-          "G2-M1-B": { completed: true, crowns: 3, masteryScore: 92, accuracyPct: 92, medianSpeedSec: 3.9, fluencyGrade: 3, stabilityDays: 7.0, lastReviewedDaysAgo: 1 }
-        },
-        misconceptionCounts: {},
-        gateHistory: []
-      }
-    }
+    questionId: row.question_id,
+    topicId: row.topic_id,
+    unitId: row.unit_id,
+    topicCode: row.topic_code,
+    topicName: row.topic_name,
+    difficultyLevel: row.difficulty_level,
+    interactionType: row.interaction_type,
+    prompt: row.prompt,
+    visualAid: row.visual_aid_svg,
+    visualObjects: row.visual_objects || undefined,
+    targetCount: row.target_count ?? undefined,
+    maxCounterCells: row.max_counter_cells ?? undefined,
+    counterEmoji: row.counter_emoji ?? undefined,
+    tileBank: row.tile_bank_json ? JSON.parse(row.tile_bank_json) : undefined,
+    choices: JSON.parse(row.choices_json || "[]"),
+    correctAnswer: row.correct_answer,
+    misconceptionTags: JSON.parse(row.misconception_tags_json || "[]"),
+    explanation: row.explanation
   };
 }
 
-function loadStore() {
-  const initial = createDefaultStore();
-  if (fs.existsSync(STORE_PATH)) {
-    try {
-      const loaded = JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
-      if (loaded && loaded.students && loaded.students["stu-aarav-k"]?.topicMastery?.["K-M1-C"]) {
-        return loaded;
-      }
-    } catch (e) {}
+function getStudentFullState(studentId) {
+  const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
+  if (!stuRow) return null;
+
+  const unitRows = db.prepare("SELECT * FROM student_unit_progress WHERE student_id = ?").all(studentId);
+  const topicRows = db.prepare("SELECT * FROM student_topic_progress WHERE student_id = ?").all(studentId);
+  const attemptCountRow = db.prepare("SELECT COUNT(*) AS cnt FROM student_question_attempts WHERE student_id = ?").get(studentId);
+
+  const unitProgress = {};
+  for (const u of unitRows) {
+    unitProgress[u.unit_id] = {
+      status: u.status,
+      keyState: u.key_state,
+      bestAccuracyPct: u.best_accuracy_pct,
+      bestMedianSpeedSec: u.best_median_speed_sec,
+      attemptsCount: u.attempts_count,
+      stabilityDays: u.stability_days,
+      lastReviewedAt: u.last_reviewed_at,
+      cpaStage: u.cpa_stage
+    };
   }
-  saveStore(initial);
-  return initial;
-}
 
-function saveStore(storeData) {
-  fs.writeFileSync(STORE_PATH, JSON.stringify(storeData, null, 2), "utf8");
-}
-
-const store = loadStore();
-
-function summarizeStudent(stu) {
-  const progs = Object.entries(stu.unitProgress || {});
-  const topics = Object.values(stu.topicMastery || {});
-  const completedTopicsCount = topics.filter((t) => t.completed).length;
-  const masteredCount = progs.filter(([, p]) => p.status === "MASTERED").length;
-  const goldKeys = progs.filter(([, p]) => p.keyState === "GOLD_KEY").length;
-  const silverKeys = progs.filter(([, p]) => p.keyState === "SILVER_KEY").length;
-
+  const topicMastery = {};
   let dueReviews = 0;
   let totalRetrievability = 0;
-  for (const t of topics) {
-    const r = computeRetrievabilityPct(t.lastReviewedDaysAgo || 0, t.stabilityDays || 2);
+  const nowMs = Date.now();
+
+  for (const t of topicRows) {
+    const elapsedDays = Math.max(0, (nowMs - new Date(t.last_reviewed_at).getTime()) / 86400000);
+    const r = computeRetrievabilityPct(elapsedDays, t.stability_days || 2.0);
     totalRetrievability += r;
     if (r < 80) dueReviews += 1;
-  }
-  const gardenHealthPct = topics.length > 0 ? Math.round(totalRetrievability / topics.length) : 100;
 
-  return {
-    studentId: stu.studentId,
-    username: stu.username || stu.nickname.toLowerCase(),
-    nickname: stu.nickname,
-    avatar: stu.avatar,
-    ageYears: stu.ageYears,
-    currentGrade: stu.currentGrade,
-    motorBaselineSec: stu.motorBaselineSec,
-    streakDays: stu.streakDays || 1,
-    starCoins: stu.starCoins || 100,
-    hearts: stu.hearts || 5,
-    completedTopicsCount,
-    masteredUnitsCount: masteredCount,
-    goldKeysCount: goldKeys,
-    silverKeysCount: silverKeys,
-    dueSpacedReviewsCount: dueReviews,
-    gardenHealthPct
+    topicMastery[t.topic_id] = {
+      completed: Boolean(t.completed),
+      crowns: t.crowns,
+      masteryScore: t.mastery_score,
+      accuracyPct: t.best_accuracy_pct,
+      medianSpeedSec: t.best_median_speed_sec,
+      attemptsCount: t.attempts_count,
+      fluencyGrade: t.fluency_grade,
+      stabilityDays: t.stability_days,
+      retrievabilityPct: r,
+      lastReviewedAt: t.last_reviewed_at
+    };
+  }
+
+  const completedTopicsCount = topicRows.filter((t) => t.completed === 1).length;
+  const masteredUnitsCount = unitRows.filter((u) => u.status === "MASTERED").length;
+  const goldKeysCount = unitRows.filter((u) => u.key_state === "GOLD_KEY").length;
+  const silverKeysCount = unitRows.filter((u) => u.key_state === "SILVER_KEY").length;
+  const gardenHealthPct = topicRows.length > 0 ? Math.round(totalRetrievability / topicRows.length) : 100;
+
+  const student = {
+    studentId: stuRow.student_id,
+    username: stuRow.username,
+    nickname: stuRow.nickname,
+    avatar: stuRow.avatar,
+    ageYears: stuRow.age_years,
+    currentGrade: stuRow.current_grade,
+    motorBaselineSec: stuRow.motor_baseline_sec,
+    streakDays: stuRow.streak_days,
+    starCoins: stuRow.star_coins,
+    hearts: stuRow.hearts,
+    unitProgress,
+    topicMastery
   };
+
+  const summary = {
+    studentId: stuRow.student_id,
+    username: stuRow.username,
+    nickname: stuRow.nickname,
+    avatar: stuRow.avatar,
+    ageYears: stuRow.age_years,
+    currentGrade: stuRow.current_grade,
+    motorBaselineSec: stuRow.motor_baseline_sec,
+    streakDays: stuRow.streak_days,
+    starCoins: stuRow.star_coins,
+    hearts: stuRow.hearts,
+    completedTopicsCount,
+    masteredUnitsCount,
+    goldKeysCount,
+    silverKeysCount,
+    dueSpacedReviewsCount: dueReviews,
+    gardenHealthPct,
+    totalQuestionAttemptsLogged: attemptCountRow ? attemptCountRow.cnt : 0
+  };
+
+  return { student, summary };
 }
 
 function sendJson(res, status, payload) {
@@ -197,7 +131,7 @@ function sendJson(res, status, payload) {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
   });
   res.end(JSON.stringify(payload));
 }
@@ -207,7 +141,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
     });
     return res.end();
   }
@@ -215,39 +149,74 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
 
+  // GET /api/health -> Database & Table counts
   if (pathname === "/api/health") {
+    const gradesCnt = db.prepare("SELECT COUNT(*) AS c FROM grades").get().c;
+    const unitsCnt = db.prepare("SELECT COUNT(*) AS c FROM units").get().c;
+    const topicsCnt = db.prepare("SELECT COUNT(*) AS c FROM skill_topics").get().c;
+    const questionsCnt = db.prepare("SELECT COUNT(*) AS c FROM practice_questions").get().c;
+    const studentsCnt = db.prepare("SELECT COUNT(*) AS c FROM students").get().c;
+    const attemptsCnt = db.prepare("SELECT COUNT(*) AS c FROM student_question_attempts").get().c;
+
     return sendJson(res, 200, {
       status: "ok",
-      service: "balashikshana-api",
-      totalGrades: registry.summary.totalGrades,
-      totalUnits: registry.summary.totalUnits,
-      totalSkillTopics: registry.summary.totalSkillTopics,
-      totalStudents: Object.keys(store.students).length
+      databaseEngine: "SQLite3 (WAL Mode)",
+      totalGrades: gradesCnt,
+      totalUnits: unitsCnt,
+      totalSkillTopics: topicsCnt,
+      totalPracticeQuestionsInDb: questionsCnt,
+      totalStudentsInDb: studentsCnt,
+      totalQuestionAttemptsInDb: attemptsCnt
     });
   }
 
-  // POST /api/auth/login -> Single student login by studentId or username
+  // GET /api/students -> List student accounts from SQLite
+  if (req.method === "GET" && pathname === "/api/students") {
+    const rows = db.prepare("SELECT student_id FROM students ORDER BY created_at ASC").all();
+    const students = rows.map((r) => getStudentFullState(r.student_id).summary);
+    return sendJson(res, 200, { students });
+  }
+
+  // POST /api/auth/login -> Authenticate student by username/PIN or studentId and issue session token in SQLite
   if (req.method === "POST" && pathname === "/api/auth/login") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
-        let found = null;
-        if (payload.studentId && store.students[payload.studentId]) {
-          found = store.students[payload.studentId];
+        let stuRow = null;
+        if (payload.studentId) {
+          stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(payload.studentId);
         } else if (payload.username) {
-          const uname = payload.username.trim().toLowerCase();
-          found = Object.values(store.students).find(
-            (s) => (s.username || "").toLowerCase() === uname || s.nickname.toLowerCase() === uname
-          );
+          const uname = String(payload.username).trim().toLowerCase();
+          stuRow = db.prepare("SELECT * FROM students WHERE LOWER(username) = ? OR LOWER(nickname) = ?").get(uname, uname);
         }
-        if (!found) return sendJson(res, 404, { error: "Student account not found" });
-        store.activeStudentId = found.studentId;
-        saveStore(store);
+
+        if (!stuRow) {
+          return sendJson(res, 404, { error: "Student account not found. Please check your username or create an account." });
+        }
+
+        if (payload.pin && stuRow.pin_hash !== hashPin(payload.pin)) {
+          return sendJson(res, 401, { error: "Incorrect 4-digit PIN (Default demo PIN is 1234)." });
+        }
+
+        const now = new Date().toISOString();
+        const expires = new Date(Date.now() + 30 * 86400000).toISOString();
+        const token = createSessionToken();
+
+        db.prepare("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES (?, ?, ?, ?)").run(
+          token,
+          stuRow.student_id,
+          now,
+          expires
+        );
+        db.prepare("UPDATE students SET last_active_at = ? WHERE student_id = ?").run(now, stuRow.student_id);
+
+        const state = getStudentFullState(stuRow.student_id);
         return sendJson(res, 200, {
-          student: found,
-          summary: summarizeStudent(found)
+          token,
+          student: state.student,
+          summary: state.summary
         });
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
@@ -256,72 +225,81 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // GET /api/students -> List available student accounts for login screen
-  if (req.method === "GET" && pathname === "/api/students") {
-    return sendJson(res, 200, {
-      activeStudentId: store.activeStudentId,
-      students: Object.values(store.students).map(summarizeStudent)
-    });
-  }
-
-  // POST /api/students -> Sign up a new student account
+  // POST /api/students -> Register a new student account in SQLite
   if (req.method === "POST" && pathname === "/api/students") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
-        const nickname = (payload.nickname || "Explorer").trim();
-        const username = (payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "");
-        const gradeId = gradeMap[payload.currentGrade] ? payload.currentGrade : "kindergarten";
-        const ageYears = Number(payload.ageYears) || 5;
+        const nickname = String(payload.nickname || "Explorer").trim();
+        const baseUsername = String(payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "") || "student";
+        const existing = db.prepare("SELECT student_id FROM students WHERE username = ?").get(baseUsername);
+        const username = existing ? `${baseUsername}${Math.floor(100 + Math.random() * 900)}` : baseUsername;
+        const pin = String(payload.pin || "1234").trim();
+        const gradeId = payload.currentGrade || "kindergarten";
+        const ageYears = Number(payload.ageYears) || (gradeId === "pre-k" ? 4 : gradeId === "kindergarten" ? 5 : gradeId === "grade-1" ? 6 : gradeId === "grade-2" ? 7 : 8);
         const avatar = payload.avatar || "🐼";
         const studentId = `stu-${username}-${Date.now().toString().slice(-4)}`;
+        const now = new Date().toISOString();
 
-        const seededProgress = {};
-        if (gradeId === "kindergarten") {
-          seededProgress["PK-M7"] = { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90, bestMedianSpeedSec: 5.0, attemptsCount: 1, stabilityDays: 14, lastReviewedDaysAgo: 1, cpaStage: "PURE_ABSTRACT_SYMBOLIC" };
-          seededProgress["PK-E7"] = { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90, bestMedianSpeedSec: 5.0, attemptsCount: 1, stabilityDays: 14, lastReviewedDaysAgo: 1, cpaStage: "PURE_ABSTRACT_SYMBOLIC" };
-        } else if (gradeId === "grade-1") {
-          for (const pid of ["K-M10", "K-E9", "K-S5", "K-SS4"]) {
-            seededProgress[pid] = { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90, bestMedianSpeedSec: 5.0, attemptsCount: 1, stabilityDays: 21, lastReviewedDaysAgo: 1, cpaStage: "PURE_ABSTRACT_SYMBOLIC" };
+        db.exec("BEGIN TRANSACTION;");
+        try {
+          db.prepare(`
+            INSERT INTO students (
+              student_id, username, pin_hash, nickname, avatar, age_years,
+              current_grade, motor_baseline_sec, streak_days, star_coins, hearts,
+              last_active_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 50, 5, ?, ?)
+          `).run(
+            studentId,
+            username,
+            hashPin(pin),
+            nickname,
+            avatar,
+            ageYears,
+            gradeId,
+            ageYears <= 4 ? 0.55 : ageYears <= 6 ? 0.44 : 0.34,
+            now,
+            now
+          );
+
+          // Unlock prerequisite grade final units so the chosen grade's Unit 1 is unlocked
+          const prereqSeeds = {
+            "kindergarten": ["PK-M7", "PK-E7"],
+            "grade-1": ["K-M10", "K-E9", "K-S5", "K-SS4"],
+            "grade-2": ["G1-M9", "G1-E10", "G1-S5", "G1-SS4"],
+            "grade-3": ["G2-M9", "G2-E10", "G2-S6", "G2-SS4"]
+          };
+          const insertUnitProg = db.prepare(`
+            INSERT OR REPLACE INTO student_unit_progress (
+              student_id, unit_id, status, key_state, best_accuracy_pct,
+              best_median_speed_sec, attempts_count, stability_days,
+              last_reviewed_at, cpa_stage, updated_at
+            ) VALUES (?, ?, 'MASTERED', 'GOLD_KEY', 90.0, 4.5, 1, 21.0, ?, 'PURE_ABSTRACT_SYMBOLIC', ?)
+          `);
+          for (const pid of prereqSeeds[gradeId] || []) {
+            insertUnitProg.run(studentId, pid, now, now);
           }
-        } else if (gradeId === "grade-2") {
-          for (const pid of ["G1-M9", "G1-E10", "G1-S5", "G1-SS4"]) {
-            seededProgress[pid] = { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90, bestMedianSpeedSec: 5.0, attemptsCount: 1, stabilityDays: 30, lastReviewedDaysAgo: 1, cpaStage: "PURE_ABSTRACT_SYMBOLIC" };
-          }
-        } else if (gradeId === "grade-3") {
-          for (const pid of ["G2-M9", "G2-E10", "G2-S6", "G2-SS4"]) {
-            seededProgress[pid] = { status: "MASTERED", keyState: "GOLD_KEY", bestAccuracyPct: 90, bestMedianSpeedSec: 5.0, attemptsCount: 1, stabilityDays: 45, lastReviewedDaysAgo: 1, cpaStage: "PURE_ABSTRACT_SYMBOLIC" };
-          }
+          db.exec("COMMIT;");
+        } catch (txErr) {
+          db.exec("ROLLBACK;");
+          throw txErr;
         }
 
-        const newStu = {
+        const token = createSessionToken();
+        db.prepare("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES (?, ?, ?, ?)").run(
+          token,
           studentId,
-          username,
-          pin: payload.pin || "1234",
-          nickname,
-          avatar,
-          ageYears,
-          currentGrade: gradeId,
-          motorBaselineSec: ageYears <= 4 ? 0.55 : ageYears <= 6 ? 0.44 : 0.34,
-          streakDays: 1,
-          starCoins: 50,
-          hearts: 5,
-          createdAt: new Date().toISOString(),
-          unitProgress: seededProgress,
-          topicMastery: {},
-          misconceptionCounts: {},
-          gateHistory: []
-        };
+          now,
+          new Date(Date.now() + 30 * 86400000).toISOString()
+        );
 
-        store.students[studentId] = newStu;
-        store.activeStudentId = studentId;
-        saveStore(store);
-
+        const state = getStudentFullState(studentId);
         return sendJson(res, 201, {
-          student: newStu,
-          summary: summarizeStudent(newStu)
+          token,
+          student: state.student,
+          summary: state.summary
         });
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
@@ -330,112 +308,298 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // GET /api/students/:studentId -> Get full student state
+  // GET /api/students/:studentId -> Get student state from SQLite
   if (req.method === "GET" && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "");
-    const stu = store.students[studentId];
-    if (!stu) return sendJson(res, 404, { error: `Student ${studentId} not found` });
-    store.activeStudentId = studentId;
-    saveStore(store);
+    const state = getStudentFullState(studentId);
+    if (!state) return sendJson(res, 404, { error: "Student not found" });
+    return sendJson(res, 200, state);
+  }
+
+  // POST /api/students/:studentId/calibrate -> Update motor baseline in SQLite
+  if (req.method === "POST" && pathname.endsWith("/calibrate") && pathname.startsWith("/api/students/")) {
+    const studentId = pathname.replace("/api/students/", "").replace("/calibrate", "");
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const payload = JSON.parse(body || "{}");
+        const motorSec = Array.isArray(payload.warmupTapTimesSec)
+          ? computeMotorBaselineSec(payload.warmupTapTimesSec)
+          : Number(payload.motorBaselineSec || 0.42);
+        db.prepare("UPDATE students SET motor_baseline_sec = ? WHERE student_id = ?").run(motorSec, studentId);
+        return sendJson(res, 200, getStudentFullState(studentId));
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    });
+    return;
+  }
+
+  // GET /api/curriculum/summary -> Query grades, units, and skill_topics from SQLite
+  if (pathname === "/api/curriculum/summary") {
+    const gradesRows = db.prepare("SELECT * FROM grades ORDER BY sequence_order ASC").all();
+    const unitsRows = db.prepare("SELECT * FROM units ORDER BY sequence_order ASC").all();
+    const topicsRows = db.prepare("SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order FROM skill_topics ORDER BY sequence_order ASC").all();
+    const questionsCount = db.prepare("SELECT COUNT(*) AS c FROM practice_questions").get().c;
+
+    const topicsByUnit = {};
+    for (const t of topicsRows) {
+      if (!topicsByUnit[t.unit_id]) topicsByUnit[t.unit_id] = [];
+      topicsByUnit[t.unit_id].push({ code: t.topic_code, name: t.topic_name, topicId: t.topic_id });
+    }
+
+    const grades = gradesRows.map((g) => {
+      const gUnits = unitsRows.filter((u) => u.grade_id === g.grade_id);
+      const subjects = {};
+      for (const u of gUnits) {
+        if (!subjects[u.subject]) {
+          subjects[u.subject] = { totalUnits: 0, totalSkillTopics: 0, units: [] };
+        }
+        const uTopics = topicsByUnit[u.unit_id] || [];
+        subjects[u.subject].totalUnits += 1;
+        subjects[u.subject].totalSkillTopics += uTopics.length;
+        subjects[u.subject].units.push({
+          unitId: u.unit_id,
+          sequenceOrder: u.sequence_order,
+          title: u.title,
+          prerequisiteUnitIds: JSON.parse(u.prerequisite_unit_ids_json || "[]"),
+          masteryGate: {
+            questionCount: u.gate_question_count,
+            minAccuracyPercent: u.gate_min_accuracy_pct,
+            maxMedianResponseTimeSec: u.gate_max_speed_sec,
+            challengeZoneStreak: u.gate_streak_req
+          },
+          skillTopics: uTopics
+        });
+      }
+      return {
+        gradeId: g.grade_id,
+        gradeName: g.grade_name,
+        targetAgeYears: g.target_age_years,
+        spacedRepetitionPolicy: {
+          stabilityGrowthFactor: g.sr_growth_factor,
+          maxIntervalCapDays: g.sr_max_interval_days,
+          baseScheduleDays: JSON.parse(g.sr_schedule_json || "[]")
+        },
+        subjects
+      };
+    });
+
     return sendJson(res, 200, {
-      student: stu,
-      summary: summarizeStudent(stu)
+      summary: {
+        totalGrades: gradesRows.length,
+        totalUnits: unitsRows.length,
+        totalSkillTopics: topicsRows.length,
+        totalPracticeQuestionsInDb: questionsCount
+      },
+      grades
     });
   }
 
-  // GET /api/practice/topic/:unitId/:topicCode -> Generate 8 Duolingo-style interactive practice problems for a specific topic
+  // GET /api/practice/topic/:unitId/:topicCode -> Fetch stored practice questions from SQLite practice_questions table
   if (req.method === "GET" && pathname.startsWith("/api/practice/topic/")) {
     const parts = pathname.replace("/api/practice/topic/", "").split("/");
     const unitId = parts[0];
     const topicCode = parts[1];
-    const unit = unitMap[unitId];
-    if (!unit) return sendJson(res, 404, { error: `Unit ${unitId} not found` });
-    const topic = unit.skillTopics.find((t) => t.code === topicCode) || unit.skillTopics[0];
+    const topicId = `${unitId}-${topicCode}`;
+
+    const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
+    const topicRow = db.prepare("SELECT * FROM skill_topics WHERE topic_id = ?").get(topicId);
+    if (!unitRow || !topicRow) return sendJson(res, 404, { error: `Topic ${topicId} not found in database` });
+
     const count = Number(url.searchParams.get("count") || 8);
-    const problems = generateTopicPracticeSet(unit, topic, count);
+    const qRows = db.prepare("SELECT * FROM practice_questions WHERE topic_id = ? ORDER BY difficulty_level ASC, question_id ASC LIMIT ?").all(topicId, count);
+
     return sendJson(res, 200, {
-      unitId: unit.unitId,
-      unitTitle: unit.title,
-      targetSpeedSec: unit.masteryGate.maxMedianResponseTimeSec,
+      unitId: unitRow.unit_id,
+      unitTitle: unitRow.title,
+      targetSpeedSec: unitRow.gate_max_speed_sec,
       minAccuracyPercent: 80,
       topic: {
-        code: topic.code,
-        name: topic.name,
-        assets: topic.assets
+        topicId: topicRow.topic_id,
+        code: topicRow.topic_code,
+        name: topicRow.topic_name,
+        assets: JSON.parse(topicRow.assets_json || "{}")
       },
-      practiceProblems: problems
+      practiceProblems: qRows.map(mapQuestionRow)
     });
   }
 
-  // POST /api/practice/topic/complete -> Complete a topic practice node on the journey path
+  // GET /api/curriculum/unit/:unitId -> Fetch unit + stratified Boss Gate questions from SQLite practice_questions table
+  if (req.method === "GET" && pathname.startsWith("/api/curriculum/unit/")) {
+    const unitId = pathname.replace("/api/curriculum/unit/", "");
+    const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
+    if (!unitRow) return sendJson(res, 404, { error: `Unit ${unitId} not found in database` });
+
+    const topicRows = db.prepare("SELECT * FROM skill_topics WHERE unit_id = ? ORDER BY sequence_order ASC").all(unitId);
+    const count = Number(url.searchParams.get("count") || unitRow.gate_question_count || 12);
+
+    // Stratified selection from SQLite practice_questions across all topics in this unit
+    const allUnitQuestions = db.prepare("SELECT * FROM practice_questions WHERE unit_id = ? ORDER BY question_id ASC").all(unitId).map(mapQuestionRow);
+    const byTopic = {};
+    for (const q of allUnitQuestions) {
+      if (!byTopic[q.topicCode]) byTopic[q.topicCode] = [];
+      byTopic[q.topicCode].push(q);
+    }
+
+    const selectedQuestions = [];
+    const topicCodes = topicRows.map((t) => t.topic_code);
+    for (let i = 0; i < count; i++) {
+      const tCode = topicCodes[i % topicCodes.length];
+      const pool = byTopic[tCode] || allUnitQuestions;
+      const picked = pool[Math.floor(i / topicCodes.length) % pool.length];
+      if (picked) selectedQuestions.push(picked);
+    }
+
+    return sendJson(res, 200, {
+      unit: {
+        unitId: unitRow.unit_id,
+        gradeId: unitRow.grade_id,
+        subject: unitRow.subject,
+        sequenceOrder: unitRow.sequence_order,
+        title: unitRow.title,
+        prerequisiteUnitIds: JSON.parse(unitRow.prerequisite_unit_ids_json || "[]"),
+        masteryGate: {
+          questionCount: unitRow.gate_question_count,
+          minAccuracyPercent: unitRow.gate_min_accuracy_pct,
+          maxMedianResponseTimeSec: unitRow.gate_max_speed_sec,
+          challengeZoneStreak: unitRow.gate_streak_req
+        },
+        skillTopics: topicRows.map((t) => ({
+          topicId: t.topic_id,
+          code: t.topic_code,
+          name: t.topic_name,
+          assets: JSON.parse(t.assets_json || "{}")
+        }))
+      },
+      generatedQuestions: selectedQuestions
+    });
+  }
+
+  // POST /api/practice/topic/complete -> Persist topic completion & question attempts in SQLite
   if (req.method === "POST" && pathname === "/api/practice/topic/complete") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
-        const studentId = payload.studentId || store.activeStudentId;
-        const stu = store.students[studentId] || Object.values(store.students)[0];
-        const unit = unitMap[payload.unitId];
-        if (!unit) return sendJson(res, 404, { error: "Unit not found" });
-
+        const studentId = payload.studentId;
+        const unitId = payload.unitId;
         const topicCode = payload.topicCode;
+        const topicId = `${unitId}-${topicCode}`;
+
+        const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
+        const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
+        const gradeRow = unitRow ? db.prepare("SELECT * FROM grades WHERE grade_id = ?").get(unitRow.grade_id) : null;
+        if (!stuRow || !unitRow) return sendJson(res, 404, { error: "Student or Unit not found" });
+
         const responses = payload.responses || [];
-        const motorSec = payload.motorBaselineSec || stu.motorBaselineSec || 0.42;
+        const motorSec = payload.motorBaselineSec || stuRow.motor_baseline_sec || 0.42;
         const total = Math.max(1, responses.length);
         const correct = responses.filter((r) => r.isCorrect).length;
         const accPct = Number(((correct / total) * 100).toFixed(1));
         const cogTimes = responses.map((r) => computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0));
         const medSpeed = Number(median(cogTimes).toFixed(2));
-        const targetSpeed = unit.masteryGate.maxMedianResponseTimeSec;
+        const targetSpeed = unitRow.gate_max_speed_sec;
 
         const passedTopic = accPct >= 80;
         const crowns = accPct >= 95 && medSpeed <= targetSpeed ? 3 : accPct >= 85 ? 2 : passedTopic ? 1 : 0;
 
-        const srPolicy = unit.spacedRepetitionPolicy || { stabilityGrowthFactor: 2.0, maxIntervalCapDays: 45 };
-        const fullKey = `${unit.unitId}-${topicCode}`;
-        const prevTopic = stu.topicMastery[fullKey] || { stabilityDays: 1.0, crowns: 0 };
+        const prevTopic = db.prepare("SELECT * FROM student_topic_progress WHERE student_id = ? AND topic_id = ?").get(studentId, topicId);
         const fg = computeFluencyGrade(passedTopic, medSpeed, targetSpeed);
         const srUpdate = updateTopicMemoryStability({
-          currentStabilityDays: prevTopic.stabilityDays,
+          currentStabilityDays: prevTopic ? prevTopic.stability_days : 1.0,
           fluencyGrade: fg,
-          gradeGrowthFactor: srPolicy.stabilityGrowthFactor,
-          maxIntervalCapDays: srPolicy.maxIntervalCapDays
+          gradeGrowthFactor: gradeRow ? gradeRow.sr_growth_factor : 2.0,
+          maxIntervalCapDays: gradeRow ? gradeRow.sr_max_interval_days : 45
         });
 
-        if (passedTopic) {
-          stu.topicMastery[fullKey] = {
-            completed: true,
-            crowns: Math.max(prevTopic.crowns || 0, crowns),
-            masteryScore: Math.round(accPct),
-            accuracyPct: accPct,
-            medianSpeedSec: medSpeed,
-            fluencyGrade: fg,
-            stabilityDays: srUpdate.stabilityDays,
-            lastReviewedDaysAgo: 0
-          };
-          stu.starCoins = (stu.starCoins || 0) + 15 + crowns * 5;
+        const now = new Date().toISOString();
+        const nextReview = new Date(Date.now() + srUpdate.stabilityDays * 86400000).toISOString();
+
+        db.exec("BEGIN TRANSACTION;");
+        try {
+          // 1. Log every individual question attempt into student_question_attempts
+          const insertAttempt = db.prepare(`
+            INSERT INTO student_question_attempts (
+              student_id, session_type, unit_id, topic_id, question_id,
+              chosen_answer, is_correct, raw_time_sec, cognitive_time_sec,
+              fluency_grade, misconception_tags_json, attempted_at
+            ) VALUES (?, 'TOPIC_PRACTICE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          for (const r of responses) {
+            const cSec = computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0);
+            insertAttempt.run(
+              studentId,
+              unitId,
+              topicId,
+              r.questionId || `${topicId}-Q1`,
+              String(r.chosenAnswer || ""),
+              r.isCorrect ? 1 : 0,
+              r.rawTimeSec || 3.0,
+              cSec,
+              computeFluencyGrade(Boolean(r.isCorrect), cSec, targetSpeed),
+              JSON.stringify(r.misconceptionTags || []),
+              now
+            );
+          }
+
+          // 2. Upsert student_topic_progress
+          db.prepare(`
+            INSERT INTO student_topic_progress (
+              student_id, topic_id, unit_id, topic_code, completed, crowns,
+              mastery_score, best_accuracy_pct, best_median_speed_sec,
+              attempts_count, fluency_grade, stability_days, next_review_at, last_reviewed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(student_id, topic_id) DO UPDATE SET
+              completed = MAX(student_topic_progress.completed, excluded.completed),
+              crowns = MAX(student_topic_progress.crowns, excluded.crowns),
+              mastery_score = MAX(student_topic_progress.mastery_score, excluded.mastery_score),
+              best_accuracy_pct = MAX(student_topic_progress.best_accuracy_pct, excluded.best_accuracy_pct),
+              best_median_speed_sec = CASE
+                WHEN student_topic_progress.best_median_speed_sec > 0
+                THEN MIN(student_topic_progress.best_median_speed_sec, excluded.best_median_speed_sec)
+                ELSE excluded.best_median_speed_sec
+              END,
+              attempts_count = student_topic_progress.attempts_count + 1,
+              fluency_grade = excluded.fluency_grade,
+              stability_days = excluded.stability_days,
+              next_review_at = excluded.next_review_at,
+              last_reviewed_at = excluded.last_reviewed_at
+          `).run(
+            studentId,
+            topicId,
+            unitId,
+            topicCode,
+            passedTopic ? 1 : 0,
+            crowns,
+            Math.round(accPct),
+            accPct,
+            medSpeed,
+            1,
+            fg,
+            srUpdate.stabilityDays,
+            nextReview,
+            now
+          );
+
+          if (passedTopic) {
+            const rewardCoins = 15 + crowns * 5;
+            db.prepare("UPDATE students SET star_coins = star_coins + ?, last_active_at = ? WHERE student_id = ?").run(rewardCoins, now, studentId);
+          }
+
+          db.exec("COMMIT;");
+        } catch (txErr) {
+          db.exec("ROLLBACK;");
+          throw txErr;
         }
 
-        // Check if all topics in this unit are now completed -> unlock Boss Gate
-        const allTopicsDone = unit.skillTopics.every((t) => stu.topicMastery[`${unit.unitId}-${t.code}`]?.completed);
-        if (!stu.unitProgress[unit.unitId]) {
-          stu.unitProgress[unit.unitId] = {
-            status: allTopicsDone ? "GATE_UNLOCKED" : "IN_PROGRESS",
-            keyState: null,
-            bestAccuracyPct: accPct,
-            bestMedianSpeedSec: medSpeed,
-            attemptsCount: 1,
-            stabilityDays: srUpdate.stabilityDays,
-            lastReviewedDaysAgo: 0,
-            cpaStage: srUpdate.cpaStage
-          };
-        } else if (stu.unitProgress[unit.unitId].status !== "MASTERED" && allTopicsDone) {
-          stu.unitProgress[unit.unitId].status = "GATE_UNLOCKED";
-        }
+        const totalTopicsInUnit = db.prepare("SELECT COUNT(*) AS c FROM skill_topics WHERE unit_id = ?").get(unitId).c;
+        const completedInUnit = db.prepare("SELECT COUNT(*) AS c FROM student_topic_progress WHERE student_id = ? AND unit_id = ? AND completed = 1").get(studentId, unitId).c;
+        const allTopicsDone = completedInUnit >= totalTopicsInUnit;
 
-        saveStore(store);
-
+        const state = getStudentFullState(studentId);
         return sendJson(res, 200, {
           passedTopic,
           crownsAwarded: crowns,
@@ -444,8 +608,8 @@ const server = http.createServer((req, res) => {
           targetSpeedSec: targetSpeed,
           bossGateUnlocked: allTopicsDone,
           spacedRepetition: srUpdate,
-          student: stu,
-          summary: summarizeStudent(stu)
+          student: state.student,
+          summary: state.summary
         });
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
@@ -454,116 +618,104 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (pathname === "/api/curriculum/summary") {
-    return sendJson(res, 200, {
-      summary: registry.summary,
-      globalMasteryRules: registry.globalMasteryRules,
-      grades: registry.grades.map((g) => ({
-        gradeId: g.gradeId,
-        gradeName: g.gradeName,
-        targetAgeYears: g.targetAgeYears,
-        spacedRepetitionPolicy: g.spacedRepetitionPolicy,
-        subjects: Object.fromEntries(
-          Object.entries(g.subjects).map(([k, v]) => [
-            k,
-            {
-              totalUnits: v.units.length,
-              totalSkillTopics: v.totalSkillTopics,
-              units: v.units.map((u) => ({
-                unitId: u.unitId,
-                sequenceOrder: u.sequenceOrder,
-                title: u.title,
-                prerequisiteUnitIds: u.prerequisiteUnitIds,
-                masteryGate: u.masteryGate,
-                skillTopics: u.skillTopics.map((t) => ({ code: t.code, name: t.name }))
-              }))
-            }
-          ])
-        )
-      }))
-    });
-  }
-
-  if (pathname.startsWith("/api/curriculum/unit/")) {
-    const unitId = pathname.replace("/api/curriculum/unit/", "");
-    const unit = unitMap[unitId];
-    if (!unit) return sendJson(res, 404, { error: `Unit ${unitId} not found` });
-    const count = Number(url.searchParams.get("count") || unit.masteryGate.questionCount || 12);
-    const questions = [];
-    for (let i = 0; i < count; i++) {
-      const topic = unit.skillTopics[i % unit.skillTopics.length];
-      questions.push(generateProceduralQuestion(unit, topic, i));
-    }
-    return sendJson(res, 200, { unit, generatedQuestions: questions });
-  }
-
+  // POST /api/gate/evaluate -> Evaluate Unit Boss Gate & persist unit mastery in SQLite
   if (req.method === "POST" && pathname === "/api/gate/evaluate") {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
-        const studentId = payload.studentId || store.activeStudentId;
-        const stu = store.students[studentId] || Object.values(store.students)[0];
-        const unit = unitMap[payload.unitId];
-        if (!unit) return sendJson(res, 404, { error: "Unit not found" });
+        const studentId = payload.studentId;
+        const unitId = payload.unitId;
+        const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
+        const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
+        const gradeRow = unitRow ? db.prepare("SELECT * FROM grades WHERE grade_id = ?").get(unitRow.grade_id) : null;
+        if (!stuRow || !unitRow) return sendJson(res, 404, { error: "Student or Unit not found" });
 
-        const motorSec = payload.motorBaselineSec || stu.motorBaselineSec;
+        const topicRows = db.prepare("SELECT * FROM skill_topics WHERE unit_id = ? ORDER BY sequence_order ASC").all(unitId);
+        const unitObj = {
+          unitId: unitRow.unit_id,
+          title: unitRow.title,
+          masteryGate: {
+            questionCount: unitRow.gate_question_count,
+            minAccuracyPercent: unitRow.gate_min_accuracy_pct,
+            maxMedianResponseTimeSec: unitRow.gate_max_speed_sec,
+            challengeZoneStreak: unitRow.gate_streak_req
+          },
+          skillTopics: topicRows.map((t) => ({ code: t.topic_code, name: t.topic_name }))
+        };
+
+        const motorSec = payload.motorBaselineSec || stuRow.motor_baseline_sec || 0.42;
         const evalResult = evaluateMasteryGateAttempt({
-          unit,
+          unit: unitObj,
           responses: payload.responses || [],
           motorBaselineSec: motorSec
         });
 
-        const srPolicy = unit.spacedRepetitionPolicy || { stabilityGrowthFactor: 2.0, maxIntervalCapDays: 45 };
-        const fg = computeFluencyGrade(evalResult.passed, evalResult.medianCogSpeedSec, unit.masteryGate.maxMedianResponseTimeSec);
-        const prevProg = stu.unitProgress[unit.unitId] || { stabilityDays: 1.0, attemptsCount: 0, keyState: null };
+        const prevProg = db.prepare("SELECT * FROM student_unit_progress WHERE student_id = ? AND unit_id = ?").get(studentId, unitId);
+        const fg = computeFluencyGrade(evalResult.passed, evalResult.medianCogSpeedSec, unitRow.gate_max_speed_sec);
         const srUpdate = updateTopicMemoryStability({
-          currentStabilityDays: prevProg.stabilityDays,
+          currentStabilityDays: prevProg ? prevProg.stability_days : 1.0,
           fluencyGrade: fg,
-          gradeGrowthFactor: srPolicy.stabilityGrowthFactor,
-          maxIntervalCapDays: srPolicy.maxIntervalCapDays
+          gradeGrowthFactor: gradeRow ? gradeRow.sr_growth_factor : 2.0,
+          maxIntervalCapDays: gradeRow ? gradeRow.sr_max_interval_days : 45
         });
 
         const nextKeyState = evalResult.passed
-          ? (prevProg.keyState === "SILVER_KEY" || prevProg.keyState === "GOLD_KEY" ? "GOLD_KEY" : "SILVER_KEY")
-          : prevProg.keyState;
+          ? (prevProg && (prevProg.key_state === "SILVER_KEY" || prevProg.key_state === "GOLD_KEY") ? "GOLD_KEY" : "SILVER_KEY")
+          : (prevProg ? prevProg.key_state : null);
 
-        if (evalResult.passed) {
-          for (const t of unit.skillTopics) {
-            const fullKey = `${unit.unitId}-${t.code}`;
-            stu.topicMastery[fullKey] = {
-              completed: true,
-              crowns: 3,
-              masteryScore: 100,
-              accuracyPct: evalResult.overallAccuracyPct,
-              medianSpeedSec: evalResult.medianCogSpeedSec,
-              fluencyGrade: fg,
-              stabilityDays: srUpdate.stabilityDays,
-              lastReviewedDaysAgo: 0
-            };
+        const now = new Date().toISOString();
+
+        db.exec("BEGIN TRANSACTION;");
+        try {
+          db.prepare(`
+            INSERT INTO student_unit_progress (
+              student_id, unit_id, status, key_state, best_accuracy_pct,
+              best_median_speed_sec, attempts_count, stability_days,
+              last_reviewed_at, cpa_stage, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            ON CONFLICT(student_id, unit_id) DO UPDATE SET
+              status = CASE WHEN student_unit_progress.status = 'MASTERED' THEN 'MASTERED' ELSE excluded.status END,
+              key_state = COALESCE(excluded.key_state, student_unit_progress.key_state),
+              best_accuracy_pct = MAX(student_unit_progress.best_accuracy_pct, excluded.best_accuracy_pct),
+              best_median_speed_sec = CASE
+                WHEN student_unit_progress.best_median_speed_sec > 0
+                THEN MIN(student_unit_progress.best_median_speed_sec, excluded.best_median_speed_sec)
+                ELSE excluded.best_median_speed_sec
+              END,
+              attempts_count = student_unit_progress.attempts_count + 1,
+              stability_days = excluded.stability_days,
+              last_reviewed_at = excluded.last_reviewed_at,
+              cpa_stage = excluded.cpa_stage,
+              updated_at = excluded.updated_at
+          `).run(
+            studentId,
+            unitId,
+            evalResult.passed ? "MASTERED" : "REMEDIATION_REQUIRED",
+            nextKeyState,
+            evalResult.overallAccuracyPct,
+            evalResult.medianCogSpeedSec,
+            srUpdate.stabilityDays,
+            now,
+            srUpdate.cpaStage,
+            now
+          );
+
+          if (evalResult.passed) {
+            db.prepare("UPDATE students SET star_coins = star_coins + 50, last_active_at = ? WHERE student_id = ?").run(now, studentId);
           }
-          stu.starCoins = (stu.starCoins || 0) + 50;
+
+          db.exec("COMMIT;");
+        } catch (txErr) {
+          db.exec("ROLLBACK;");
+          throw txErr;
         }
 
-        stu.unitProgress[unit.unitId] = {
-          status: evalResult.passed ? "MASTERED" : "REMEDIATION_REQUIRED",
-          keyState: nextKeyState,
-          bestAccuracyPct: Math.max(prevProg.bestAccuracyPct || 0, evalResult.overallAccuracyPct),
-          bestMedianSpeedSec: prevProg.bestMedianSpeedSec
-            ? Math.min(prevProg.bestMedianSpeedSec, evalResult.medianCogSpeedSec)
-            : evalResult.medianCogSpeedSec,
-          attemptsCount: (prevProg.attemptsCount || 0) + 1,
-          stabilityDays: srUpdate.stabilityDays,
-          lastReviewedDaysAgo: 0,
-          cpaStage: srUpdate.cpaStage
-        };
-
-        saveStore(store);
-
+        const state = getStudentFullState(studentId);
         return sendJson(res, 200, {
-          student: stu,
-          summary: summarizeStudent(stu),
+          student: state.student,
+          summary: state.summary,
           evaluation: { ...evalResult, keyAwarded: nextKeyState },
           spacedRepetition: srUpdate
         });
@@ -579,5 +731,5 @@ const server = http.createServer((req, res) => {
 
 const PORT = Number(process.env.PORT || 4000);
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[Balashikshana API] Listening on http://localhost:${PORT}`);
+  console.log(`[Balashikshana SQLite-Backed API] Listening on http://localhost:${PORT}`);
 });

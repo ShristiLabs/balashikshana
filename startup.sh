@@ -8,11 +8,11 @@ mkdir -p .pids logs
 
 echo "=== Starting Balashikshana Platform ==="
 
-# 1. Start Backend Sync & Analytics API (Port 4000)
+# 1. Start Backend SQLite Database & Sync API (Port 4000)
 if [ -f .pids/api.pid ] && kill -0 "$(cat .pids/api.pid)" 2>/dev/null; then
   echo "[API] Already running (PID $(cat .pids/api.pid))"
 else
-  PORT=4000 nohup node services/api/server.mjs > logs/api.log 2>&1 &
+  PORT=4000 nohup node --experimental-sqlite --no-warnings services/api/server.mjs > logs/api.log 2>&1 &
   echo $! > .pids/api.pid
   echo "[API] Started on http://localhost:4000 (PID $(cat .pids/api.pid))"
 fi

@@ -30,11 +30,12 @@ jobs:
       - name: Validate Core Mastery & Spaced Repetition Engine
         run: node packages/core-engine/src/verify-engine.mjs
 
-      - name: Smoke-Test Sync & Curriculum API Server
+      - name: Smoke-Test SQLite Database, 6,140 Practice Questions & Curriculum API Server
         run: |
-          node services/api/server.mjs &
+          node --experimental-sqlite --no-warnings services/api/server.mjs &
           API_PID=$!
-          sleep 2
+          sleep 3
           curl -fsS http://127.0.0.1:4000/api/health
-          curl -fsS http://127.0.0.1:4000/api/curriculum/summary
+          curl -fsS http://127.0.0.1:4000/api/curriculum/summary > /dev/null
+          curl -fsS "http://127.0.0.1:4000/api/practice/topic/K-M2/I?count=8" > /dev/null
           kill $API_PID

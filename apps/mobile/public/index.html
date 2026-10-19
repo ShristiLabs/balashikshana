@@ -576,8 +576,16 @@
       </p>
 
       <div id="existingAccountsBox">
+        <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--duo-muted); margin-bottom: 8px; text-align: left;">
+          Log in with Username &amp; PIN (Default PIN: 1234):
+        </div>
+        <div style="display:grid; grid-template-columns: 1.3fr 0.8fr auto; gap:8px; margin-bottom:14px;">
+          <input id="loginUsernameInput" class="input-field" style="margin-bottom:0;" type="text" placeholder="Username (e.g. aarav)" />
+          <input id="loginPinInput" class="input-field" style="margin-bottom:0;" type="password" maxlength="6" placeholder="PIN (1234)" value="1234" />
+          <button class="duo-btn blue" style="padding:10px 16px;" onclick="loginWithUsernameAndPin()">LOG IN</button>
+        </div>
         <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--duo-muted); margin-bottom: 10px; text-align: left;">
-          Log in to your Student Account:
+          Or Quick-Select a Student Account from Database:
         </div>
         <div id="loginStudentsList"></div>
       </div>
@@ -854,6 +862,29 @@
           <span class="duo-btn blue" style="padding:8px 14px; font-size:13px;">LOG IN →</span>
         </div>
       `).join("");
+    }
+
+    async function loginWithUsernameAndPin() {
+      const username = document.getElementById("loginUsernameInput").value.trim();
+      const pin = document.getElementById("loginPinInput").value.trim() || "1234";
+      if (!username) return;
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, pin })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Login failed");
+        return;
+      }
+      loggedInStudent = data.student;
+      studentSummary = data.summary;
+      sessionStorage.setItem("balashikshana_student_id", loggedInStudent.studentId);
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("mainAppScreen").style.display = "grid";
+      updateStudentHud();
+      await selectGrade(loggedInStudent.currentGrade || "kindergarten");
     }
 
     async function loginWithStudentId(studentId) {
@@ -1353,7 +1384,9 @@
       const cogSec = Math.max(0.5, rawTimeSec - (loggedInStudent?.motorBaselineSec || 0.42)).toFixed(2);
 
       sessionResponses.push({
+        questionId: q.questionId,
         topicCode: q.topicCode,
+        chosenAnswer: currentSelectedAnswer,
         isCorrect,
         rawTimeSec,
         misconceptionTags: q.misconceptionTags || []

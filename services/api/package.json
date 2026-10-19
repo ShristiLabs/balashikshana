@@ -4,6 +4,6 @@
   "type": "module",
   "main": "./server.mjs",
   "scripts": {
-    "start": "node ./server.mjs"
+    "start": "node --experimental-sqlite --no-warnings ./server.mjs"
   }
 }

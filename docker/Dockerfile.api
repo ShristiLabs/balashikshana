@@ -6,4 +6,4 @@ COPY assets/ ./assets/
 COPY packages/ ./packages/
 COPY services/api/ ./services/api/
 EXPOSE 4000
-CMD ["node", "services/api/server.mjs"]
+CMD ["node", "--experimental-sqlite", "--no-warnings", "services/api/server.mjs"]

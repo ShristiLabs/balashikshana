@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "validate:curriculum": "python3 scripts/validate-curriculum.py",
-    "start:api": "node services/api/server.mjs",
+    "start:api": "node --experimental-sqlite --no-warnings services/api/server.mjs",
     "start:app": "npm --workspace=apps/mobile run web",
     "start:ios": "npm --workspace=apps/mobile run ios",
     "start:android": "npm --workspace=apps/mobile run android",
