@@ -42,3 +42,6 @@ temp/
 .pids/
 logs/
 services/api/data/
+
+# SDLC runtime state (delivery-flow status files; not product code)
+.sdlc/
