@@ -6,10 +6,11 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API = "http://127.0.0.1:4798";
@@ -25,54 +26,20 @@ const TEST_ENV = {
 };
 
 let serverProcess;
-let tempDir;
+let testDatabase;
 let stdoutLines = [];
 let stderrText = "";
-
-function spawnServer(extraEnv) {
-  const child = spawn(
-    process.execPath,
-    ["--experimental-sqlite", "--no-warnings", SERVER],
-    {
-      env: { ...TEST_ENV, ...extraEnv },
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
-  child.stdout.on("data", (c) => {
-    for (const line of String(c).split("\n")) {
-      if (line.trim()) stdoutLines.push(line);
-    }
-  });
-  child.stderr.on("data", (c) => {
-    stderrText += String(c);
-  });
-  return child;
-}
-
-async function waitForHealth(timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API}/api/health`);
-      if (res.ok) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  throw new Error("API server did not become healthy in time");
-}
 
 function spawnExpectingFailure(extraEnv) {
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      ["--experimental-sqlite", "--no-warnings", SERVER],
+      ["--no-warnings", SERVER],
       {
         env: {
           ...TEST_ENV,
           ...extraEnv,
-          SQLITE_DB_PATH: path.join(mkdtempSync(path.join(os.tmpdir(), "bootfail-")), "x.sqlite")
+          DATABASE_URL: "postgres://balashikshana:balashikshana_dev@localhost:5432/no_such_db_expected_unused"
         },
         stdio: ["ignore", "pipe", "pipe"]
       }
@@ -87,14 +54,26 @@ function spawnExpectingFailure(extraEnv) {
 }
 
 before(async () => {
-  tempDir = mkdtempSync(path.join(os.tmpdir(), "balashikshana-edge-test-"));
-  serverProcess = spawnServer({ SQLITE_DB_PATH: path.join(tempDir, "test.sqlite") });
-  await waitForHealth();
+  testDatabase = await createTestDatabase();
+  serverProcess = await startTestServer({
+    port: 4798,
+    databaseUrl: testDatabase.url,
+    env: TEST_ENV,
+    onStdout: (c) => {
+      for (const line of c.split("\n")) {
+        if (line.trim()) stdoutLines.push(line);
+      }
+    },
+    onStderr: (c) => {
+      stderrText += c;
+    }
+  });
+  await waitForHealth(API, 120000);
 });
 
-after(() => {
+after(async () => {
   serverProcess?.kill("SIGTERM");
-  rmSync(tempDir, { recursive: true, force: true });
+  if (testDatabase) await dropTestDatabase(testDatabase.name);
 });
 
 describe("CORS allowlist", () => {

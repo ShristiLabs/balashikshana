@@ -8,19 +8,15 @@
 
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { Client } from "pg";
 import { fileURLToPath } from "node:url";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API = "http://127.0.0.1:4799";
-const SERVER = path.resolve(__dirname, "../server.mjs");
 
 let serverProcess;
-let tempDir;
 let db;
 
 async function api(pathname, { method = "GET", token, body } = {}) {
@@ -41,18 +37,8 @@ async function api(pathname, { method = "GET", token, body } = {}) {
   return { status: res.status, json };
 }
 
-async function waitForHealth(timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${API}/api/health`);
-      if (res.ok) return;
-    } catch {
-      // server not up yet
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error("API server did not become healthy in time");
+async function waitForHealthLocal(timeoutMs = 60000) {
+  return waitForHealth(API, timeoutMs);
 }
 
 async function registerStudent(name, pin = "5533") {
@@ -68,38 +54,35 @@ async function login(identifier, pin) {
   return api("/api/auth/login", { method: "POST", body: { ...identifier, pin } });
 }
 
+let testDatabase;
+
 before(async () => {
-  tempDir = mkdtempSync(path.join(os.tmpdir(), "balashikshana-auth-test-"));
-  serverProcess = spawn(
-    process.execPath,
-    ["--experimental-sqlite", "--no-warnings", SERVER],
-    {
-      env: {
-        ...process.env,
-        PORT: "4799",
-        SQLITE_DB_PATH: path.join(tempDir, "test.sqlite"),
-        // This suite logs in many times from one IP; rate-limit behavior is
-        // covered separately in edge-hardening.test.mjs with tuned limits.
-        RATE_LIMIT_PER_IP_MIN: "1000",
-        RATE_LIMIT_PER_TOKEN_MIN: "1000",
-        RATE_LIMIT_LOGIN_PER_IP_MIN: "1000"
-      },
-      stdio: ["ignore", "pipe", "pipe"]
+  testDatabase = await createTestDatabase();
+  serverProcess = await startTestServer({
+    port: 4799,
+    databaseUrl: testDatabase.url,
+    env: {
+      // This suite logs in many times from one IP; rate-limit behavior is
+      // covered separately in edge-hardening.test.mjs with tuned limits.
+      RATE_LIMIT_PER_IP_MIN: "1000",
+      RATE_LIMIT_PER_TOKEN_MIN: "1000",
+      RATE_LIMIT_LOGIN_PER_IP_MIN: "1000"
     }
-  );
+  });
   serverProcess.stderr.on("data", () => {});
-  await waitForHealth();
-  db = new DatabaseSync(path.join(tempDir, "test.sqlite"));
+  await waitForHealthLocal();
+  db = new Client({ connectionString: testDatabase.url });
+  await db.connect();
 });
 
-after(() => {
+after(async () => {
   try {
-    db?.close();
+    await db?.end();
   } catch {
     // already closed
   }
   serverProcess?.kill("SIGTERM");
-  rmSync(tempDir, { recursive: true, force: true });
+  if (testDatabase) await dropTestDatabase(testDatabase.name);
 });
 
 describe("PIN hashing and registration", () => {
@@ -121,16 +104,14 @@ describe("PIN hashing and registration", () => {
     const created = await registerStudent("scryptholder");
     assert.ok(created.token, "registration must mint a session token");
 
-    const row = db.prepare("SELECT pin_hash FROM students WHERE student_id = ?").get(created.student.studentId);
+    const row = (await db.query("SELECT pin_hash FROM students WHERE student_id = $1", [created.student.studentId])).rows[0];
     assert.match(row.pin_hash, /^scrypt\$16384\$8\$1\$[0-9a-f]+\$[0-9a-f]+$/);
   });
 
   test("two students with the same PIN get different hashes (per-row salt)", async () => {
     const a = await registerStudent("salteda", "7777");
     const b = await registerStudent("saltedb", "7777");
-    const rows = db
-      .prepare("SELECT pin_hash FROM students WHERE student_id IN (?, ?)")
-      .all(a.student.studentId, b.student.studentId);
+    const rows = (await db.query("SELECT pin_hash FROM students WHERE student_id IN ($1, $2)", [a.student.studentId, b.student.studentId])).rows;
     assert.notEqual(rows[0].pin_hash, rows[1].pin_hash);
   });
 });
@@ -196,17 +177,15 @@ describe("login", () => {
     const legacyHash = (
       await import("node:crypto")
     ).createHash("sha256").update("balashikshana:8642").digest("hex");
-    db.prepare("UPDATE students SET pin_hash = ? WHERE student_id = ?").run(
+    await db.query("UPDATE students SET pin_hash = $1 WHERE student_id = $2", [
       legacyHash,
       created.student.studentId
-    );
+    ]);
 
     const res = await login({ username: "legacyrow" }, "8642");
     assert.equal(res.status, 200);
 
-    const upgraded = db
-      .prepare("SELECT pin_hash FROM students WHERE student_id = ?")
-      .get(created.student.studentId);
+    const upgraded = (await db.query("SELECT pin_hash FROM students WHERE student_id = $1", [created.student.studentId])).rows[0];
     assert.match(upgraded.pin_hash, /^scrypt\$16384\$8\$1\$/, "legacy hash must be rehashed on login");
 
     // And the old PIN no longer validates through the legacy path.
@@ -353,16 +332,16 @@ describe("token lifecycle", () => {
 
   test("expired session token returns 401 and is deleted", async () => {
     const created = await registerStudent("expireduser", "8080");
-    db.prepare("UPDATE student_sessions SET expires_at = ? WHERE token = ?").run(
+    await db.query("UPDATE student_sessions SET expires_at = $1 WHERE token = $2", [
       new Date(Date.now() - 1000).toISOString(),
       created.token
-    );
+    ]);
     const res = await api(`/api/students/${created.student.studentId}`, {
       token: created.token
     });
     assert.equal(res.status, 401);
 
-    const row = db.prepare("SELECT token FROM student_sessions WHERE token = ?").get(created.token);
+    const row = (await db.query("SELECT token FROM student_sessions WHERE token = $1", [created.token])).rows[0];
     assert.equal(row, undefined, "expired session row must be lazily deleted");
   });
 });

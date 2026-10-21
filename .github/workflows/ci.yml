@@ -10,6 +10,25 @@ jobs:
   validate-and-build:
     name: Validate Curriculum DAG, 9-Asset Contract & Build Engine
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: balashikshana
+          POSTGRES_PASSWORD: balashikshana_dev
+          POSTGRES_DB: balashikshana_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U balashikshana -d balashikshana_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://balashikshana:balashikshana_dev@localhost:5432/balashikshana_db
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,7 +43,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install API dependencies (pino)
+      - name: Install API dependencies (pg, node-pg-migrate, pino)
         run: npm ci --workspaces=false --prefix services/api
 
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
@@ -33,15 +52,18 @@ jobs:
       - name: Validate Core Mastery & Spaced Repetition Engine
         run: node packages/core-engine/src/verify-engine.mjs
 
-      - name: Security Tests (scrypt PINs, IDOR denial, token lifecycle, CORS, rate limits, request caps)
-        run: node --experimental-sqlite --no-warnings --test 'services/api/test/*.test.mjs'
+      - name: Security & Edge Tests (scrypt PINs, IDOR denial, CORS, rate limits, Postgres)
+        run: node --no-warnings --test 'services/api/test/*.test.mjs'
 
-      - name: Smoke-Test SQLite Database, 6,140 Practice Questions & Curriculum API Server
+      - name: Smoke-Test Migrations, Seed & Full Route Inventory on PostgreSQL
         run: |
-          node --experimental-sqlite --no-warnings services/api/server.mjs &
+          node --no-warnings services/api/server.mjs &
           API_PID=$!
-          sleep 3
-          curl -fsS http://127.0.0.1:4000/api/health
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:4000/api/health > /dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4000/api/health | grep -q '"totalPracticeQuestionsInDb":6140'
           curl -fsS http://127.0.0.1:4000/api/curriculum/summary > /dev/null
           curl -fsS "http://127.0.0.1:4000/api/practice/topic/K-M2/I?count=8" > /dev/null
           kill $API_PID
