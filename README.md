@@ -56,6 +56,13 @@ Every unit progresses through four stages:
 docker compose -f docker/docker-compose.yml up --build -d
 ```
 
+### 3. API Authentication (Student Sessions)
+- Every student-scoped route requires a session token: send `Authorization: Bearer <token>` (401 without/invalid/expired token, 403 when the token belongs to a different student)
+- Obtain a token: `POST /api/auth/login` (username or studentId + 4-digit PIN, always required) or account creation via `POST /api/students` (PIN required, no default exists; demo-seed PINs are randomly generated and printed once in the API log)
+- Revoke a token: `POST /api/auth/logout` (also your own token); sessions expire after 30 days
+- PINs are stored as salted scrypt hashes (N=16384, r=8, p=1, keylen=64; see `services/api/db.mjs`); legacy unsalted-SHA-256 rows are rehashed transparently on next login
+- Run the auth/session security tests: `npm run test:api`
+
 ---
 
 ## Repository Structure & Documentation

@@ -16,12 +16,71 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-export function hashPin(pin = "1234") {
+// PIN hashing.
+//
+// Current scheme: scrypt (node:crypto) with per-row random salt.
+// Parameters follow the OWASP cheat-sheet recommendation for interactive
+// logins: N=16384 (CPU/memory cost), r=8 (block size), p=1
+// (parallelization), keylen=64 bytes. Stored format:
+//   scrypt$<N>$<r>$<p>$<salt hex>$<key hex>
+//
+// Legacy scheme (pre-hardening rows): unsalted SHA-256 of
+// "balashikshana:<pin>". Legacy rows are transparently rehashed with
+// scrypt on the next successful login (rehash-on-login migration).
+export const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, keylen: 64 };
+
+function scryptKey(pin, salt, params) {
+  return crypto.scryptSync(String(pin).trim(), salt, params.keylen, {
+    N: params.N,
+    r: params.r,
+    p: params.p
+  });
+}
+
+export function hashPinScrypt(pin) {
+  const params = SCRYPT_PARAMS;
+  const salt = crypto.randomBytes(16);
+  const key = scryptKey(pin, salt, params);
+  return ["scrypt", params.N, params.r, params.p, salt.toString("hex"), key.toString("hex")].join("$");
+}
+
+function legacyHashPin(pin) {
   return crypto.createHash("sha256").update(`balashikshana:${String(pin).trim()}`).digest("hex");
 }
 
+function isLegacyPinHash(stored) {
+  return typeof stored === "string" && /^[0-9a-f]{64}$/.test(stored);
+}
+
+function constantTimeEquals(a, b) {
+  const bufA = Buffer.from(a, "hex");
+  const bufB = Buffer.from(b, "hex");
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Verifies a PIN against a stored hash. Returns true only on exact match.
+export function verifyPin(pin, stored) {
+  if (!stored) return false;
+  if (isLegacyPinHash(stored)) {
+    return constantTimeEquals(legacyHashPin(pin), stored);
+  }
+  const parts = String(stored).split("$");
+  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+  const key = scryptKey(pin, Buffer.from(parts[4], "hex"), {
+    N: Number(parts[1]),
+    r: Number(parts[2]),
+    p: Number(parts[3]),
+    keylen: parts[5].length / 2
+  });
+  return constantTimeEquals(key.toString("hex"), parts[5]);
+}
+
+export function isLegacyStoredPin(stored) {
+  return isLegacyPinHash(stored);
+}
+
 export function createSessionToken() {
-  return crypto.randomBytes(24).toString("hex");
+  return crypto.randomBytes(32).toString("base64url");
 }
 
 export function initDatabase() {
@@ -42,6 +101,15 @@ export function initDatabase() {
   if (!stuRow || stuRow.cnt === 0) {
     seedDefaultStudents(db);
   }
+
+  // One-time invalidation of pre-hardening sessions: tokens issued before
+  // this change were never validated by any code path and use the old
+  // 48-hex-char format. New tokens are 43-char base64url, so this delete
+  // only ever matches legacy rows (the first boot after upgrade removes
+  // them all; subsequent boots match nothing).
+  db.prepare(
+    "DELETE FROM student_sessions WHERE LENGTH(token) = 48 AND token GLOB '[0-9a-f][0-9a-f][0-9a-f]*'"
+  ).run();
 
   return db;
 }
@@ -193,9 +261,16 @@ function seedDefaultStudents(db) {
 
   db.exec("BEGIN TRANSACTION;");
   try {
-    insertStudent.run("stu-aarav-k", "aarav", hashPin("1234"), "Aarav", "🦁", 5, "kindergarten", 0.42, 7, 340, 5, now, now);
-    insertStudent.run("stu-maya-pk", "maya", hashPin("1234"), "Maya", "🦊", 4, "pre-k", 0.55, 4, 140, 5, now, now);
-    insertStudent.run("stu-liam-g2", "liam", hashPin("1234"), "Liam", "🚀", 8, "grade-2", 0.31, 12, 590, 5, now, now);
+    // Demo accounts get individually generated random PINs (there is no
+    // shared default PIN anywhere). The generated PINs are printed once at
+    // seed time so a local developer can log in; check the API log.
+    const seedPins = {};
+    for (const username of ["aarav", "maya", "liam"]) {
+      seedPins[username] = String(Math.floor(1000 + Math.random() * 9000));
+    }
+    insertStudent.run("stu-aarav-k", "aarav", hashPinScrypt(seedPins.aarav), "Aarav", "🦁", 5, "kindergarten", 0.42, 7, 340, 5, now, now);
+    insertStudent.run("stu-maya-pk", "maya", hashPinScrypt(seedPins.maya), "Maya", "🦊", 4, "pre-k", 0.55, 4, 140, 5, now, now);
+    insertStudent.run("stu-liam-g2", "liam", hashPinScrypt(seedPins.liam), "Liam", "🚀", 8, "grade-2", 0.31, 12, 590, 5, now, now);
 
     // Seed Aarav's initial Kindergarten progress
     insertUnitProg.run("stu-aarav-k", "PK-M7", "MASTERED", "GOLD_KEY", 93.0, 4.5, 1, 21.0, now, "PURE_ABSTRACT_SYMBOLIC", now);
@@ -218,6 +293,9 @@ function seedDefaultStudents(db) {
     insertTopicProg.run("stu-liam-g2", "G2-M1-B", "G2-M1", "B", 1, 3, 92, 92.0, 3.9, 1, 3, 7.0, now, now);
 
     db.exec("COMMIT;");
+    console.log(
+      `[DB] Demo students seeded with one-time random PINs: aarav=${seedPins.aarav} maya=${seedPins.maya} liam=${seedPins.liam} (also stored in the API log)`
+    );
   } catch (err) {
     db.exec("ROLLBACK;");
     throw err;

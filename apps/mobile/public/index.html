@@ -577,11 +577,11 @@
 
       <div id="existingAccountsBox">
         <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--duo-muted); margin-bottom: 8px; text-align: left;">
-          Log in with Username &amp; PIN (Default PIN: 1234):
+          Log in with Username &amp; PIN:
         </div>
         <div style="display:grid; grid-template-columns: 1.3fr 0.8fr auto; gap:8px; margin-bottom:14px;">
           <input id="loginUsernameInput" class="input-field" style="margin-bottom:0;" type="text" placeholder="Username (e.g. aarav)" />
-          <input id="loginPinInput" class="input-field" style="margin-bottom:0;" type="password" maxlength="6" placeholder="PIN (1234)" value="1234" />
+          <input id="loginPinInput" class="input-field" style="margin-bottom:0;" type="password" maxlength="4" inputmode="numeric" placeholder="4-digit PIN" />
           <button class="duo-btn blue" style="padding:10px 16px;" onclick="loginWithUsernameAndPin()">LOG IN</button>
         </div>
         <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--duo-muted); margin-bottom: 10px; text-align: left;">
@@ -598,6 +598,7 @@
 
       <div style="text-align: left;">
         <input id="signupName" class="input-field" type="text" placeholder="Your First Name (e.g., Sofia)" />
+        <input id="signupPinInput" class="input-field" type="password" maxlength="4" inputmode="numeric" placeholder="Choose a 4-digit PIN" />
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <select id="signupAvatar" class="input-field">
             <option value="🦁">🦁 Lion</option>
@@ -839,23 +840,71 @@
       const stuData = await stuRes.json();
       renderLoginScreen(stuData.students || []);
 
-      // Auto-restore logged in student if saved in sessionStorage
+      // Auto-restore the previous session from its saved token. If the
+      // token is missing, expired, or revoked, fall back to the login
+      // screen (no PIN-less login exists anymore).
       const savedId = sessionStorage.getItem("balashikshana_student_id");
-      if (savedId) {
-        await loginWithStudentId(savedId);
+      const savedToken = sessionStorage.getItem("balashikshana_session_token");
+      if (savedId && savedToken) {
+        await restoreSessionWithToken(savedId, savedToken);
       }
+    }
+
+    function authHeaders() {
+      const token = sessionStorage.getItem("balashikshana_session_token");
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
+    async function restoreSessionWithToken(studentId, token) {
+      let res;
+      try {
+        res = await fetch(`${API_BASE}/api/students/${studentId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } catch {
+        return;
+      }
+      if (!res.ok) {
+        sessionStorage.removeItem("balashikshana_student_id");
+        sessionStorage.removeItem("balashikshana_session_token");
+        return;
+      }
+      const data = await res.json();
+      enterAppWithSession(token, data.student, data.summary);
+      await selectGrade(loggedInStudent.currentGrade || "kindergarten");
+    }
+
+    function enterAppWithSession(token, student, summary) {
+      sessionStorage.setItem("balashikshana_session_token", token);
+      sessionStorage.setItem("balashikshana_student_id", student.studentId);
+      loggedInStudent = student;
+      studentSummary = summary;
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("mainAppScreen").style.display = "grid";
+      updateStudentHud();
+    }
+
+    function escapeHtml(value) {
+      // Registration accepts arbitrary nickname/avatar strings; everything
+      // user-controlled that lands in an innerHTML template must pass here.
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
     }
 
     function renderLoginScreen(students) {
       const list = document.getElementById("loginStudentsList");
       list.innerHTML = students.map((s) => `
-        <div class="student-login-Option" onclick="loginWithStudentId('${s.studentId}')">
+        <div class="student-login-Option" onclick="prefillLoginFor('${s.username}')">
           <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:34px;">${s.avatar}</span>
+            <span style="font-size:34px;">${escapeHtml(s.avatar)}</span>
             <div>
-              <div style="font-weight:900; font-size:17px;">${s.nickname}</div>
+              <div style="font-weight:900; font-size:17px;">${escapeHtml(s.nickname)}</div>
               <div style="font-size:13px; color:var(--duo-muted); font-weight:700;">
-                ${s.currentGrade.toUpperCase()} • ${s.completedTopicsCount || 0} Topics • ${s.masteredUnitsCount || 0} Units Mastered
+                ${String(s.currentGrade).toUpperCase()}
               </div>
             </div>
           </div>
@@ -864,10 +913,22 @@
       `).join("");
     }
 
+    function prefillLoginFor(username) {
+      // username is server-sanitized to [a-z0-9]; never inject free-text
+      // fields (nickname/avatar) into inline handlers.
+      document.getElementById("loginUsernameInput").value = username;
+      const pinInput = document.getElementById("loginPinInput");
+      pinInput.value = "";
+      pinInput.focus();
+    }
+
     async function loginWithUsernameAndPin() {
       const username = document.getElementById("loginUsernameInput").value.trim();
-      const pin = document.getElementById("loginPinInput").value.trim() || "1234";
-      if (!username) return;
+      const pin = document.getElementById("loginPinInput").value.trim();
+      if (!username || !pin) {
+        alert("Enter your username and 4-digit PIN.");
+        return;
+      }
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -878,31 +939,7 @@
         alert(data.error || "Login failed");
         return;
       }
-      loggedInStudent = data.student;
-      studentSummary = data.summary;
-      sessionStorage.setItem("balashikshana_student_id", loggedInStudent.studentId);
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("mainAppScreen").style.display = "grid";
-      updateStudentHud();
-      await selectGrade(loggedInStudent.currentGrade || "kindergarten");
-    }
-
-    async function loginWithStudentId(studentId) {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId })
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      loggedInStudent = data.student;
-      studentSummary = data.summary;
-      sessionStorage.setItem("balashikshana_student_id", loggedInStudent.studentId);
-
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("mainAppScreen").style.display = "grid";
-
-      updateStudentHud();
+      enterAppWithSession(data.token, data.student, data.summary);
       await selectGrade(loggedInStudent.currentGrade || "kindergarten");
     }
 
@@ -910,18 +947,37 @@
       const nickname = document.getElementById("signupName").value.trim() || "Explorer";
       const avatar = document.getElementById("signupAvatar").value;
       const currentGrade = document.getElementById("signupGrade").value;
+      const pin = document.getElementById("signupPinInput").value.trim();
+      if (!/^\d{4}$/.test(pin)) {
+        alert("Choose a 4-digit PIN to protect your account.");
+        return;
+      }
       const res = await fetch(`${API_BASE}/api/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nickname, avatar, currentGrade })
+        body: JSON.stringify({ nickname, avatar, currentGrade, pin })
       });
       const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Could not create the account.");
+        return;
+      }
       playSound("/assets/sounds/sfx_star_fanfare.wav");
-      await loginWithStudentId(data.student.studentId);
+      enterAppWithSession(data.token, data.student, data.summary);
+      await selectGrade(loggedInStudent.currentGrade || "kindergarten");
     }
 
     async function logoutStudent() {
+      try {
+        await fetch(`${API_BASE}/api/auth/logout`, {
+          method: "POST",
+          headers: authHeaders()
+        });
+      } catch {
+        // Server unreachable: still clear the local session below.
+      }
       sessionStorage.removeItem("balashikshana_student_id");
+      sessionStorage.removeItem("balashikshana_session_token");
       const stuRes = await fetch(`${API_BASE}/api/students`);
       const stuData = await stuRes.json();
       renderLoginScreen(stuData.students || []);
@@ -1437,7 +1493,7 @@
       if (sessionMode === "topic") {
         const res = await fetch(`${API_BASE}/api/practice/topic/complete`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({
             studentId: loggedInStudent.studentId,
             unitId: sessionUnitId,
@@ -1483,7 +1539,7 @@
       } else {
         const res = await fetch(`${API_BASE}/api/gate/evaluate`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({
             studentId: loggedInStudent.studentId,
             unitId: sessionUnitId,
