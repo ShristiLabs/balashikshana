@@ -63,6 +63,20 @@ docker compose -f docker/docker-compose.yml up --build -d
 - PINs are stored as salted scrypt hashes (N=16384, r=8, p=1, keylen=64; see `services/api/db.mjs`); legacy unsalted-SHA-256 rows are rehashed transparently on next login
 - Run the auth/session security tests: `npm run test:api`
 
+### 4. API Configuration (Edge Hardening)
+All configuration is environment-driven (defaults in `services/api/server.mjs`):
+
+| Variable | Default (dev) | Meaning |
+| --- | --- | --- |
+| `ALLOWED_ORIGINS` | `http://localhost:4200,http://127.0.0.1:4200` | CORS allowlist (comma-separated). Wildcards are always rejected; in `NODE_ENV=production` the server refuses to start without an explicit list |
+| `RATE_LIMIT_PER_IP_MIN` | `120` | Requests per minute per client IP (429 + `Retry-After` beyond) |
+| `RATE_LIMIT_PER_TOKEN_MIN` | `60` | Requests per minute per session token |
+| `RATE_LIMIT_LOGIN_PER_IP_MIN` | `10` | Login attempts per minute per IP (PIN brute-force guard) |
+| `BODY_LIMIT_BYTES` | `65536` | Request body cap (413 beyond) |
+| `PORT` | `4000` | Listen port |
+
+Every request is logged as one structured JSON line (pino) with `requestId`, method, route, status, duration, and client IP; the request ID is echoed back in the `X-Request-Id` response header for support correlation.
+
 ---
 
 ## Repository Structure & Documentation

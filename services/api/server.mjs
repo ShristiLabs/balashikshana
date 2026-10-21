@@ -1,4 +1,6 @@
 import http from "node:http";
+import crypto from "node:crypto";
+import pino from "pino";
 import {
   median,
   computeMotorBaselineSec,
@@ -16,9 +18,125 @@ import {
   createSessionToken
 } from "./db.mjs";
 
+// --- Environment configuration -------------------------------------------
+// PORT                        listen port                        (default 4000)
+// SQLITE_DB_PATH              SQLite database file               (default services/api/data)
+// ALLOWED_ORIGINS             CORS allowlist, comma-separated    (dev default: http://localhost:4200,http://127.0.0.1:4200;
+//                                                                REQUIRED, non-empty, non-wildcard when NODE_ENV=production)
+// NODE_ENV                    "production" enables strict config (default dev)
+// BODY_LIMIT_BYTES            max request body bytes             (default 65536)
+// RATE_LIMIT_PER_IP_MIN       general per-IP requests/minute     (default 120)
+// RATE_LIMIT_PER_TOKEN_MIN    per-token requests/minute          (default 60)
+// RATE_LIMIT_LOGIN_PER_IP_MIN login attempts/minute per IP       (default 10)
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function parseAllowedOrigins() {
+  const raw = process.env.ALLOWED_ORIGINS;
+  if (IS_PRODUCTION) {
+    if (!raw || !raw.trim()) {
+      throw new Error("ALLOWED_ORIGINS must be set to an explicit origin list when NODE_ENV=production (wildcards are forbidden).");
+    }
+  }
+  const list = String(raw || "http://localhost:4200,http://127.0.0.1:4200")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (list.includes("*")) {
+    if (IS_PRODUCTION) {
+      throw new Error("ALLOWED_ORIGINS must not contain a wildcard when NODE_ENV=production.");
+    }
+    // Dev convenience is still denied: wildcard CORS defeats the allowlist.
+    throw new Error("ALLOWED_ORIGINS must not contain a wildcard; list explicit origins instead.");
+  }
+  return new Set(list);
+}
+
+const ALLOWED_ORIGINS = parseAllowedOrigins();
+const BODY_LIMIT_BYTES = Number(process.env.BODY_LIMIT_BYTES || 65536);
+const RATE_LIMIT_PER_IP_MIN = Number(process.env.RATE_LIMIT_PER_IP_MIN || 120);
+const RATE_LIMIT_PER_TOKEN_MIN = Number(process.env.RATE_LIMIT_PER_TOKEN_MIN || 60);
+const RATE_LIMIT_LOGIN_PER_IP_MIN = Number(process.env.RATE_LIMIT_LOGIN_PER_IP_MIN || 10);
+const URL_LENGTH_LIMIT = 2048;
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || (IS_PRODUCTION ? "info" : "info"),
+  base: { service: "balashikshana-api" }
+});
+
 const db = initDatabase();
 
 const SESSION_TTL_MS = 30 * 86400000;
+
+// --- In-memory rate limiting (fixed window) --------------------------------
+// Sufficient for a single-instance dev/staging API; Redis-backed limiting is
+// deferred to M6 multi-instance work per the roadmap. Windows are pruned on
+// each check sweep so the maps cannot grow unbounded.
+
+const WINDOW_MS = 60000;
+const rateBuckets = new Map(); // key -> { windowStart, count }
+
+function pruneRateBuckets(now) {
+  if (rateBuckets.size < 512) return;
+  for (const [key, bucket] of rateBuckets) {
+    if (now - bucket.windowStart >= WINDOW_MS) rateBuckets.delete(key);
+  }
+}
+
+function checkRateLimit(key, limitPerMin, now = Date.now()) {
+  pruneRateBuckets(now);
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.windowStart >= WINDOW_MS) {
+    rateBuckets.set(key, { windowStart: now, count: 1 });
+    return { allowed: true, retryAfterSec: 0 };
+  }
+  bucket.count += 1;
+  if (bucket.count > limitPerMin) {
+    const resetAt = bucket.windowStart + WINDOW_MS;
+    return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((resetAt - now) / 1000)) };
+  }
+  return { allowed: true, retryAfterSec: 0 };
+}
+
+function clientIp(req) {
+  // Single-instance deployment: the socket address is the client. Behind a
+  // proxy, Dwara (M6) terminates TLS and forwards; trusted-proxy handling
+  // lands with that work.
+  return req.socket.remoteAddress || "unknown";
+}
+
+// --- Request body reading with size cap ------------------------------------
+
+function readJsonBody(req, res, callback) {
+  const chunks = [];
+  let received = 0;
+  let aborted = false;
+  req.on("data", (chunk) => {
+    if (aborted) return;
+    received += chunk.length;
+    if (received > BODY_LIMIT_BYTES) {
+      aborted = true;
+      callback(null, { tooLarge: true });
+      // Cut the connection only after the 413 response has flushed, so the
+      // client reliably sees the error instead of a connection reset race.
+      res.on("finish", () => req.destroy());
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on("end", () => {
+    if (aborted) return;
+    let parsed = {};
+    try {
+      parsed = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    } catch (err) {
+      return callback(null, { parseError: err.message });
+    }
+    callback(parsed, null);
+  });
+  req.on("error", () => {
+    if (!aborted) callback(null, { parseError: "stream error" });
+  });
+}
 
 // --- Session authentication ----------------------------------------------
 // Every student-scoped route must pass requireStudentAccess, which binds
@@ -53,6 +171,7 @@ function requireStudentAccess(req, res, studentId) {
     sendJson(res, 403, { error: "Session does not grant access to this student" });
     return null;
   }
+  res._balashiStudentId = auth.session.student_id;
   return auth.session;
 }
 
@@ -171,27 +290,90 @@ function getStudentFullState(studentId) {
 }
 
 function sendJson(res, status, payload) {
-  res.writeHead(status, {
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
-  });
+    "X-Request-Id": res._balashiRequestId || ""
+  };
+  if (res._balashiCorsAllowed) {
+    headers["Access-Control-Allow-Origin"] = res._balashiCorsOrigin;
+    headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
+    headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+    headers.Vary = "Origin";
+  }
+  if (res._balashiRetryAfterSec) {
+    headers["Retry-After"] = String(res._balashiRetryAfterSec);
+  }
+  res.writeHead(status, headers);
   res.end(JSON.stringify(payload));
 }
 
 const server = http.createServer((req, res) => {
+  const startedAt = Date.now();
+  const requestId = crypto.randomUUID();
+  res._balashiRequestId = requestId;
+
+  // CORS: requests without an Origin header are not cross-origin and pass
+  // through without CORS headers; cross-origin requests must match the
+  // allowlist or receive no CORS headers (browsers block the response).
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res._balashiCorsAllowed = true;
+    res._balashiCorsOrigin = origin;
+  }
+
+  res.on("finish", () => {
+    logger.info(
+      {
+        requestId,
+        method: req.method,
+        url: req.url,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        ip: clientIp(req),
+        studentId: res._balashiStudentId || undefined
+      },
+      "request"
+    );
+  });
+
   if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization"
-    });
-    return res.end();
+    if (origin && !res._balashiCorsAllowed) {
+      return sendJson(res, 403, { error: "Origin is not allowed." });
+    }
+    return sendJson(res, 204, {});
+  }
+
+  if ((req.url || "").length > URL_LENGTH_LIMIT) {
+    return sendJson(res, 414, { error: "Request URL exceeds the length limit." });
+  }
+
+  const ip = clientIp(req);
+  const ipLimit = checkRateLimit(`ip:${ip}`, RATE_LIMIT_PER_IP_MIN);
+  if (!ipLimit.allowed) {
+    res._balashiRetryAfterSec = ipLimit.retryAfterSec;
+    return sendJson(res, 429, { error: "Too many requests. Please slow down." });
+  }
+
+  const isBearerRequest = /^Bearer [A-Za-z0-9_-]+$/.test(req.headers.authorization || "");
+  if (isBearerRequest) {
+    const token = req.headers.authorization.split(" ")[1];
+    const tokenLimit = checkRateLimit(`token:${token}`, RATE_LIMIT_PER_TOKEN_MIN);
+    if (!tokenLimit.allowed) {
+      res._balashiRetryAfterSec = tokenLimit.retryAfterSec;
+      return sendJson(res, 429, { error: "Too many requests for this session. Please slow down." });
+    }
   }
 
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
+
+  if (req.method === "POST" && pathname === "/api/auth/login") {
+    const loginLimit = checkRateLimit(`login:${ip}`, RATE_LIMIT_LOGIN_PER_IP_MIN);
+    if (!loginLimit.allowed) {
+      res._balashiRetryAfterSec = loginLimit.retryAfterSec;
+      return sendJson(res, 429, { error: "Too many sign-in attempts. Try again shortly." });
+    }
+  }
 
   // GET /api/health -> Database & Table counts
   if (pathname === "/api/health") {
@@ -241,11 +423,10 @@ const server = http.createServer((req, res) => {
   // always required) and issue a session token. Unknown student and wrong
   // PIN return the same 401 to prevent account enumeration.
   if (req.method === "POST" && pathname === "/api/auth/login") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    readJsonBody(req, res, (payload, failure) => {
+      if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
+      if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
-        const payload = JSON.parse(body || "{}");
         const pin = String(payload.pin ?? "").trim();
         if (!/^\d{4}$/.test(pin)) {
           return sendJson(res, 401, { error: "Incorrect username or PIN." });
@@ -309,11 +490,10 @@ const server = http.createServer((req, res) => {
 
   // POST /api/students -> Register a new student account in SQLite
   if (req.method === "POST" && pathname === "/api/students") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    readJsonBody(req, res, (payload, failure) => {
+      if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
+      if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
-        const payload = JSON.parse(body || "{}");
         const pin = String(payload.pin ?? "").trim();
         if (!/^\d{4}$/.test(pin)) {
           return sendJson(res, 400, { error: "A 4-digit PIN is required to create a student account." });
@@ -408,11 +588,10 @@ const server = http.createServer((req, res) => {
   if (req.method === "POST" && pathname.endsWith("/calibrate") && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "").replace("/calibrate", "");
     if (!requireStudentAccess(req, res, studentId)) return;
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    readJsonBody(req, res, (payload, failure) => {
+      if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
+      if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
-        const payload = JSON.parse(body || "{}");
         const motorSec = Array.isArray(payload.warmupTapTimesSec)
           ? computeMotorBaselineSec(payload.warmupTapTimesSec)
           : Number(payload.motorBaselineSec || 0.42);
@@ -568,11 +747,10 @@ const server = http.createServer((req, res) => {
 
   // POST /api/practice/topic/complete -> Persist topic completion & question attempts in SQLite
   if (req.method === "POST" && pathname === "/api/practice/topic/complete") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    readJsonBody(req, res, (payload, failure) => {
+      if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
+      if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
-        const payload = JSON.parse(body || "{}");
         const studentId = payload.studentId;
         const unitId = payload.unitId;
         const topicCode = payload.topicCode;
@@ -711,11 +889,10 @@ const server = http.createServer((req, res) => {
 
   // POST /api/gate/evaluate -> Evaluate Unit Boss Gate & persist unit mastery in SQLite
   if (req.method === "POST" && pathname === "/api/gate/evaluate") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => {
+    readJsonBody(req, res, (payload, failure) => {
+      if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
+      if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
-        const payload = JSON.parse(body || "{}");
         const studentId = payload.studentId;
         const unitId = payload.unitId;
 
@@ -825,5 +1002,13 @@ const server = http.createServer((req, res) => {
 
 const PORT = Number(process.env.PORT || 4000);
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[Balashikshana SQLite-Backed API] Listening on http://localhost:${PORT}`);
+  logger.info(
+    {
+      port: PORT,
+      allowedOrigins: [...ALLOWED_ORIGINS],
+      bodyLimitBytes: BODY_LIMIT_BYTES,
+      rateLimits: { perIpMin: RATE_LIMIT_PER_IP_MIN, perTokenMin: RATE_LIMIT_PER_TOKEN_MIN, loginPerIpMin: RATE_LIMIT_LOGIN_PER_IP_MIN }
+    },
+    "Balashikshana API listening"
+  );
 });

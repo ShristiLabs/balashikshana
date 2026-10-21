@@ -5,5 +5,8 @@
   "main": "./server.mjs",
   "scripts": {
     "start": "node --experimental-sqlite --no-warnings ./server.mjs"
+  },
+  "dependencies": {
+    "pino": "^9.14.0"
   }
 }

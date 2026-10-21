@@ -41,6 +41,7 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://balashikshana:balashikshana_dev@postgres:5432/balashikshana_db
       REDIS_URL: redis://redis:6379
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:4200}
     ports:
       - "4000:4000"
     depends_on:
