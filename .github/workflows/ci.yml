@@ -30,6 +30,9 @@ jobs:
       - name: Validate Core Mastery & Spaced Repetition Engine
         run: node packages/core-engine/src/verify-engine.mjs
 
+      - name: Auth & Session Security Tests (scrypt PINs, IDOR denial, token lifecycle)
+        run: node --experimental-sqlite --no-warnings --test 'services/api/test/*.test.mjs'
+
       - name: Smoke-Test SQLite Database, 6,140 Practice Questions & Curriculum API Server
         run: |
           node --experimental-sqlite --no-warnings services/api/server.mjs &

@@ -8,9 +8,53 @@ import {
   updateTopicMemoryStability,
   computeRetrievabilityPct
 } from "../../packages/core-engine/src/index.mjs";
-import { initDatabase, hashPin, createSessionToken } from "./db.mjs";
+import {
+  initDatabase,
+  hashPinScrypt,
+  verifyPin,
+  isLegacyStoredPin,
+  createSessionToken
+} from "./db.mjs";
 
 const db = initDatabase();
+
+const SESSION_TTL_MS = 30 * 86400000;
+
+// --- Session authentication ----------------------------------------------
+// Every student-scoped route must pass requireStudentAccess, which binds
+// the requested studentId to the session token from the Authorization
+// header. Missing/unknown/expired tokens -> 401; a valid token for a
+// DIFFERENT student -> 403. Expired rows are lazily deleted on lookup.
+
+function getSessionFromRequest(req) {
+  const authHeader = req.headers.authorization || "";
+  const [scheme, token] = authHeader.split(" ");
+  if (scheme !== "Bearer" || !token || /[^A-Za-z0-9_-]/.test(token)) {
+    return { error: "Missing or malformed bearer token" };
+  }
+  const row = db.prepare("SELECT * FROM student_sessions WHERE token = ?").get(token);
+  if (!row) {
+    return { error: "Session token is invalid or has been revoked" };
+  }
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    db.prepare("DELETE FROM student_sessions WHERE token = ?").run(token);
+    return { error: "Session token has expired" };
+  }
+  return { session: row };
+}
+
+function requireStudentAccess(req, res, studentId) {
+  const auth = getSessionFromRequest(req);
+  if (auth.error) {
+    sendJson(res, 401, { error: auth.error });
+    return null;
+  }
+  if (auth.session.student_id !== studentId) {
+    sendJson(res, 403, { error: "Session does not grant access to this student" });
+    return null;
+  }
+  return auth.session;
+}
 
 function mapQuestionRow(row) {
   return {
@@ -170,20 +214,43 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // GET /api/students -> List student accounts from SQLite
+  // GET /api/students -> Profile cards for the login screen. Without a
+  // valid session only public profile fields are returned (no progress
+  // data); with a valid session the caller also receives its own full
+  // summary via `ownSummary`.
   if (req.method === "GET" && pathname === "/api/students") {
-    const rows = db.prepare("SELECT student_id FROM students ORDER BY created_at ASC").all();
-    const students = rows.map((r) => getStudentFullState(r.student_id).summary);
-    return sendJson(res, 200, { students });
+    const rows = db.prepare(
+      "SELECT student_id, username, nickname, avatar, age_years, current_grade, created_at FROM students ORDER BY created_at ASC"
+    ).all();
+    const students = rows.map((r) => ({
+      studentId: r.student_id,
+      username: r.username,
+      nickname: r.nickname,
+      avatar: r.avatar,
+      ageYears: r.age_years,
+      currentGrade: r.current_grade
+    }));
+    const auth = getSessionFromRequest(req);
+    const ownSummary = auth.session
+      ? getStudentFullState(auth.session.student_id).summary
+      : undefined;
+    return sendJson(res, 200, ownSummary ? { students, ownSummary } : { students });
   }
 
-  // POST /api/auth/login -> Authenticate student by username/PIN or studentId and issue session token in SQLite
+  // POST /api/auth/login -> Authenticate student by username/PIN (PIN is
+  // always required) and issue a session token. Unknown student and wrong
+  // PIN return the same 401 to prevent account enumeration.
   if (req.method === "POST" && pathname === "/api/auth/login") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
+        const pin = String(payload.pin ?? "").trim();
+        if (!/^\d{4}$/.test(pin)) {
+          return sendJson(res, 401, { error: "Incorrect username or PIN." });
+        }
+
         let stuRow = null;
         if (payload.studentId) {
           stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(payload.studentId);
@@ -192,16 +259,21 @@ const server = http.createServer((req, res) => {
           stuRow = db.prepare("SELECT * FROM students WHERE LOWER(username) = ? OR LOWER(nickname) = ?").get(uname, uname);
         }
 
-        if (!stuRow) {
-          return sendJson(res, 404, { error: "Student account not found. Please check your username or create an account." });
+        if (!stuRow || !verifyPin(pin, stuRow.pin_hash)) {
+          return sendJson(res, 401, { error: "Incorrect username or PIN." });
         }
 
-        if (payload.pin && stuRow.pin_hash !== hashPin(payload.pin)) {
-          return sendJson(res, 401, { error: "Incorrect 4-digit PIN (Default demo PIN is 1234)." });
+        // Rehash-on-login migration: rows still stored with the legacy
+        // unsalted SHA-256 scheme are upgraded to salted scrypt.
+        if (isLegacyStoredPin(stuRow.pin_hash)) {
+          db.prepare("UPDATE students SET pin_hash = ? WHERE student_id = ?").run(
+            hashPinScrypt(pin),
+            stuRow.student_id
+          );
         }
 
         const now = new Date().toISOString();
-        const expires = new Date(Date.now() + 30 * 86400000).toISOString();
+        const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
         const token = createSessionToken();
 
         db.prepare("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES (?, ?, ?, ?)").run(
@@ -225,6 +297,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // POST /api/auth/logout -> Revoke the caller's session token
+  if (req.method === "POST" && pathname === "/api/auth/logout") {
+    const auth = getSessionFromRequest(req);
+    if (auth.error) {
+      return sendJson(res, 401, { error: auth.error });
+    }
+    db.prepare("DELETE FROM student_sessions WHERE token = ?").run(auth.session.token);
+    return sendJson(res, 200, { ok: true });
+  }
+
   // POST /api/students -> Register a new student account in SQLite
   if (req.method === "POST" && pathname === "/api/students") {
     let body = "";
@@ -232,11 +314,14 @@ const server = http.createServer((req, res) => {
     req.on("end", () => {
       try {
         const payload = JSON.parse(body || "{}");
+        const pin = String(payload.pin ?? "").trim();
+        if (!/^\d{4}$/.test(pin)) {
+          return sendJson(res, 400, { error: "A 4-digit PIN is required to create a student account." });
+        }
         const nickname = String(payload.nickname || "Explorer").trim();
         const baseUsername = String(payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "") || "student";
         const existing = db.prepare("SELECT student_id FROM students WHERE username = ?").get(baseUsername);
         const username = existing ? `${baseUsername}${Math.floor(100 + Math.random() * 900)}` : baseUsername;
-        const pin = String(payload.pin || "1234").trim();
         const gradeId = payload.currentGrade || "kindergarten";
         const ageYears = Number(payload.ageYears) || (gradeId === "pre-k" ? 4 : gradeId === "kindergarten" ? 5 : gradeId === "grade-1" ? 6 : gradeId === "grade-2" ? 7 : 8);
         const avatar = payload.avatar || "🐼";
@@ -254,7 +339,7 @@ const server = http.createServer((req, res) => {
           `).run(
             studentId,
             username,
-            hashPin(pin),
+            hashPinScrypt(pin),
             nickname,
             avatar,
             ageYears,
@@ -292,7 +377,7 @@ const server = http.createServer((req, res) => {
           token,
           studentId,
           now,
-          new Date(Date.now() + 30 * 86400000).toISOString()
+          new Date(Date.now() + SESSION_TTL_MS).toISOString()
         );
 
         const state = getStudentFullState(studentId);
@@ -308,17 +393,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // GET /api/students/:studentId -> Get student state from SQLite
+  // GET /api/students/:studentId -> Get student state from SQLite (session
+  // must belong to this student)
   if (req.method === "GET" && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "");
+    if (!requireStudentAccess(req, res, studentId)) return;
     const state = getStudentFullState(studentId);
     if (!state) return sendJson(res, 404, { error: "Student not found" });
     return sendJson(res, 200, state);
   }
 
   // POST /api/students/:studentId/calibrate -> Update motor baseline in SQLite
+  // (session must belong to this student)
   if (req.method === "POST" && pathname.endsWith("/calibrate") && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "").replace("/calibrate", "");
+    if (!requireStudentAccess(req, res, studentId)) return;
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
@@ -489,6 +578,8 @@ const server = http.createServer((req, res) => {
         const topicCode = payload.topicCode;
         const topicId = `${unitId}-${topicCode}`;
 
+        if (!requireStudentAccess(req, res, studentId)) return;
+
         const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
         const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
         const gradeRow = unitRow ? db.prepare("SELECT * FROM grades WHERE grade_id = ?").get(unitRow.grade_id) : null;
@@ -627,6 +718,9 @@ const server = http.createServer((req, res) => {
         const payload = JSON.parse(body || "{}");
         const studentId = payload.studentId;
         const unitId = payload.unitId;
+
+        if (!requireStudentAccess(req, res, studentId)) return;
+
         const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
         const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
         const gradeRow = unitRow ? db.prepare("SELECT * FROM grades WHERE grade_id = ?").get(unitRow.grade_id) : null;
