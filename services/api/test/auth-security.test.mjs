@@ -77,7 +77,12 @@ before(async () => {
       env: {
         ...process.env,
         PORT: "4799",
-        SQLITE_DB_PATH: path.join(tempDir, "test.sqlite")
+        SQLITE_DB_PATH: path.join(tempDir, "test.sqlite"),
+        // This suite logs in many times from one IP; rate-limit behavior is
+        // covered separately in edge-hardening.test.mjs with tuned limits.
+        RATE_LIMIT_PER_IP_MIN: "1000",
+        RATE_LIMIT_PER_TOKEN_MIN: "1000",
+        RATE_LIMIT_LOGIN_PER_IP_MIN: "1000"
       },
       stdio: ["ignore", "pipe", "pipe"]
     }

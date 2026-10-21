@@ -24,13 +24,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install API dependencies (pino)
+        run: npm ci --workspaces=false --prefix services/api
+
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
         run: python3 scripts/validate-curriculum.py
 
       - name: Validate Core Mastery & Spaced Repetition Engine
         run: node packages/core-engine/src/verify-engine.mjs
 
-      - name: Auth & Session Security Tests (scrypt PINs, IDOR denial, token lifecycle)
+      - name: Security Tests (scrypt PINs, IDOR denial, token lifecycle, CORS, rate limits, request caps)
         run: node --experimental-sqlite --no-warnings --test 'services/api/test/*.test.mjs'
 
       - name: Smoke-Test SQLite Database, 6,140 Practice Questions & Curriculum API Server
