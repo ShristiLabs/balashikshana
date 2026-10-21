@@ -37,6 +37,9 @@ Every unit progresses through four stages:
 
 ### 1. Run Locally with One Command (`startup.sh` / `stop.sh`)
 ```bash
+# The API serves from PostgreSQL (roadmap D2) — start it first:
+docker compose -f docker/docker-compose.yml up -d postgres
+
 # Start both the Sync/Mastery API (port 4000) and Interactive Learning App (port 4200)
 ./startup.sh
 
@@ -45,6 +48,10 @@ Every unit progresses through four stages:
 ```
 - **Interactive Learning App:** `http://localhost:4200`
 - **Sync & Analytics API Health:** `http://localhost:4000/api/health`
+- On first boot the API runs all migrations and seeds the curriculum
+  (5 grades, 130 units, 614 topics, 6,140 questions) from
+  `docs/us-curriculum-registry.json` — both idempotent. Migration ledger:
+  `docs/database-migrations.md`
 - **Validate Curriculum DAG & Core Engine:**
   ```bash
   npm run validate:curriculum
@@ -68,6 +75,7 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 
 | Variable | Default (dev) | Meaning |
 | --- | --- | --- |
+| `DATABASE_URL` | `postgres://balashikshana:balashikshana_dev@localhost:5432/balashikshana_db` | PostgreSQL connection string (matches the compose service); the server exits with a clear message if the database is unreachable |
 | `ALLOWED_ORIGINS` | `http://localhost:4200,http://127.0.0.1:4200` | CORS allowlist (comma-separated). Wildcards are always rejected; in `NODE_ENV=production` the server refuses to start without an explicit list |
 | `RATE_LIMIT_PER_IP_MIN` | `120` | Requests per minute per client IP (429 + `Retry-After` beyond) |
 | `RATE_LIMIT_PER_TOKEN_MIN` | `60` | Requests per minute per session token |
@@ -96,7 +104,9 @@ balashikshana/
 ├── packages/
 │   └── core-engine/                          # DAG Resolver, 5-Condition Mastery Gate, Child FSRS & Question Generator
 ├── services/
-│   └── api/                                  # Node.js Sync, Mastery Gate Evaluation & Parent Analytics API
+│   └── api/                                  # PostgreSQL-backed Sync, Mastery Gate Evaluation & Parent Analytics API
+│       ├── migrations/                       # node-pg-migrate migrations (served datastore, PostgreSQL)
+│       └── sqlite/                           # On-device SQLite schema reference (offline store, roadmap D2)
 ├── apps/
 │   └── mobile/                               # Cross-Platform Expo/React Native + Web Interactive Learning App
 ├── docs/
@@ -107,6 +117,7 @@ balashikshana/
 │   ├── spaced-repetition-science.md          # Child-calibrated Memory Consolidation & Spaced Repetition (Ages 3-9)
 │   ├── skill-topic-assets-catalog.md         # Catalog of all 9 asset categories across all 614 skill topics
 │   ├── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
+│   ├── database-migrations.md                # PostgreSQL migration ledger & runner guide (served datastore)
 │   └── roadmap.md                            # Approved M1–M6 enterprise launch roadmap (decisions D1–D11)
 └── assets/
     ├── catalogs/                             # Per-grade JSON asset catalogs (pre-k..grade-3)
@@ -131,3 +142,4 @@ balashikshana/
 7. **[Scientific Memory Consolidation & Spaced Repetition (`docs/spaced-repetition-science.md`)](./docs/spaced-repetition-science.md)** — 6 cognitive science mechanisms tailored for ages 3–9 (`Lag +2/+5/+10`, Two-Key Overnight Sleep Consolidation, Speed-Weighted Child FSRS, `70/20/10` Interleaved Spiral Practice, Fractional Implicit Repetition, and CPA Scaffold Fading).
 8. **[Technical Architecture (`docs/architecture.md`)](./docs/architecture.md)** — Cross-platform iOS/Android mobile stack, procedural question/distractor generation, offline SQLite schema, and COPPA compliance.
 9. **[Enterprise Launch Roadmap (`docs/roadmap.md`)](./docs/roadmap.md)** — Approved M1–M6 roadmap: binding decisions D1–D11, the full issue tree (#27–#65), workstream details, risks, and per-milestone verification gates.
+10. **[Database Migration Ledger (`docs/database-migrations.md`)](./docs/database-migrations.md)** — PostgreSQL migration history, runner usage, and the rules every schema change follows.

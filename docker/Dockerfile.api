@@ -4,6 +4,8 @@ COPY package.json ./
 COPY docs/ ./docs/
 COPY assets/ ./assets/
 COPY packages/ ./packages/
+COPY services/api/package.json services/api/package-lock.json ./services/api/
+RUN cd services/api && npm ci --workspaces=false --omit=dev
 COPY services/api/ ./services/api/
 EXPOSE 4000
-CMD ["node", "--experimental-sqlite", "--no-warnings", "services/api/server.mjs"]
+CMD ["node", "--no-warnings", "services/api/server.mjs"]

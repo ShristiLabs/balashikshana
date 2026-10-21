@@ -11,7 +11,7 @@ import {
   computeRetrievabilityPct
 } from "../../packages/core-engine/src/index.mjs";
 import {
-  initDatabase,
+  createDb,
   hashPinScrypt,
   verifyPin,
   isLegacyStoredPin,
@@ -20,7 +20,7 @@ import {
 
 // --- Environment configuration -------------------------------------------
 // PORT                        listen port                        (default 4000)
-// SQLITE_DB_PATH              SQLite database file               (default services/api/data)
+// DATABASE_URL                PostgreSQL connection string       (default postgres://balashikshana:balashikshana_dev@localhost:5432/balashikshana_db)
 // ALLOWED_ORIGINS             CORS allowlist, comma-separated    (dev default: http://localhost:4200,http://127.0.0.1:4200;
 //                                                                REQUIRED, non-empty, non-wildcard when NODE_ENV=production)
 // NODE_ENV                    "production" enables strict config (default dev)
@@ -59,11 +59,14 @@ const RATE_LIMIT_LOGIN_PER_IP_MIN = Number(process.env.RATE_LIMIT_LOGIN_PER_IP_M
 const URL_LENGTH_LIMIT = 2048;
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || (IS_PRODUCTION ? "info" : "info"),
+  level: process.env.LOG_LEVEL || "info",
   base: { service: "balashikshana-api" }
 });
 
-const db = initDatabase();
+const db = await createDb(logger).catch((err) => {
+  logger.fatal({ err: err.message }, "Database initialization failed");
+  process.exit(1);
+});
 
 const SESSION_TTL_MS = 30 * 86400000;
 
@@ -144,25 +147,25 @@ function readJsonBody(req, res, callback) {
 // header. Missing/unknown/expired tokens -> 401; a valid token for a
 // DIFFERENT student -> 403. Expired rows are lazily deleted on lookup.
 
-function getSessionFromRequest(req) {
+async function getSessionFromRequest(req) {
   const authHeader = req.headers.authorization || "";
   const [scheme, token] = authHeader.split(" ");
   if (scheme !== "Bearer" || !token || /[^A-Za-z0-9_-]/.test(token)) {
     return { error: "Missing or malformed bearer token" };
   }
-  const row = db.prepare("SELECT * FROM student_sessions WHERE token = ?").get(token);
+  const row = await db.get("SELECT * FROM student_sessions WHERE token = $1", [token]);
   if (!row) {
     return { error: "Session token is invalid or has been revoked" };
   }
   if (new Date(row.expires_at).getTime() <= Date.now()) {
-    db.prepare("DELETE FROM student_sessions WHERE token = ?").run(token);
+    await db.run("DELETE FROM student_sessions WHERE token = $1", [token]);
     return { error: "Session token has expired" };
   }
   return { session: row };
 }
 
-function requireStudentAccess(req, res, studentId) {
-  const auth = getSessionFromRequest(req);
+async function requireStudentAccess(req, res, studentId) {
+  const auth = await getSessionFromRequest(req);
   if (auth.error) {
     sendJson(res, 401, { error: auth.error });
     return null;
@@ -198,13 +201,13 @@ function mapQuestionRow(row) {
   };
 }
 
-function getStudentFullState(studentId) {
-  const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
+async function getStudentFullState(studentId) {
+  const stuRow = await db.get("SELECT * FROM students WHERE student_id = $1", [studentId]);
   if (!stuRow) return null;
 
-  const unitRows = db.prepare("SELECT * FROM student_unit_progress WHERE student_id = ?").all(studentId);
-  const topicRows = db.prepare("SELECT * FROM student_topic_progress WHERE student_id = ?").all(studentId);
-  const attemptCountRow = db.prepare("SELECT COUNT(*) AS cnt FROM student_question_attempts WHERE student_id = ?").get(studentId);
+  const unitRows = await db.all("SELECT * FROM student_unit_progress WHERE student_id = $1", [studentId]);
+  const topicRows = await db.all("SELECT * FROM student_topic_progress WHERE student_id = $1", [studentId]);
+  const attemptCountRow = await db.get("SELECT COUNT(*)::int AS cnt FROM student_question_attempts WHERE student_id = $1", [studentId]);
 
   const unitProgress = {};
   for (const u of unitRows) {
@@ -308,6 +311,17 @@ function sendJson(res, status, payload) {
 }
 
 const server = http.createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    logger.error({ err: err?.message, requestId: res._balashiRequestId }, "Unhandled request error");
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    sendJson(res, 500, { error: "Internal server error." });
+  });
+});
+
+async function handleRequest(req, res) {
   const startedAt = Date.now();
   const requestId = crypto.randomUUID();
   res._balashiRequestId = requestId;
@@ -377,16 +391,17 @@ const server = http.createServer((req, res) => {
 
   // GET /api/health -> Database & Table counts
   if (pathname === "/api/health") {
-    const gradesCnt = db.prepare("SELECT COUNT(*) AS c FROM grades").get().c;
-    const unitsCnt = db.prepare("SELECT COUNT(*) AS c FROM units").get().c;
-    const topicsCnt = db.prepare("SELECT COUNT(*) AS c FROM skill_topics").get().c;
-    const questionsCnt = db.prepare("SELECT COUNT(*) AS c FROM practice_questions").get().c;
-    const studentsCnt = db.prepare("SELECT COUNT(*) AS c FROM students").get().c;
-    const attemptsCnt = db.prepare("SELECT COUNT(*) AS c FROM student_question_attempts").get().c;
+    const gradesCnt = (await db.get("SELECT COUNT(*)::int AS c FROM grades")).c;
+    const unitsCnt = (await db.get("SELECT COUNT(*)::int AS c FROM units")).c;
+    const topicsCnt = (await db.get("SELECT COUNT(*)::int AS c FROM skill_topics")).c;
+    const questionsCnt = (await db.get("SELECT COUNT(*)::int AS c FROM practice_questions")).c;
+    const studentsCnt = (await db.get("SELECT COUNT(*)::int AS c FROM students")).c;
+    const attemptsCnt = (await db.get("SELECT COUNT(*)::int AS c FROM student_question_attempts")).c;
+    const versionRow = await db.get("SELECT version() AS version");
 
     return sendJson(res, 200, {
       status: "ok",
-      databaseEngine: "SQLite3 (WAL Mode)",
+      databaseEngine: `PostgreSQL (${versionRow?.version?.split(" ").slice(0, 2).join(" ") || "unknown"})`,
       totalGrades: gradesCnt,
       totalUnits: unitsCnt,
       totalSkillTopics: topicsCnt,
@@ -401,9 +416,9 @@ const server = http.createServer((req, res) => {
   // data); with a valid session the caller also receives its own full
   // summary via `ownSummary`.
   if (req.method === "GET" && pathname === "/api/students") {
-    const rows = db.prepare(
+    const rows = await db.all(
       "SELECT student_id, username, nickname, avatar, age_years, current_grade, created_at FROM students ORDER BY created_at ASC"
-    ).all();
+    );
     const students = rows.map((r) => ({
       studentId: r.student_id,
       username: r.username,
@@ -412,9 +427,9 @@ const server = http.createServer((req, res) => {
       ageYears: r.age_years,
       currentGrade: r.current_grade
     }));
-    const auth = getSessionFromRequest(req);
+    const auth = await getSessionFromRequest(req);
     const ownSummary = auth.session
-      ? getStudentFullState(auth.session.student_id).summary
+      ? (await getStudentFullState(auth.session.student_id)).summary
       : undefined;
     return sendJson(res, 200, ownSummary ? { students, ownSummary } : { students });
   }
@@ -423,7 +438,7 @@ const server = http.createServer((req, res) => {
   // always required) and issue a session token. Unknown student and wrong
   // PIN return the same 401 to prevent account enumeration.
   if (req.method === "POST" && pathname === "/api/auth/login") {
-    readJsonBody(req, res, (payload, failure) => {
+    readJsonBody(req, res, async (payload, failure) => {
       if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
       if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
@@ -434,10 +449,10 @@ const server = http.createServer((req, res) => {
 
         let stuRow = null;
         if (payload.studentId) {
-          stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(payload.studentId);
+          stuRow = await db.get("SELECT * FROM students WHERE student_id = $1", [payload.studentId]);
         } else if (payload.username) {
           const uname = String(payload.username).trim().toLowerCase();
-          stuRow = db.prepare("SELECT * FROM students WHERE LOWER(username) = ? OR LOWER(nickname) = ?").get(uname, uname);
+          stuRow = await db.get("SELECT * FROM students WHERE LOWER(username) = $1 OR LOWER(nickname) = $2", [uname, uname]);
         }
 
         if (!stuRow || !verifyPin(pin, stuRow.pin_hash)) {
@@ -447,25 +462,21 @@ const server = http.createServer((req, res) => {
         // Rehash-on-login migration: rows still stored with the legacy
         // unsalted SHA-256 scheme are upgraded to salted scrypt.
         if (isLegacyStoredPin(stuRow.pin_hash)) {
-          db.prepare("UPDATE students SET pin_hash = ? WHERE student_id = ?").run(
-            hashPinScrypt(pin),
-            stuRow.student_id
-          );
+          await db.run("UPDATE students SET pin_hash = $1 WHERE student_id = $2", [hashPinScrypt(pin),
+            stuRow.student_id]);
         }
 
         const now = new Date().toISOString();
         const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
         const token = createSessionToken();
 
-        db.prepare("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES (?, ?, ?, ?)").run(
-          token,
+        await db.run("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES ($1, $2, $3, $4)", [token,
           stuRow.student_id,
           now,
-          expires
-        );
-        db.prepare("UPDATE students SET last_active_at = ? WHERE student_id = ?").run(now, stuRow.student_id);
+          expires]);
+        await db.run("UPDATE students SET last_active_at = $1 WHERE student_id = $2", [now, stuRow.student_id]);
 
-        const state = getStudentFullState(stuRow.student_id);
+        const state = await getStudentFullState(stuRow.student_id);
         return sendJson(res, 200, {
           token,
           student: state.student,
@@ -480,17 +491,17 @@ const server = http.createServer((req, res) => {
 
   // POST /api/auth/logout -> Revoke the caller's session token
   if (req.method === "POST" && pathname === "/api/auth/logout") {
-    const auth = getSessionFromRequest(req);
+    const auth = await getSessionFromRequest(req);
     if (auth.error) {
       return sendJson(res, 401, { error: auth.error });
     }
-    db.prepare("DELETE FROM student_sessions WHERE token = ?").run(auth.session.token);
+    await db.run("DELETE FROM student_sessions WHERE token = $1", [auth.session.token]);
     return sendJson(res, 200, { ok: true });
   }
 
   // POST /api/students -> Register a new student account in SQLite
   if (req.method === "POST" && pathname === "/api/students") {
-    readJsonBody(req, res, (payload, failure) => {
+    readJsonBody(req, res, async (payload, failure) => {
       if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
       if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
@@ -500,7 +511,7 @@ const server = http.createServer((req, res) => {
         }
         const nickname = String(payload.nickname || "Explorer").trim();
         const baseUsername = String(payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "") || "student";
-        const existing = db.prepare("SELECT student_id FROM students WHERE username = ?").get(baseUsername);
+        const existing = await db.get("SELECT student_id FROM students WHERE username = $1", [baseUsername]);
         const username = existing ? `${baseUsername}${Math.floor(100 + Math.random() * 900)}` : baseUsername;
         const gradeId = payload.currentGrade || "kindergarten";
         const ageYears = Number(payload.ageYears) || (gradeId === "pre-k" ? 4 : gradeId === "kindergarten" ? 5 : gradeId === "grade-1" ? 6 : gradeId === "grade-2" ? 7 : 8);
@@ -508,15 +519,14 @@ const server = http.createServer((req, res) => {
         const studentId = `stu-${username}-${Date.now().toString().slice(-4)}`;
         const now = new Date().toISOString();
 
-        db.exec("BEGIN TRANSACTION;");
-        try {
-          db.prepare(`
+        await db.withTransaction(async (client) => {
+          await client.query(`
             INSERT INTO students (
               student_id, username, pin_hash, nickname, avatar, age_years,
               current_grade, motor_baseline_sec, streak_days, star_coins, hearts,
               last_active_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 50, 5, ?, ?)
-          `).run(
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 50, 5, $9, $10)
+          `, [
             studentId,
             username,
             hashPinScrypt(pin),
@@ -527,7 +537,7 @@ const server = http.createServer((req, res) => {
             ageYears <= 4 ? 0.55 : ageYears <= 6 ? 0.44 : 0.34,
             now,
             now
-          );
+          ]);
 
           // Unlock prerequisite grade final units so the chosen grade's Unit 1 is unlocked
           const prereqSeeds = {
@@ -536,31 +546,28 @@ const server = http.createServer((req, res) => {
             "grade-2": ["G1-M9", "G1-E10", "G1-S5", "G1-SS4"],
             "grade-3": ["G2-M9", "G2-E10", "G2-S6", "G2-SS4"]
           };
-          const insertUnitProg = db.prepare(`
-            INSERT OR REPLACE INTO student_unit_progress (
-              student_id, unit_id, status, key_state, best_accuracy_pct,
-              best_median_speed_sec, attempts_count, stability_days,
-              last_reviewed_at, cpa_stage, updated_at
-            ) VALUES (?, ?, 'MASTERED', 'GOLD_KEY', 90.0, 4.5, 1, 21.0, ?, 'PURE_ABSTRACT_SYMBOLIC', ?)
-          `);
           for (const pid of prereqSeeds[gradeId] || []) {
-            insertUnitProg.run(studentId, pid, now, now);
+            await client.query(`
+              INSERT INTO student_unit_progress (
+                student_id, unit_id, status, key_state, best_accuracy_pct,
+                best_median_speed_sec, attempts_count, stability_days,
+                last_reviewed_at, cpa_stage, updated_at
+              ) VALUES ($1, $2, 'MASTERED', 'GOLD_KEY', 90.0, 4.5, 1, 21.0, $3, 'PURE_ABSTRACT_SYMBOLIC', $4)
+              ON CONFLICT (student_id, unit_id) DO UPDATE SET
+                status = 'MASTERED', key_state = 'GOLD_KEY'
+            `, [studentId, pid, now, now]);
           }
-          db.exec("COMMIT;");
-        } catch (txErr) {
-          db.exec("ROLLBACK;");
-          throw txErr;
-        }
+        });
 
         const token = createSessionToken();
-        db.prepare("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES (?, ?, ?, ?)").run(
+        await db.run("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES ($1, $2, $3, $4)", [
           token,
           studentId,
           now,
           new Date(Date.now() + SESSION_TTL_MS).toISOString()
-        );
+        ]);
 
-        const state = getStudentFullState(studentId);
+        const state = await getStudentFullState(studentId);
         return sendJson(res, 201, {
           token,
           student: state.student,
@@ -577,8 +584,8 @@ const server = http.createServer((req, res) => {
   // must belong to this student)
   if (req.method === "GET" && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "");
-    if (!requireStudentAccess(req, res, studentId)) return;
-    const state = getStudentFullState(studentId);
+    if (!(await requireStudentAccess(req, res, studentId))) return;
+    const state = await getStudentFullState(studentId);
     if (!state) return sendJson(res, 404, { error: "Student not found" });
     return sendJson(res, 200, state);
   }
@@ -587,16 +594,16 @@ const server = http.createServer((req, res) => {
   // (session must belong to this student)
   if (req.method === "POST" && pathname.endsWith("/calibrate") && pathname.startsWith("/api/students/")) {
     const studentId = pathname.replace("/api/students/", "").replace("/calibrate", "");
-    if (!requireStudentAccess(req, res, studentId)) return;
-    readJsonBody(req, res, (payload, failure) => {
+    if (!(await requireStudentAccess(req, res, studentId))) return;
+    readJsonBody(req, res, async (payload, failure) => {
       if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
       if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
         const motorSec = Array.isArray(payload.warmupTapTimesSec)
           ? computeMotorBaselineSec(payload.warmupTapTimesSec)
           : Number(payload.motorBaselineSec || 0.42);
-        db.prepare("UPDATE students SET motor_baseline_sec = ? WHERE student_id = ?").run(motorSec, studentId);
-        return sendJson(res, 200, getStudentFullState(studentId));
+        await db.run("UPDATE students SET motor_baseline_sec = $1 WHERE student_id = $2", [motorSec, studentId]);
+        return sendJson(res, 200, await getStudentFullState(studentId));
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
       }
@@ -606,10 +613,10 @@ const server = http.createServer((req, res) => {
 
   // GET /api/curriculum/summary -> Query grades, units, and skill_topics from SQLite
   if (pathname === "/api/curriculum/summary") {
-    const gradesRows = db.prepare("SELECT * FROM grades ORDER BY sequence_order ASC").all();
-    const unitsRows = db.prepare("SELECT * FROM units ORDER BY sequence_order ASC").all();
-    const topicsRows = db.prepare("SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order FROM skill_topics ORDER BY sequence_order ASC").all();
-    const questionsCount = db.prepare("SELECT COUNT(*) AS c FROM practice_questions").get().c;
+    const gradesRows = await db.all("SELECT * FROM grades ORDER BY sequence_order ASC");
+    const unitsRows = await db.all("SELECT * FROM units ORDER BY sequence_order ASC");
+    const topicsRows = await db.all("SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order FROM skill_topics ORDER BY sequence_order ASC");
+    const questionsCount = (await db.get("SELECT COUNT(*)::int AS c FROM practice_questions")).c;
 
     const topicsByUnit = {};
     for (const t of topicsRows) {
@@ -672,12 +679,12 @@ const server = http.createServer((req, res) => {
     const topicCode = parts[1];
     const topicId = `${unitId}-${topicCode}`;
 
-    const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
-    const topicRow = db.prepare("SELECT * FROM skill_topics WHERE topic_id = ?").get(topicId);
+    const unitRow = await db.get("SELECT * FROM units WHERE unit_id = $1", [unitId]);
+    const topicRow = await db.get("SELECT * FROM skill_topics WHERE topic_id = $1", [topicId]);
     if (!unitRow || !topicRow) return sendJson(res, 404, { error: `Topic ${topicId} not found in database` });
 
     const count = Number(url.searchParams.get("count") || 8);
-    const qRows = db.prepare("SELECT * FROM practice_questions WHERE topic_id = ? ORDER BY difficulty_level ASC, question_id ASC LIMIT ?").all(topicId, count);
+    const qRows = await db.all("SELECT * FROM practice_questions WHERE topic_id = $1 ORDER BY difficulty_level ASC, question_id ASC LIMIT $2", [topicId, count]);
 
     return sendJson(res, 200, {
       unitId: unitRow.unit_id,
@@ -697,14 +704,14 @@ const server = http.createServer((req, res) => {
   // GET /api/curriculum/unit/:unitId -> Fetch unit + stratified Boss Gate questions from SQLite practice_questions table
   if (req.method === "GET" && pathname.startsWith("/api/curriculum/unit/")) {
     const unitId = pathname.replace("/api/curriculum/unit/", "");
-    const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
+    const unitRow = await db.get("SELECT * FROM units WHERE unit_id = $1", [unitId]);
     if (!unitRow) return sendJson(res, 404, { error: `Unit ${unitId} not found in database` });
 
-    const topicRows = db.prepare("SELECT * FROM skill_topics WHERE unit_id = ? ORDER BY sequence_order ASC").all(unitId);
+    const topicRows = await db.all("SELECT * FROM skill_topics WHERE unit_id = $1 ORDER BY sequence_order ASC", [unitId]);
     const count = Number(url.searchParams.get("count") || unitRow.gate_question_count || 12);
 
     // Stratified selection from SQLite practice_questions across all topics in this unit
-    const allUnitQuestions = db.prepare("SELECT * FROM practice_questions WHERE unit_id = ? ORDER BY question_id ASC").all(unitId).map(mapQuestionRow);
+    const allUnitQuestions = await db.all("SELECT * FROM practice_questions WHERE unit_id = $1 ORDER BY question_id ASC", [unitId]).map(mapQuestionRow);
     const byTopic = {};
     for (const q of allUnitQuestions) {
       if (!byTopic[q.topicCode]) byTopic[q.topicCode] = [];
@@ -747,7 +754,7 @@ const server = http.createServer((req, res) => {
 
   // POST /api/practice/topic/complete -> Persist topic completion & question attempts in SQLite
   if (req.method === "POST" && pathname === "/api/practice/topic/complete") {
-    readJsonBody(req, res, (payload, failure) => {
+    readJsonBody(req, res, async (payload, failure) => {
       if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
       if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
@@ -756,11 +763,11 @@ const server = http.createServer((req, res) => {
         const topicCode = payload.topicCode;
         const topicId = `${unitId}-${topicCode}`;
 
-        if (!requireStudentAccess(req, res, studentId)) return;
+        if (!(await requireStudentAccess(req, res, studentId))) return;
 
-        const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
-        const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
-        const gradeRow = unitRow ? db.prepare("SELECT * FROM grades WHERE grade_id = ?").get(unitRow.grade_id) : null;
+        const stuRow = await db.get("SELECT * FROM students WHERE student_id = $1", [studentId]);
+        const unitRow = await db.get("SELECT * FROM units WHERE unit_id = $1", [unitId]);
+        const gradeRow = unitRow ? await db.get("SELECT * FROM grades WHERE grade_id = $1", [unitRow.grade_id]) : null;
         if (!stuRow || !unitRow) return sendJson(res, 404, { error: "Student or Unit not found" });
 
         const responses = payload.responses || [];
@@ -775,7 +782,7 @@ const server = http.createServer((req, res) => {
         const passedTopic = accPct >= 80;
         const crowns = accPct >= 95 && medSpeed <= targetSpeed ? 3 : accPct >= 85 ? 2 : passedTopic ? 1 : 0;
 
-        const prevTopic = db.prepare("SELECT * FROM student_topic_progress WHERE student_id = ? AND topic_id = ?").get(studentId, topicId);
+        const prevTopic = await db.get("SELECT * FROM student_topic_progress WHERE student_id = $1 AND topic_id = $2", [studentId, topicId]);
         const fg = computeFluencyGrade(passedTopic, medSpeed, targetSpeed);
         const srUpdate = updateTopicMemoryStability({
           currentStabilityDays: prevTopic ? prevTopic.stability_days : 1.0,
@@ -787,19 +794,17 @@ const server = http.createServer((req, res) => {
         const now = new Date().toISOString();
         const nextReview = new Date(Date.now() + srUpdate.stabilityDays * 86400000).toISOString();
 
-        db.exec("BEGIN TRANSACTION;");
-        try {
+        await db.withTransaction(async (client) => {
           // 1. Log every individual question attempt into student_question_attempts
-          const insertAttempt = db.prepare(`
-            INSERT INTO student_question_attempts (
-              student_id, session_type, unit_id, topic_id, question_id,
-              chosen_answer, is_correct, raw_time_sec, cognitive_time_sec,
-              fluency_grade, misconception_tags_json, attempted_at
-            ) VALUES (?, 'TOPIC_PRACTICE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
           for (const r of responses) {
             const cSec = computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0);
-            insertAttempt.run(
+            await client.query(`
+              INSERT INTO student_question_attempts (
+                student_id, session_type, unit_id, topic_id, question_id,
+                chosen_answer, is_correct, raw_time_sec, cognitive_time_sec,
+                fluency_grade, misconception_tags_json, attempted_at
+              ) VALUES ($1, 'TOPIC_PRACTICE', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `, [
               studentId,
               unitId,
               topicId,
@@ -811,24 +816,24 @@ const server = http.createServer((req, res) => {
               computeFluencyGrade(Boolean(r.isCorrect), cSec, targetSpeed),
               JSON.stringify(r.misconceptionTags || []),
               now
-            );
+            ]);
           }
 
           // 2. Upsert student_topic_progress
-          db.prepare(`
+          await client.query(`
             INSERT INTO student_topic_progress (
               student_id, topic_id, unit_id, topic_code, completed, crowns,
               mastery_score, best_accuracy_pct, best_median_speed_sec,
               attempts_count, fluency_grade, stability_days, next_review_at, last_reviewed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             ON CONFLICT(student_id, topic_id) DO UPDATE SET
-              completed = MAX(student_topic_progress.completed, excluded.completed),
-              crowns = MAX(student_topic_progress.crowns, excluded.crowns),
-              mastery_score = MAX(student_topic_progress.mastery_score, excluded.mastery_score),
-              best_accuracy_pct = MAX(student_topic_progress.best_accuracy_pct, excluded.best_accuracy_pct),
+              completed = GREATEST(student_topic_progress.completed, excluded.completed),
+              crowns = GREATEST(student_topic_progress.crowns, excluded.crowns),
+              mastery_score = GREATEST(student_topic_progress.mastery_score, excluded.mastery_score),
+              best_accuracy_pct = GREATEST(student_topic_progress.best_accuracy_pct, excluded.best_accuracy_pct),
               best_median_speed_sec = CASE
                 WHEN student_topic_progress.best_median_speed_sec > 0
-                THEN MIN(student_topic_progress.best_median_speed_sec, excluded.best_median_speed_sec)
+                THEN LEAST(student_topic_progress.best_median_speed_sec, excluded.best_median_speed_sec)
                 ELSE excluded.best_median_speed_sec
               END,
               attempts_count = student_topic_progress.attempts_count + 1,
@@ -836,7 +841,7 @@ const server = http.createServer((req, res) => {
               stability_days = excluded.stability_days,
               next_review_at = excluded.next_review_at,
               last_reviewed_at = excluded.last_reviewed_at
-          `).run(
+          `, [
             studentId,
             topicId,
             unitId,
@@ -851,24 +856,19 @@ const server = http.createServer((req, res) => {
             srUpdate.stabilityDays,
             nextReview,
             now
-          );
+          ]);
 
           if (passedTopic) {
             const rewardCoins = 15 + crowns * 5;
-            db.prepare("UPDATE students SET star_coins = star_coins + ?, last_active_at = ? WHERE student_id = ?").run(rewardCoins, now, studentId);
+            await client.query("UPDATE students SET star_coins = star_coins + $1, last_active_at = $2 WHERE student_id = $3", [rewardCoins, now, studentId]);
           }
+        });
 
-          db.exec("COMMIT;");
-        } catch (txErr) {
-          db.exec("ROLLBACK;");
-          throw txErr;
-        }
-
-        const totalTopicsInUnit = db.prepare("SELECT COUNT(*) AS c FROM skill_topics WHERE unit_id = ?").get(unitId).c;
-        const completedInUnit = db.prepare("SELECT COUNT(*) AS c FROM student_topic_progress WHERE student_id = ? AND unit_id = ? AND completed = 1").get(studentId, unitId).c;
+        const totalTopicsInUnit = (await db.get("SELECT COUNT(*)::int AS c FROM skill_topics WHERE unit_id = $1", [unitId])).c;
+        const completedInUnit = (await db.get("SELECT COUNT(*)::int AS c FROM student_topic_progress WHERE student_id = $1 AND unit_id = $2 AND completed = 1", [studentId, unitId])).c;
         const allTopicsDone = completedInUnit >= totalTopicsInUnit;
 
-        const state = getStudentFullState(studentId);
+        const state = await getStudentFullState(studentId);
         return sendJson(res, 200, {
           passedTopic,
           crownsAwarded: crowns,
@@ -889,21 +889,21 @@ const server = http.createServer((req, res) => {
 
   // POST /api/gate/evaluate -> Evaluate Unit Boss Gate & persist unit mastery in SQLite
   if (req.method === "POST" && pathname === "/api/gate/evaluate") {
-    readJsonBody(req, res, (payload, failure) => {
+    readJsonBody(req, res, async (payload, failure) => {
       if (failure?.tooLarge) return sendJson(res, 413, { error: "Request body exceeds the size limit." });
       if (failure?.parseError) return sendJson(res, 400, { error: `Invalid JSON body: ${failure.parseError}` });
       try {
         const studentId = payload.studentId;
         const unitId = payload.unitId;
 
-        if (!requireStudentAccess(req, res, studentId)) return;
+        if (!(await requireStudentAccess(req, res, studentId))) return;
 
-        const stuRow = db.prepare("SELECT * FROM students WHERE student_id = ?").get(studentId);
-        const unitRow = db.prepare("SELECT * FROM units WHERE unit_id = ?").get(unitId);
-        const gradeRow = unitRow ? db.prepare("SELECT * FROM grades WHERE grade_id = ?").get(unitRow.grade_id) : null;
+        const stuRow = await db.get("SELECT * FROM students WHERE student_id = $1", [studentId]);
+        const unitRow = await db.get("SELECT * FROM units WHERE unit_id = $1", [unitId]);
+        const gradeRow = unitRow ? await db.get("SELECT * FROM grades WHERE grade_id = $1", [unitRow.grade_id]) : null;
         if (!stuRow || !unitRow) return sendJson(res, 404, { error: "Student or Unit not found" });
 
-        const topicRows = db.prepare("SELECT * FROM skill_topics WHERE unit_id = ? ORDER BY sequence_order ASC").all(unitId);
+        const topicRows = await db.all("SELECT * FROM skill_topics WHERE unit_id = $1 ORDER BY sequence_order ASC", [unitId]);
         const unitObj = {
           unitId: unitRow.unit_id,
           title: unitRow.title,
@@ -923,7 +923,7 @@ const server = http.createServer((req, res) => {
           motorBaselineSec: motorSec
         });
 
-        const prevProg = db.prepare("SELECT * FROM student_unit_progress WHERE student_id = ? AND unit_id = ?").get(studentId, unitId);
+        const prevProg = await db.get("SELECT * FROM student_unit_progress WHERE student_id = $1 AND unit_id = $2", [studentId, unitId]);
         const fg = computeFluencyGrade(evalResult.passed, evalResult.medianCogSpeedSec, unitRow.gate_max_speed_sec);
         const srUpdate = updateTopicMemoryStability({
           currentStabilityDays: prevProg ? prevProg.stability_days : 1.0,
@@ -938,21 +938,20 @@ const server = http.createServer((req, res) => {
 
         const now = new Date().toISOString();
 
-        db.exec("BEGIN TRANSACTION;");
-        try {
-          db.prepare(`
+        await db.withTransaction(async (client) => {
+          await client.query(`
             INSERT INTO student_unit_progress (
               student_id, unit_id, status, key_state, best_accuracy_pct,
               best_median_speed_sec, attempts_count, stability_days,
               last_reviewed_at, cpa_stage, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            ) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, $10)
             ON CONFLICT(student_id, unit_id) DO UPDATE SET
               status = CASE WHEN student_unit_progress.status = 'MASTERED' THEN 'MASTERED' ELSE excluded.status END,
               key_state = COALESCE(excluded.key_state, student_unit_progress.key_state),
-              best_accuracy_pct = MAX(student_unit_progress.best_accuracy_pct, excluded.best_accuracy_pct),
+              best_accuracy_pct = GREATEST(student_unit_progress.best_accuracy_pct, excluded.best_accuracy_pct),
               best_median_speed_sec = CASE
                 WHEN student_unit_progress.best_median_speed_sec > 0
-                THEN MIN(student_unit_progress.best_median_speed_sec, excluded.best_median_speed_sec)
+                THEN LEAST(student_unit_progress.best_median_speed_sec, excluded.best_median_speed_sec)
                 ELSE excluded.best_median_speed_sec
               END,
               attempts_count = student_unit_progress.attempts_count + 1,
@@ -960,7 +959,7 @@ const server = http.createServer((req, res) => {
               last_reviewed_at = excluded.last_reviewed_at,
               cpa_stage = excluded.cpa_stage,
               updated_at = excluded.updated_at
-          `).run(
+          `, [
             studentId,
             unitId,
             evalResult.passed ? "MASTERED" : "REMEDIATION_REQUIRED",
@@ -971,19 +970,14 @@ const server = http.createServer((req, res) => {
             now,
             srUpdate.cpaStage,
             now
-          );
+          ]);
 
           if (evalResult.passed) {
-            db.prepare("UPDATE students SET star_coins = star_coins + 50, last_active_at = ? WHERE student_id = ?").run(now, studentId);
+            await client.query("UPDATE students SET star_coins = star_coins + 50, last_active_at = $1 WHERE student_id = $2", [now, studentId]);
           }
+        });
 
-          db.exec("COMMIT;");
-        } catch (txErr) {
-          db.exec("ROLLBACK;");
-          throw txErr;
-        }
-
-        const state = getStudentFullState(studentId);
+        const state = await getStudentFullState(studentId);
         return sendJson(res, 200, {
           student: state.student,
           summary: state.summary,
@@ -998,6 +992,16 @@ const server = http.createServer((req, res) => {
   }
 
   return sendJson(res, 404, { error: "Route not found" });
+}
+
+// Last-resort nets: any future unawaited rejection or stray 'error' event
+// logs instead of terminating the process (Node's default). Proper
+// lifecycle shutdown arrives with the M6 ops work.
+process.on("unhandledRejection", (err) => {
+  logger.error({ err: err?.message }, "Unhandled rejection");
+});
+process.on("uncaughtException", (err) => {
+  logger.error({ err: err?.message }, "Uncaught exception");
 });
 
 const PORT = Number(process.env.PORT || 4000);

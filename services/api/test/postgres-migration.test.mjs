@@ -1,0 +1,192 @@
+// PostgreSQL migration coverage for issue #30: migration tracking, seed
+// completeness, referential integrity, cascade behavior, upsert semantics
+// (the GREATEST/LEAST port), and identity columns. Runs against a
+// throwaway database, same harness style as the sibling suites.
+
+import { test, describe, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { Client } from "pg";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
+
+const API = "http://127.0.0.1:4797";
+
+let serverProcess;
+let testDatabase;
+let db;
+
+async function api(pathname, { method = "GET", token, body } = {}) {
+  const headers = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API}${pathname}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+  let json = null;
+  try {
+    json = await res.json();
+  } catch {
+    // non-JSON response
+  }
+  return { status: res.status, json };
+}
+
+async function registerStudent(name, pin = "5533") {
+  const res = await api("/api/students", {
+    method: "POST",
+    body: { nickname: name, username: name, currentGrade: "kindergarten", pin }
+  });
+  assert.equal(res.status, 201, `registration failed: ${JSON.stringify(res.json)}`);
+  return res.json;
+}
+
+before(async () => {
+  testDatabase = await createTestDatabase();
+  serverProcess = await startTestServer({
+    port: 4797,
+    databaseUrl: testDatabase.url,
+    env: {
+      RATE_LIMIT_PER_IP_MIN: "1000",
+      RATE_LIMIT_PER_TOKEN_MIN: "1000",
+      RATE_LIMIT_LOGIN_PER_IP_MIN: "1000"
+    }
+  });
+  serverProcess.stderr.on("data", () => {});
+  await waitForHealth(API, 120000);
+  db = new Client({ connectionString: testDatabase.url });
+  await db.connect();
+});
+
+after(async () => {
+  try {
+    await db?.end();
+  } catch {
+    // already closed
+  }
+  serverProcess?.kill("SIGTERM");
+  if (testDatabase) await dropTestDatabase(testDatabase.name);
+});
+
+describe("migration tracking", () => {
+  test("pgmigrations records exactly the 001 migration after boot", async () => {
+    const rows = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows;
+    assert.deepEqual(
+      rows.map((r) => r.name),
+      ["001_initial_schema"]
+    );
+  });
+});
+
+describe("seed completeness", () => {
+  test("database counts match the registry (5/130/614/6140) and health agrees", async () => {
+    const counts = (
+      await db.query(`
+        SELECT
+          (SELECT COUNT(*)::int FROM grades) AS grades,
+          (SELECT COUNT(*)::int FROM units) AS units,
+          (SELECT COUNT(*)::int FROM skill_topics) AS topics,
+          (SELECT COUNT(*)::int FROM practice_questions) AS questions
+      `)
+    ).rows[0];
+
+    assert.equal(counts.grades, 5);
+    assert.equal(counts.units, 130);
+    assert.equal(counts.topics, 614);
+    assert.equal(counts.questions, 6140);
+
+    const health = await api("/api/health");
+    assert.equal(health.status, 200);
+    assert.equal(health.json.totalGrades, 5);
+    assert.equal(health.json.totalUnits, 130);
+    assert.equal(health.json.totalSkillTopics, 614);
+    assert.equal(health.json.totalPracticeQuestionsInDb, 6140);
+    assert.match(health.json.databaseEngine, /^PostgreSQL/);
+  });
+});
+
+describe("referential integrity", () => {
+  test("session insert for a nonexistent student fails with FK violation 23503", async () => {
+    await assert.rejects(
+      db.query(
+        "INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES ($1, $2, $3, $4)",
+        ["fake-token-xyz", "stu-does-not-exist", new Date().toISOString(), new Date().toISOString()]
+      ),
+      (err) => err.code === "23503"
+    );
+  });
+
+  test("deleting a student cascades to their sessions", async () => {
+    const created = await registerStudent("cascadeprobe", "4141");
+    await db.query(
+      "INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES ($1, $2, $3, $4)",
+      ["stray-session-token", created.student.studentId, new Date().toISOString(), new Date().toISOString()]
+    );
+
+    await db.query("DELETE FROM students WHERE student_id = $1", [created.student.studentId]);
+
+    const row = (await db.query("SELECT token FROM student_sessions WHERE student_id = $1", [
+      created.student.studentId
+    ])).rows[0];
+    assert.equal(row, undefined, "sessions must cascade-delete with the student");
+  });
+});
+
+describe("upsert semantics on PostgreSQL", () => {
+  test("practice complete twice: attempts_count increments, crowns never decrease", async () => {
+    const created = await registerStudent("upsertprobe", "4242");
+    const studentId = created.student.studentId;
+    const complete = (responses) =>
+      api("/api/practice/topic/complete", {
+        method: "POST",
+        token: created.token,
+        body: {
+          studentId,
+          unitId: "K-M2",
+          topicCode: "I",
+          motorBaselineSec: 0.4,
+          responses
+        }
+      });
+
+    const first = await complete([{ questionId: "K-M2-I-Q1", chosenAnswer: "6", isCorrect: true, rawTimeSec: 2.5 }]);
+    assert.equal(first.status, 200, JSON.stringify(first.json));
+
+    // A weaker second attempt (correctness that cannot exceed first crowns).
+    const second = await complete([{ questionId: "K-M2-I-Q2", chosenAnswer: "1", isCorrect: false, rawTimeSec: 3.5 }]);
+    assert.equal(second.status, 200, JSON.stringify(second.json));
+
+    const row = (
+      await db.query(
+        "SELECT attempts_count, crowns, completed FROM student_topic_progress WHERE student_id = $1 AND topic_id = $2",
+        [studentId, "K-M2-I"]
+      )
+    ).rows[0];
+    assert.ok(row, "progress row must exist");
+    assert.equal(row.attempts_count, 2, "attempts_count must increment per completion");
+    assert.ok(row.crowns >= second.json.crownsAwarded, "stored crowns must not decrease");
+    assert.equal(row.completed, 1, "GREATEST keeps completed latched at 1 after a weaker attempt");
+  });
+});
+
+describe("identity columns", () => {
+  test("attempt_id auto-generates when omitted", async () => {
+    const created = await registerStudent("identityprobe", "4343");
+    await db.query(
+      `INSERT INTO student_question_attempts (
+        student_id, session_type, unit_id, topic_id, question_id,
+        chosen_answer, is_correct, raw_time_sec, cognitive_time_sec,
+        fluency_grade, misconception_tags_json, attempted_at
+      ) VALUES ($1, 'TOPIC_PRACTICE', 'K-M1', 'K-M1-A', 'K-M1-A-Q1', '3', 1, 2.0, 1.6, 4, '[]', $2)`,
+      [created.student.studentId, new Date().toISOString()]
+    );
+    const row = (
+      await db.query("SELECT attempt_id FROM student_question_attempts WHERE student_id = $1", [
+        created.student.studentId
+      ])
+    ).rows[0];
+    // pg returns bigint (int8) columns as strings; the identity still
+    // generated a positive value.
+    assert.ok(Number(row.attempt_id) > 0, "attempt_id must be generated");
+  });
+});
