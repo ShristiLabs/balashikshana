@@ -85,7 +85,8 @@ balashikshana/
 │   ├── mastery-gate-engine.md                # Mathematical specification for Accuracy + Speed Mastery Gating
 │   ├── spaced-repetition-science.md          # Child-calibrated Memory Consolidation & Spaced Repetition (Ages 3-9)
 │   ├── skill-topic-assets-catalog.md         # Catalog of all 9 asset categories across all 614 skill topics
-│   └── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
+│   ├── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
+│   └── roadmap.md                            # Approved M1–M6 enterprise launch roadmap (decisions D1–D11)
 └── assets/
     ├── catalogs/                             # Per-grade JSON asset catalogs (pre-k..grade-3)
     ├── sounds/                               # 16 synthesized .wav files + sounds-manifest.json (614 topics)
@@ -108,3 +109,4 @@ balashikshana/
 6. **[Mastery Gate Engine Specification (`docs/mastery-gate-engine.md`)](./docs/mastery-gate-engine.md)** — Equations for motor-latency calibration, cognitive speed calculation, 80th-percentile tail latency caps, and diagnostic remediation routing.
 7. **[Scientific Memory Consolidation & Spaced Repetition (`docs/spaced-repetition-science.md`)](./docs/spaced-repetition-science.md)** — 6 cognitive science mechanisms tailored for ages 3–9 (`Lag +2/+5/+10`, Two-Key Overnight Sleep Consolidation, Speed-Weighted Child FSRS, `70/20/10` Interleaved Spiral Practice, Fractional Implicit Repetition, and CPA Scaffold Fading).
 8. **[Technical Architecture (`docs/architecture.md`)](./docs/architecture.md)** — Cross-platform iOS/Android mobile stack, procedural question/distractor generation, offline SQLite schema, and COPPA compliance.
+9. **[Enterprise Launch Roadmap (`docs/roadmap.md`)](./docs/roadmap.md)** — Approved M1–M6 roadmap: binding decisions D1–D11, the full issue tree (#27–#65), workstream details, risks, and per-milestone verification gates.

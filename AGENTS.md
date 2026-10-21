@@ -40,7 +40,8 @@ balashikshana/
 │   ├── mastery-gate-engine.md                # Mathematical spec for Accuracy + Speed Mastery Gating
 │   ├── spaced-repetition-science.md          # Child-calibrated FSRS, Lag +2/+5/+10 & CPA fading spec
 │   ├── skill-topic-assets-catalog.md         # Specification for all 9 asset types per skill topic
-│   └── architecture.md                       # Mobile (iOS/Android), offline SQLite & cloud sync spec
+│   ├── architecture.md                       # Mobile (iOS/Android), offline SQLite & cloud sync spec
+│   └── roadmap.md                            # Approved M1–M6 enterprise launch roadmap (binding decisions D1–D11)
 └── assets/
     ├── catalogs/                             # Per-grade JSON asset catalogs (pre-k..grade-3)
     ├── sounds/                               # Synthesized WAV audio files & sounds-manifest.json
