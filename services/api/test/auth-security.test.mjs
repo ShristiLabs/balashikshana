@@ -3,10 +3,10 @@
 // Runs the real API server as a child process against a throwaway
 // PostgreSQL database and exercises the session/PIN lifecycle end to end,
 // including the cross-student access (IDOR) denial that is the core
-// acceptance criterion. Uses Node's built-in test runner only (zero
-// dependencies); issue #32 ports these cases onto vitest.
+// acceptance criterion. Vitest suite (issue #32); assertions are the
+// node:test originals, unchanged.
 
-import { test, describe, before, after } from "node:test";
+import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { Client } from "pg";
@@ -58,7 +58,7 @@ async function login(identifier, pin) {
 
 let testDatabase;
 
-before(async () => {
+beforeAll(async () => {
   testDatabase = await createTestDatabase();
   serverProcess = await startTestServer({
     port: 4799,
@@ -77,7 +77,7 @@ before(async () => {
   await db.connect();
 });
 
-after(async () => {
+afterAll(async () => {
   try {
     await db?.end();
   } catch {
@@ -115,6 +115,15 @@ describe("PIN hashing and registration", () => {
     const b = await registerStudent("saltedb", "7777");
     const rows = (await db.query("SELECT pin_hash FROM students WHERE student_id IN ($1, $2)", [a.student.studentId, b.student.studentId])).rows;
     assert.notEqual(rows[0].pin_hash, rows[1].pin_hash);
+  });
+
+  test("unknown extra fields in the register body are rejected 400 (closed schema)", async () => {
+    const res = await api("/api/students", {
+      method: "POST",
+      body: { nickname: "ExtraField", currentGrade: "kindergarten", pin: "4321", role: "admin" }
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.json.title, "Validation failed");
   });
 });
 
@@ -186,6 +195,23 @@ describe("login", () => {
     assert.notEqual(second.json.student.username, first.student.username);
     const res = await login({ username: second.json.student.username }, "1212");
     assert.equal(res.status, 200);
+  });
+
+  test("repeated duplicate registrations keep drawing free suffixes (no 500 on collision)", async () => {
+    const usernames = new Set();
+    for (let i = 0; i < 3; i += 1) {
+      const res = await api("/api/students", {
+        method: "POST",
+        body: { nickname: "duploop", username: "duploop", currentGrade: "kindergarten", pin: "1313" }
+      });
+      assert.equal(res.status, 201, `registration ${i + 1} failed: ${JSON.stringify(res.json)}`);
+      usernames.add(res.json.student.username);
+      const loginRes = await login({ username: res.json.student.username }, "1313");
+      assert.equal(loginRes.status, 200, `login ${i + 1} failed for ${res.json.student.username}`);
+    }
+    // The base name plus two auto-suffixed variants: three distinct rows.
+    assert.equal(usernames.size, 3);
+    assert.ok(usernames.has("duploop"));
   });
 
   test("legacy unsalted-SHA256 row logs in and is rehashed to scrypt", async () => {

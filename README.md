@@ -87,6 +87,16 @@ Every request is logged as one structured JSON line (pino) with `requestId`, met
 
 The API runs on Fastify v5 with per-route JSON-schema validation. Every error response is an RFC 9457 `application/problem+json` document (`type`, `title`, `status`, `detail`, `instance`; validation failures add an `errors[]` array, 429 adds `Retry-After`). The full route contract is [`docs/openapi/baseline.yaml`](./docs/openapi/baseline.yaml) (OpenAPI 3.1); CI enforces it additive-only via an oasdiff breaking-change gate on every pull request.
 
+### 5. Run the Test Suites (vitest)
+```bash
+npm run test:engine   # core-engine unit specs (mastery gate, FSRS, curriculum DAG & questions) — no services required
+npm run test:api      # API integration suites (auth, edge hardening, Postgres migrations) — requires PostgreSQL
+npm test              # both workspaces in sequence
+```
+- The API suites (`services/api/test/`) boot the real server as a child process against a throwaway PostgreSQL database created per suite (dev data is never touched). The cold start applies all migrations and reseeds the 6,140 practice questions, so `services/api/vitest.config.mjs` raises the test/hook timeouts (120s/180s) accordingly.
+- PostgreSQL must be reachable at `DATABASE_URL` (the compose service from section 1 is sufficient). The core-engine specs (`packages/core-engine/test/`) run fully standalone.
+- CI (`.github/workflows/ci.yml`) runs the same pipeline on every push and pull request: curriculum validator -> core-engine verifier (`verify-engine.mjs`) -> engine vitest suite -> API vitest suite against a `postgres:16` service container -> live smoke test -> OpenAPI breaking-change gate (`tufin/oasdiff` pinned to `v1.34.1`). Superseded runs on the same ref are cancelled automatically.
+
 ---
 
 ## Repository Structure & Documentation
@@ -98,7 +108,7 @@ balashikshana/
 ├── startup.sh / stop.sh                      # One-command startup and shutdown scripts
 ├── package.json                              # Monorepo workspaces configuration
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Mathematics Curriculum Guide
-├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG, engine build, API security tests & OpenAPI breaking-change gate
+├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG validation, engine verifier + vitest suites (postgres:16 service), live smoke & OpenAPI breaking-change gate
 ├── docker/
 │   ├── docker-compose.yml                    # Postgres, Redis, API & Web container orchestration
 │   ├── Dockerfile.api                        # Backend Sync & Mastery API container

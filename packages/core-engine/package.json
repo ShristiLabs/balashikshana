@@ -4,6 +4,10 @@
   "type": "module",
   "main": "./src/index.mjs",
   "scripts": {
-    "build": "node ./src/verify-engine.mjs"
+    "build": "node ./src/verify-engine.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.12"
   }
 }
