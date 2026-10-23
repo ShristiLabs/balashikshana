@@ -118,6 +118,11 @@ describe("CORS allowlist", () => {
     assert.equal(res.headers.get("access-control-allow-origin"), null);
   });
 
+  test("OPTIONS without an Origin header still returns 204 (pre-Fastify parity)", async () => {
+    const res = await fetch(`${API}/api/health`, { method: "OPTIONS" });
+    assert.equal(res.status, 204);
+  });
+
   test("production mode with wildcard ALLOWED_ORIGINS refuses to boot", async () => {
     const { code, err } = await spawnExpectingFailure({
       NODE_ENV: "production",
@@ -155,8 +160,11 @@ describe("rate limiting", () => {
     const throttled = responses.find((r) => r.status === 429);
     const retryAfter = Number(throttled.headers.get("retry-after"));
     assert.ok(retryAfter >= 1 && retryAfter <= 60, `Retry-After out of range: ${retryAfter}`);
+    assert.match(throttled.headers.get("content-type") || "", /application\/problem\+json/);
     const body = await throttled.json();
-    assert.ok(body.error);
+    assert.equal(body.status, 429);
+    assert.ok(body.title, "problem+json title missing");
+    assert.ok(body.detail, "problem+json detail missing");
   });
 
   test("per-TOKEN limit returns 429 for an over-active valid session", async () => {
@@ -270,5 +278,72 @@ describe("structured logging and request IDs", () => {
     assert.ok(line, "request log line for the authenticated call missing");
     assert.equal(line.studentId, student.studentId);
     assert.equal(line.statusCode, 200);
+  });
+});
+
+describe("problem+json error contract (RFC 9457)", () => {
+  test("unknown route returns a 404 problem document with type/title/status/detail/instance", async () => {
+    const res = await fetch(`${API}/api/definitely-not-a-route`);
+    assert.equal(res.status, 404);
+    assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
+    const body = await res.json();
+    assert.equal(body.status, 404);
+    assert.equal(typeof body.type, "string");
+    assert.ok(body.title);
+    assert.ok(body.detail);
+    assert.equal(body.instance, "/api/definitely-not-a-route");
+  });
+
+  test("validation failure returns 400 with schema details in errors[]", async () => {
+    // Uses the register route: the login throttle bucket is still latched
+    // by the earlier burst test (1-minute fixed window).
+    const res = await fetch(`${API}/api/students`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: "shapeprobe", pin: "12" })
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
+    const body = await res.json();
+    assert.equal(body.status, 400);
+    assert.equal(body.title, "Validation failed");
+    assert.ok(Array.isArray(body.errors) && body.errors.length >= 1, "schema error details missing");
+    assert.equal(body.instance, "/api/students");
+  });
+
+  test("query validation on practice topic rejects out-of-range count with 400", async () => {
+    const res = await fetch(`${API}/api/practice/topic/K-M2/I?count=999`);
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.status, 400);
+    assert.ok(Array.isArray(body.errors));
+  });
+
+  test("session rejection on a student route is a 401 problem document", async () => {
+    const res = await fetch(`${API}/api/students/stu-not-real`);
+    assert.equal(res.status, 401);
+    assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
+    const body = await res.json();
+    assert.equal(body.status, 401);
+    assert.ok(body.detail);
+  });
+
+  test("malformed JSON body returns a 400 problem document", async () => {
+    const res = await fetch(`${API}/api/students`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json"
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
+    const body = await res.json();
+    assert.equal(body.status, 400);
+  });
+
+  test("oversized URL returns a 414 problem document", async () => {
+    const res = await fetch(`${API}/api/health?pad=${"x".repeat(2200)}`);
+    assert.equal(res.status, 414);
+    const body = await res.json();
+    assert.equal(body.status, 414);
   });
 });

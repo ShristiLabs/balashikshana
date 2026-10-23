@@ -85,6 +85,8 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 
 Every request is logged as one structured JSON line (pino) with `requestId`, method, route, status, duration, and client IP; the request ID is echoed back in the `X-Request-Id` response header for support correlation.
 
+The API runs on Fastify v5 with per-route JSON-schema validation. Every error response is an RFC 9457 `application/problem+json` document (`type`, `title`, `status`, `detail`, `instance`; validation failures add an `errors[]` array, 429 adds `Retry-After`). The full route contract is [`docs/openapi/baseline.yaml`](./docs/openapi/baseline.yaml) (OpenAPI 3.1); CI enforces it additive-only via an oasdiff breaking-change gate on every pull request.
+
 ---
 
 ## Repository Structure & Documentation
@@ -96,7 +98,7 @@ balashikshana/
 ├── startup.sh / stop.sh                      # One-command startup and shutdown scripts
 ├── package.json                              # Monorepo workspaces configuration
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Mathematics Curriculum Guide
-├── .github/workflows/ci.yml                  # GitHub Actions CI for curriculum DAG & engine build
+├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG, engine build, API security tests & OpenAPI breaking-change gate
 ├── docker/
 │   ├── docker-compose.yml                    # Postgres, Redis, API & Web container orchestration
 │   ├── Dockerfile.api                        # Backend Sync & Mastery API container
@@ -118,6 +120,8 @@ balashikshana/
 │   ├── skill-topic-assets-catalog.md         # Catalog of all 9 asset categories across all 614 skill topics
 │   ├── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
 │   ├── database-migrations.md                # PostgreSQL migration ledger & runner guide (served datastore)
+│   ├── openapi/
+│   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)
 │   └── roadmap.md                            # Approved M1–M6 enterprise launch roadmap (decisions D1–D11)
 └── assets/
     ├── catalogs/                             # Per-grade JSON asset catalogs (pre-k..grade-3)
@@ -143,3 +147,4 @@ balashikshana/
 8. **[Technical Architecture (`docs/architecture.md`)](./docs/architecture.md)** — Cross-platform iOS/Android mobile stack, procedural question/distractor generation, offline SQLite schema, and COPPA compliance.
 9. **[Enterprise Launch Roadmap (`docs/roadmap.md`)](./docs/roadmap.md)** — Approved M1–M6 roadmap: binding decisions D1–D11, the full issue tree (#27–#65), workstream details, risks, and per-milestone verification gates.
 10. **[Database Migration Ledger (`docs/database-migrations.md`)](./docs/database-migrations.md)** — PostgreSQL migration history, runner usage, and the rules every schema change follows.
+11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 12 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.
