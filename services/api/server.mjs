@@ -315,6 +315,7 @@ const loginSchema = {
 const registerSchema = {
   body: {
     type: "object",
+    additionalProperties: false,
     required: ["pin"],
     properties: {
       nickname: { type: "string", maxLength: 32 },
@@ -406,7 +407,11 @@ const app = Fastify({
   logger: false,
   disableRequestLogging: true,
   genReqId: () => crypto.randomUUID(),
-  bodyLimit: BODY_LIMIT_BYTES
+  bodyLimit: BODY_LIMIT_BYTES,
+  // Keep the schemas closed: unknown body fields are a 400 validation
+  // error (the additionalProperties: false declarations), not silently
+  // stripped by Ajv's default removeAdditional behavior.
+  ajv: { customOptions: { removeAdditional: false } }
 });
 
 await app.register(helmet, { contentSecurityPolicy: false });
@@ -418,6 +423,9 @@ await app.register(helmet, { contentSecurityPolicy: false });
 app.addHook("onRequest", async (req, reply) => {
   const origin = req.headers.origin;
   if (req.method !== "OPTIONS") return;
+  // Preflight short-circuits below never reach the second hook, so the
+  // request id must be stamped here as well (every reply carries one).
+  reply.header("X-Request-Id", req.id);
   if (origin && !ALLOWED_ORIGINS.includes(origin)) {
     return sendProblem(reply, 403, { type: `${PROBLEM_BASE}/origin-not-allowed`, detail: "Origin is not allowed." });
   }
@@ -632,8 +640,14 @@ app.post("/api/students", { schema: registerSchema, preValidation: trimPinPreVal
   const payload = req.body;
   const nickname = String(payload.nickname || "Explorer").trim();
   const baseUsername = String(payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "") || "student";
-  const existing = await db.get("SELECT student_id FROM students WHERE username = $1", [baseUsername]);
-  const username = existing ? `${baseUsername}${Math.floor(100 + Math.random() * 900)}` : baseUsername;
+  // Bounded retry: if the base name (or a randomly drawn suffix) is already
+  // taken, draw again instead of letting the insert blow up as a 500.
+  let username = baseUsername;
+  let existing = await db.get("SELECT student_id FROM students WHERE username = $1", [username]);
+  for (let attempt = 0; existing && attempt < 8; attempt += 1) {
+    username = `${baseUsername}${Math.floor(100 + Math.random() * 900)}`;
+    existing = await db.get("SELECT student_id FROM students WHERE username = $1", [username]);
+  }
   const gradeId = payload.currentGrade || "kindergarten";
   const ageYears = Number(payload.ageYears) || (gradeId === "pre-k" ? 4 : gradeId === "kindergarten" ? 5 : gradeId === "grade-1" ? 6 : gradeId === "grade-2" ? 7 : 8);
   const avatar = payload.avatar || "\u{1F43C}";
@@ -1096,8 +1110,11 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
       unitId,
       evalResult.passed ? "MASTERED" : "REMEDIATION_REQUIRED",
       nextKeyState,
-      evalResult.overallAccuracyPct,
-      evalResult.medianCogSpeedSec,
+      // Empty-attempt evaluations omit these fields; Postgres rejects
+      // undefined parameters and the columns are NOT NULL — coerce to the
+      // schema default 0 (found by issue #32 tests).
+      evalResult.overallAccuracyPct ?? 0,
+      evalResult.medianCogSpeedSec ?? 0,
       srUpdate.stabilityDays,
       now,
       srUpdate.cpaStage,

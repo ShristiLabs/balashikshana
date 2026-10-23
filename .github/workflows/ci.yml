@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: ["main"]
 
+# Compute-saving: superseded runs on the same ref are cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-and-build:
-    name: Validate Curriculum DAG, 9-Asset Contract & Build Engine
+    name: Validate Curriculum, Engine Specs & API Integration (Postgres)
     runs-on: ubuntu-latest
 
     services:
@@ -37,23 +42,32 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            services/api/package-lock.json
+            packages/core-engine/package-lock.json
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install API dependencies (pg, node-pg-migrate, pino)
-        run: npm ci --workspaces=false --prefix services/api
+      - name: Install workspace dependencies (api, core-engine)
+        run: |
+          npm ci --workspaces=false --prefix services/api
+          npm ci --workspaces=false --prefix packages/core-engine
 
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
         run: python3 scripts/validate-curriculum.py
 
-      - name: Validate Core Mastery & Spaced Repetition Engine
+      - name: Verify Engine Package (aggregate self-check)
         run: node packages/core-engine/src/verify-engine.mjs
 
-      - name: Security & Edge Tests (scrypt PINs, IDOR denial, CORS, rate limits, Postgres)
-        run: node --no-warnings --test 'services/api/test/*.test.mjs'
+      - name: Core-Engine Unit Tests (vitest — mastery gate, FSRS, DAG, questions)
+        run: npm test --workspaces=false --prefix packages/core-engine
+
+      - name: Security & Edge Integration Tests (vitest — scrypt PINs, IDOR denial, CORS, rate limits, Postgres)
+        run: npm test --workspaces=false --prefix services/api
 
       - name: Smoke-Test Migrations, Seed & Full Route Inventory on PostgreSQL
         run: |
@@ -78,7 +92,7 @@ jobs:
             docker run --rm \
               -v "${PWD}:/specs:ro" \
               -v /tmp/baseline-main.yaml:/baseline.yaml:ro \
-              tufin/oasdiff:latest breaking --fail-on WARN \
+              tufin/oasdiff:v1.34.1 breaking --fail-on WARN \
               /baseline.yaml /specs/docs/openapi/baseline.yaml
             echo "No breaking API changes detected."
           else

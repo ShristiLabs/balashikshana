@@ -10,7 +10,9 @@
   ],
   "scripts": {
     "validate:curriculum": "python3 scripts/validate-curriculum.py",
-    "test:api": "node --experimental-sqlite --no-warnings --test 'services/api/test/*.test.mjs'",
+    "test": "npm run test --workspace @balashikshana/core-engine && npm run test --workspace @balashikshana/api",
+    "test:engine": "npm run test --workspace @balashikshana/core-engine",
+    "test:api": "npm run test --workspace @balashikshana/api",
     "start:api": "node --no-warnings services/api/server.mjs",
     "start:app": "npm --workspace=apps/mobile run web",
     "start:ios": "npm --workspace=apps/mobile run ios",

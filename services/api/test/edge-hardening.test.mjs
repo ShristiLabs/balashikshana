@@ -1,9 +1,10 @@
 // Edge-hardening regression tests for issue #29 (CORS allowlist, rate
 // limiting, request size caps, structured logging). Runs the real API
 // server as a child process with env-tuned limits so the behaviors are
-// deterministic. Node's built-in test runner only (zero extra deps).
+// deterministic. Vitest suite (issue #32); assertions are the node:test
+// originals, unchanged.
 
-import { test, describe, before, after } from "node:test";
+import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
@@ -53,7 +54,7 @@ function spawnExpectingFailure(extraEnv) {
   });
 }
 
-before(async () => {
+beforeAll(async () => {
   testDatabase = await createTestDatabase();
   serverProcess = await startTestServer({
     port: 4798,
@@ -71,7 +72,7 @@ before(async () => {
   await waitForHealth(API, 120000);
 });
 
-after(async () => {
+afterAll(async () => {
   serverProcess?.kill("SIGTERM");
   if (testDatabase) await dropTestDatabase(testDatabase.name);
 });
@@ -121,6 +122,25 @@ describe("CORS allowlist", () => {
   test("OPTIONS without an Origin header still returns 204 (pre-Fastify parity)", async () => {
     const res = await fetch(`${API}/api/health`, { method: "OPTIONS" });
     assert.equal(res.status, 204);
+  });
+
+  test("preflight short-circuit replies also carry an X-Request-Id UUID", async () => {
+    const noOrigin = await fetch(`${API}/api/health`, { method: "OPTIONS" });
+    assert.equal(noOrigin.status, 204);
+    assert.match(
+      noOrigin.headers.get("x-request-id") || "",
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
+
+    const rejected = await fetch(`${API}/api/students`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://evil.example.com", "Access-Control-Request-Method": "POST" }
+    });
+    assert.equal(rejected.status, 403);
+    assert.match(
+      rejected.headers.get("x-request-id") || "",
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
   });
 
   test("production mode with wildcard ALLOWED_ORIGINS refuses to boot", async () => {

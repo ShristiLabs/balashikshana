@@ -2,8 +2,10 @@
 // completeness, referential integrity, cascade behavior, upsert semantics
 // (the GREATEST/LEAST port), and identity columns. Runs against a
 // throwaway database, same harness style as the sibling suites.
+// Vitest suite (issue #32); assertions are the node:test originals,
+// unchanged.
 
-import { test, describe, before, after } from "node:test";
+import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { Client } from "pg";
 import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
@@ -41,7 +43,7 @@ async function registerStudent(name, pin = "5533") {
   return res.json;
 }
 
-before(async () => {
+beforeAll(async () => {
   testDatabase = await createTestDatabase();
   serverProcess = await startTestServer({
     port: 4797,
@@ -58,7 +60,7 @@ before(async () => {
   await db.connect();
 });
 
-after(async () => {
+afterAll(async () => {
   try {
     await db?.end();
   } catch {
@@ -166,6 +168,90 @@ describe("upsert semantics on PostgreSQL", () => {
     assert.equal(row.attempts_count, 2, "attempts_count must increment per completion");
     assert.ok(row.crowns >= second.json.crownsAwarded, "stored crowns must not decrease");
     assert.equal(row.completed, 1, "GREATEST keeps completed latched at 1 after a weaker attempt");
+  });
+});
+
+describe("curriculum, practice and gate endpoints (happy paths, issue #32 scope)", () => {
+  test("curriculum/summary returns the full seeded overview with gate metadata", async () => {
+    const res = await api("/api/curriculum/summary");
+    assert.equal(res.status, 200);
+    assert.equal(res.json.summary.totalGrades, 5);
+    assert.equal(res.json.summary.totalUnits, 130);
+    assert.equal(res.json.summary.totalSkillTopics, 614);
+    assert.equal(res.json.summary.totalPracticeQuestionsInDb, 6140);
+    const firstUnit = res.json.grades[0].subjects[Object.keys(res.json.grades[0].subjects)[0]].units[0];
+    assert.ok(firstUnit.unitId);
+    assert.ok(firstUnit.masteryGate.minAccuracyPercent > 0);
+    assert.ok(Array.isArray(firstUnit.skillTopics) && firstUnit.skillTopics.length > 0);
+  });
+
+  test("practice/topic fetch serves seeded questions and honors ?count=", async () => {
+    const res = await api("/api/practice/topic/K-M2/I?count=3");
+    assert.equal(res.status, 200);
+    assert.equal(res.json.topic.topicId, "K-M2-I");
+    assert.equal(res.json.practiceProblems.length, 3);
+    for (const q of res.json.practiceProblems) {
+      assert.ok(q.prompt, "question prompt missing");
+      assert.ok(Array.isArray(q.choices) && q.choices.length >= 3);
+      assert.ok(q.correctAnswer !== undefined);
+    }
+  });
+
+  test("gate/evaluate happy path: passing responses award the SILVER_KEY and persist mastery", async () => {
+    const created = await registerStudent("gatehappy", "4545");
+    const studentId = created.student.studentId;
+    const topicCodes = (
+      await db.query("SELECT topic_code FROM skill_topics WHERE unit_id = $1 ORDER BY sequence_order ASC", ["PK-M1"])
+    ).rows.map((r) => r.topic_code);
+    assert.ok(topicCodes.length > 0, "PK-M1 must have seeded topics");
+
+    const coinsBefore = (await db.query("SELECT star_coins FROM students WHERE student_id = $1", [studentId])).rows[0].star_coins;
+    const responses = topicCodes.flatMap((code) => [
+      { topicCode: code, isCorrect: true, rawTimeSec: 3.5 },
+      { topicCode: code, isCorrect: true, rawTimeSec: 3.8 },
+      { topicCode: code, isCorrect: true, rawTimeSec: 4.0 }
+    ]);
+
+    const res = await api("/api/gate/evaluate", {
+      method: "POST",
+      token: created.token,
+      body: { studentId, unitId: "PK-M1", motorBaselineSec: 0.42, responses }
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.equal(res.json.evaluation.passed, true);
+    assert.equal(res.json.evaluation.keyAwarded, "SILVER_KEY");
+    assert.ok(res.json.spacedRepetition.stabilityDays > 0);
+
+    const coinsAfter = (await db.query("SELECT star_coins FROM students WHERE student_id = $1", [studentId])).rows[0].star_coins;
+    assert.equal(coinsAfter - coinsBefore, 50, "a passed gate must award 50 star coins");
+    const progress = (
+      await db.query("SELECT status, key_state FROM student_unit_progress WHERE student_id = $1 AND unit_id = $2", [studentId, "PK-M1"])
+    ).rows[0];
+    assert.ok(progress, "gate evaluation must persist unit progress");
+    assert.equal(progress.status, "MASTERED");
+    assert.equal(progress.key_state, "SILVER_KEY");
+  });
+
+  test("gate/evaluate fail path: empty responses return a remediation outcome, not an error", async () => {
+    const created = await registerStudent("gatefail", "4646");
+    const studentId = created.student.studentId;
+
+    const res = await api("/api/gate/evaluate", {
+      method: "POST",
+      token: created.token,
+      body: { studentId, unitId: "PK-M1", motorBaselineSec: 0.42, responses: [] }
+    });
+    assert.equal(res.status, 200, "a failed gate is a valid outcome, not an HTTP error");
+    assert.equal(res.json.evaluation.passed, false);
+    assert.equal(res.json.evaluation.keyAwarded, null);
+    assert.equal(res.json.evaluation.remediationMode, "MODE_1_CONCEPT_GAP");
+
+    const progress = (
+      await db.query("SELECT status, attempts_count FROM student_unit_progress WHERE student_id = $1 AND unit_id = $2", [studentId, "PK-M1"])
+    ).rows[0];
+    assert.ok(progress, "failed gate attempts must still persist");
+    assert.equal(progress.status, "REMEDIATION_REQUIRED");
+    assert.equal(progress.attempts_count, 1);
   });
 });
 
