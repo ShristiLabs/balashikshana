@@ -67,3 +67,21 @@ jobs:
           curl -fsS http://127.0.0.1:4000/api/curriculum/summary > /dev/null
           curl -fsS "http://127.0.0.1:4000/api/practice/topic/K-M2/I?count=8" > /dev/null
           kill $API_PID
+
+      - name: OpenAPI Breaking-Change Gate (oasdiff, additive-only)
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          if git cat-file -e origin/main:docs/openapi/baseline.yaml 2>/dev/null; then
+            git show origin/main:docs/openapi/baseline.yaml > /tmp/baseline-main.yaml
+            echo "Diffing working-tree spec against origin/main baseline..."
+            docker run --rm \
+              -v "${PWD}:/specs:ro" \
+              -v /tmp/baseline-main.yaml:/baseline.yaml:ro \
+              tufin/oasdiff:latest breaking --fail-on WARN \
+              /baseline.yaml /specs/docs/openapi/baseline.yaml
+            echo "No breaking API changes detected."
+          else
+            echo "No docs/openapi/baseline.yaml on origin/main; this change establishes the baseline."
+            test -f docs/openapi/baseline.yaml
+          fi

@@ -936,7 +936,9 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Login failed");
+        // Errors are RFC 9457 problem+json (detail); keep data.error as a
+        // fallback for older server builds.
+        alert(data.detail || data.error || "Login failed");
         return;
       }
       enterAppWithSession(data.token, data.student, data.summary);
@@ -959,7 +961,9 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Could not create the account.");
+        // Errors are RFC 9457 problem+json (detail); keep data.error as a
+        // fallback for older server builds.
+        alert(data.detail || data.error || "Could not create the account.");
         return;
       }
       playSound("/assets/sounds/sfx_star_fanfare.wav");

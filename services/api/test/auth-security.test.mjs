@@ -1,10 +1,10 @@
 // Security regression tests for issue #28 (auth and session hardening).
 //
-// Runs the real API server as a child process against a throwaway SQLite
-// database and exercises the session/PIN lifecycle end to end, including
-// the cross-student access (IDOR) denial that is the core acceptance
-// criterion. Uses Node's built-in test runner only (zero dependencies);
-// issue #32 ports these cases onto vitest with the Postgres-backed suite.
+// Runs the real API server as a child process against a throwaway
+// PostgreSQL database and exercises the session/PIN lifecycle end to end,
+// including the cross-student access (IDOR) denial that is the core
+// acceptance criterion. Uses Node's built-in test runner only (zero
+// dependencies); issue #32 ports these cases onto vitest.
 
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -34,7 +34,9 @@ async function api(pathname, { method = "GET", token, body } = {}) {
   } catch {
     // non-JSON response
   }
-  return { status: res.status, json };
+  // `json` is the historical name; `body`/`headers` alias the same fields
+  // for tests that assert the RFC 9457 document shape and content type.
+  return { status: res.status, json, body: json, headers: res.headers };
 }
 
 async function waitForHealthLocal(timeoutMs = 60000) {
@@ -123,10 +125,25 @@ describe("login", () => {
     assert.equal(res.status, 401);
   });
 
-  test("missing PIN returns 401 (PIN-less login is gone)", async () => {
+  test("empty-string PIN returns 400 problem+json (schema-validated)", async () => {
     await registerStudent("nopinlogin", "4242");
     const res = await login({ username: "nopinlogin" }, "");
+    assert.equal(res.status, 400);
+    assert.equal(res.json.status, 400);
+    assert.equal(res.json.title, "Validation failed");
+    assert.ok(Array.isArray(res.json.errors), "schema validation details must be present");
+  });
+
+  test("absent PIN field returns 401 (PIN-less login is gone, uniform with wrong PIN)", async () => {
+    await registerStudent("nopinfield", "4242");
+    const res = await api("/api/auth/login", {
+      method: "POST",
+      body: { username: "nopinfield" }
+    });
     assert.equal(res.status, 401);
+    const wrong = await login({ username: "nopinfield" }, "9999");
+    assert.equal(wrong.status, 401);
+    assert.deepEqual(res.json, wrong.json, "absent-PIN and wrong-PIN must be indistinguishable");
   });
 
   test("unknown user and wrong PIN return identical 401 bodies (no enumeration)", async () => {
@@ -211,6 +228,10 @@ describe("session validation (IDOR fix)", () => {
       token: alice.token
     });
     assert.equal(res.status, 403);
+    // RFC 9457 contract: authorization failures are problem documents too.
+    assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
+    assert.equal(res.body.status, 403);
+    assert.ok(res.body.detail, "problem+json detail missing on 403");
   });
 
   test("cross-student calibrate with a valid token returns 403", async () => {

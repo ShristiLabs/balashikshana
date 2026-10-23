@@ -1,0 +1,1007 @@
+# Balashikshana Sync & Analytics API - OpenAPI baseline (issue #31).
+#
+# Hand-authored contract for the full route inventory served by
+# services/api/server.mjs (Fastify). This file is the API BASELINE for the
+# oasdiff breaking-change CI gate: pull requests are compared against the
+# baseline on the target branch and the gate fails on breaking changes
+# (removed paths/operations, narrowed parameters, changed response codes or
+# content types). Additive evolution (new routes, new optional fields, new
+# response fields) is allowed.
+#
+# Error contract: every error response is RFC 9457 application/problem+json
+# (type, title, status, detail, instance; validation failures add `errors`
+# with per-instance AJV details; 429 adds a Retry-After header).
+
+openapi: 3.1.0
+info:
+  title: Balashikshana Sync & Analytics API
+  version: 0.1.0
+  description: |
+    Pre-K to G3 learning platform API. Serves the curriculum registry,
+    practice questions, student sessions (scrypt PIN auth), progress
+    persistence, mastery gates, and spaced-repetition state. The datastore
+    is PostgreSQL; the mastery/fluency engine is shared isomorphic code
+    from packages/core-engine.
+  license:
+    name: Proprietary
+servers:
+  - url: http://localhost:4000
+    description: Local development (startup.sh)
+tags:
+  - name: system
+  - name: students
+  - name: auth
+  - name: curriculum
+  - name: practice
+  - name: gate
+
+security: []
+
+paths:
+  /api/health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Database and content counts (liveness/readiness)
+      responses:
+        "200":
+          description: Service healthy; served database reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/students:
+    get:
+      tags: [students]
+      operationId: listStudents
+      summary: Public profile cards for the login screen
+      description: |
+        Returns public profile fields only. With a valid session token the
+        response additionally carries `ownSummary` (the caller's own
+        progress summary). Progress data for other students is never
+        included.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Public student cards (plus own summary when authed)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [students]
+                properties:
+                  students:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StudentPublic"
+                  ownSummary:
+                    $ref: "#/components/schemas/StudentSummary"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+    post:
+      tags: [students]
+      operationId: registerStudent
+      summary: Register a new student account and open a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created; session token issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStateResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/students/{studentId}:
+    get:
+      tags: [students]
+      operationId: getStudentState
+      summary: Full student state (session must own this student)
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Full state (student profile + progress + summary)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentFullState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/students/{studentId}/calibrate:
+    post:
+      tags: [students]
+      operationId: calibrateStudent
+      summary: Update the student's motor baseline (session must own this student)
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalibrateRequest"
+      responses:
+        "200":
+          description: Updated full student state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentFullState"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Authenticate by username (or studentId) + 4-digit PIN
+      description: |
+        Unknown user, wrong PIN, and missing PIN all fail uniformly (401)
+        so responses cannot enumerate accounts. Stricter per-IP rate limit
+        than other routes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated; session token (30-day TTL) issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStateResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the caller's session token
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Token revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/curriculum/summary:
+    get:
+      tags: [curriculum]
+      operationId: getCurriculumSummary
+      summary: Grades, subjects, units, and skill-topic overview
+      responses:
+        "200":
+          description: Full curriculum tree with per-grade spaced-repetition policy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary, grades]
+                properties:
+                  summary:
+                    $ref: "#/components/schemas/CurriculumCounts"
+                  grades:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CurriculumGrade"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/curriculum/unit/{unitId}:
+    get:
+      tags: [curriculum]
+      operationId: getUnit
+      summary: Unit detail plus stratified Boss Gate questions
+      parameters:
+        - $ref: "#/components/parameters/UnitId"
+        - name: count
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 50
+          description: Number of gate questions to select (defaults to the unit's gate size)
+      responses:
+        "200":
+          description: Unit with skill topics and selected gate questions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unit, generatedQuestions]
+                properties:
+                  unit:
+                    $ref: "#/components/schemas/CurriculumUnit"
+                  generatedQuestions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PracticeQuestion"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/practice/topic/{unitId}/{topicCode}:
+    get:
+      tags: [practice]
+      operationId: getTopicPractice
+      summary: Stored practice questions for one skill topic
+      parameters:
+        - $ref: "#/components/parameters/UnitId"
+        - name: topicCode
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Topic code within the unit (topicId is `{unitId}-{topicCode}`)
+        - name: count
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 50
+            default: 8
+          description: Number of questions to return
+      responses:
+        "200":
+          description: Topic metadata and practice problems ordered by difficulty
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unitId, unitTitle, targetSpeedSec, minAccuracyPercent, topic, practiceProblems]
+                properties:
+                  unitId:
+                    type: string
+                  unitTitle:
+                    type: string
+                  targetSpeedSec:
+                    type: number
+                  minAccuracyPercent:
+                    type: integer
+                    const: 80
+                  topic:
+                    $ref: "#/components/schemas/SkillTopic"
+                  practiceProblems:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PracticeQuestion"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/practice/topic/complete:
+    post:
+      tags: [practice]
+      operationId: completeTopicPractice
+      summary: Persist a topic-practice session (attempts, crowns, spaced repetition)
+      description: Session token must belong to `studentId`.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PracticeCompleteRequest"
+      responses:
+        "200":
+          description: Completion outcome with updated student state and SR schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passedTopic, crownsAwarded, accuracyPct, medianCogSpeedSec, targetSpeedSec, bossGateUnlocked, spacedRepetition, student, summary]
+                properties:
+                  passedTopic:
+                    type: boolean
+                  crownsAwarded:
+                    type: integer
+                  accuracyPct:
+                    type: number
+                  medianCogSpeedSec:
+                    type: number
+                  targetSpeedSec:
+                    type: number
+                  bossGateUnlocked:
+                    type: boolean
+                  spacedRepetition:
+                    $ref: "#/components/schemas/SpacedRepetitionUpdate"
+                  student:
+                    $ref: "#/components/schemas/StudentProfile"
+                  summary:
+                    $ref: "#/components/schemas/StudentSummary"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/gate/evaluate:
+    post:
+      tags: [gate]
+      operationId: evaluateGate
+      summary: Evaluate a Unit Boss Gate attempt and persist unit mastery
+      description: Session token must belong to `studentId`.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GateEvaluateRequest"
+      responses:
+        "200":
+          description: Gate evaluation with key award and updated state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [student, summary, evaluation, spacedRepetition]
+                properties:
+                  student:
+                    $ref: "#/components/schemas/StudentProfile"
+                  summary:
+                    $ref: "#/components/schemas/StudentSummary"
+                  evaluation:
+                    type: object
+                    required: [passed, keyAwarded]
+                    properties:
+                      passed:
+                        type: boolean
+                      keyAwarded:
+                        type:
+                          - string
+                          - "null"
+                        enum: [SILVER_KEY, GOLD_KEY, null]
+                      overallAccuracyPct:
+                        type: number
+                      medianCogSpeedSec:
+                        type: number
+                  spacedRepetition:
+                    $ref: "#/components/schemas/SpacedRepetitionUpdate"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+components:
+  parameters:
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: Student identifier (e.g. stu-maya-pk)
+    UnitId:
+      name: unitId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: Unit identifier (e.g. K-M2)
+    SessionToken:
+      name: Authorization
+      in: header
+      required: false
+      schema:
+        type: string
+      description: "`Bearer <token>` from login/registration; required on student-scoped routes"
+
+  responses:
+    Validation:
+      description: Request failed schema validation (problem+json carries AJV details in `errors`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Missing, malformed, unknown, expired, or revoked session token
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: Session does not grant access to the requested student
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Unknown route, student, unit, or topic
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    PayloadTooLarge:
+      description: Request body exceeds the configured byte limit
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RateLimited:
+      description: Rate limit exceeded (per-IP, per-session-token, or login); Retry-After header present
+      headers:
+        Retry-After:
+          description: Seconds until the fixed window resets
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Internal:
+      description: Unexpected server error (no internals leaked)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      description: RFC 9457 problem details; served as application/problem+json on every error
+      type: object
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          description: Problem type URI (about:blank when unspecified)
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        errors:
+          type: array
+          description: Present on 400 validation failures; per-instance schema errors
+          items:
+            type: object
+            additionalProperties: true
+
+    HealthResponse:
+      type: object
+      required: [status, databaseEngine, totalGrades, totalUnits, totalSkillTopics, totalPracticeQuestionsInDb, totalStudentsInDb, totalQuestionAttemptsInDb]
+      properties:
+        status:
+          type: string
+          const: ok
+        databaseEngine:
+          type: string
+        totalGrades:
+          type: integer
+        totalUnits:
+          type: integer
+        totalSkillTopics:
+          type: integer
+        totalPracticeQuestionsInDb:
+          type: integer
+        totalStudentsInDb:
+          type: integer
+        totalQuestionAttemptsInDb:
+          type: integer
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      anyOf:
+        - required: [username]
+        - required: [studentId]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Username or nickname (case-insensitive)
+        studentId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        pin:
+          type: string
+          pattern: "^[0-9]{4}$"
+          description: 4-digit PIN (whitespace-trimmed before validation)
+
+    RegisterRequest:
+      type: object
+      required: [pin]
+      properties:
+        nickname:
+          type: string
+          maxLength: 32
+        username:
+          type: string
+          maxLength: 32
+        pin:
+          type: string
+          pattern: "^[0-9]{4}$"
+        currentGrade:
+          type: string
+          enum: [pre-k, kindergarten, grade-1, grade-2, grade-3]
+        ageYears:
+          type: number
+          minimum: 3
+          maximum: 10
+        avatar:
+          type: string
+          maxLength: 8
+
+    CalibrateRequest:
+      type: object
+      properties:
+        warmupTapTimesSec:
+          type: array
+          items:
+            type: number
+          description: Warm-up tap durations; the median becomes the motor baseline
+        motorBaselineSec:
+          type: number
+          minimum: 0
+          maximum: 5
+
+    PracticeCompleteRequest:
+      type: object
+      required: [studentId, unitId, topicCode]
+      properties:
+        studentId:
+          type: string
+          minLength: 1
+        unitId:
+          type: string
+          minLength: 1
+        topicCode:
+          type: string
+          minLength: 1
+        motorBaselineSec:
+          type: number
+        responses:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+              chosenAnswer:
+                type:
+                  - string
+                  - number
+              isCorrect:
+                type: boolean
+              rawTimeSec:
+                type: number
+              misconceptionTags:
+                type: array
+                items:
+                  type: string
+
+    GateEvaluateRequest:
+      type: object
+      required: [studentId, unitId]
+      properties:
+        studentId:
+          type: string
+          minLength: 1
+        unitId:
+          type: string
+          minLength: 1
+        motorBaselineSec:
+          type: number
+        responses:
+          type: array
+          items:
+            type: object
+            properties:
+              topicCode:
+                type: string
+              isCorrect:
+                type: boolean
+              rawTimeSec:
+                type: number
+
+    AuthStateResponse:
+      type: object
+      required: [token, student, summary]
+      properties:
+        token:
+          type: string
+          description: Opaque base64url session token (30-day TTL)
+        student:
+          $ref: "#/components/schemas/StudentProfile"
+        summary:
+          $ref: "#/components/schemas/StudentSummary"
+
+    StudentPublic:
+      type: object
+      required: [studentId, username, nickname, avatar, ageYears, currentGrade]
+      properties:
+        studentId:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        avatar:
+          type: string
+        ageYears:
+          type: integer
+        currentGrade:
+          type: string
+          enum: [pre-k, kindergarten, grade-1, grade-2, grade-3]
+
+    StudentProfile:
+      description: Full student record with progress maps (shape is engine-defined and additive)
+      allOf:
+        - $ref: "#/components/schemas/StudentPublic"
+        - type: object
+          required: [motorBaselineSec, streakDays, starCoins, hearts, unitProgress, topicMastery]
+          properties:
+            motorBaselineSec:
+              type: number
+            streakDays:
+              type: integer
+            starCoins:
+              type: integer
+            hearts:
+              type: integer
+            unitProgress:
+              type: object
+              additionalProperties:
+                type: object
+                additionalProperties: true
+            topicMastery:
+              type: object
+              additionalProperties:
+                type: object
+                additionalProperties: true
+
+    StudentSummary:
+      type: object
+      required: [studentId, completedTopicsCount, masteredUnitsCount, goldKeysCount, silverKeysCount, dueSpacedReviewsCount, gardenHealthPct, totalQuestionAttemptsLogged]
+      properties:
+        studentId:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        avatar:
+          type: string
+        ageYears:
+          type: integer
+        currentGrade:
+          type: string
+        motorBaselineSec:
+          type: number
+        streakDays:
+          type: integer
+        starCoins:
+          type: integer
+        hearts:
+          type: integer
+        completedTopicsCount:
+          type: integer
+        masteredUnitsCount:
+          type: integer
+        goldKeysCount:
+          type: integer
+        silverKeysCount:
+          type: integer
+        dueSpacedReviewsCount:
+          type: integer
+        gardenHealthPct:
+          type: integer
+        totalQuestionAttemptsLogged:
+          type: integer
+
+    StudentFullState:
+      type: object
+      required: [student, summary]
+      properties:
+        student:
+          $ref: "#/components/schemas/StudentProfile"
+        summary:
+          $ref: "#/components/schemas/StudentSummary"
+
+    CurriculumCounts:
+      type: object
+      required: [totalGrades, totalUnits, totalSkillTopics, totalPracticeQuestionsInDb]
+      properties:
+        totalGrades:
+          type: integer
+        totalUnits:
+          type: integer
+        totalSkillTopics:
+          type: integer
+        totalPracticeQuestionsInDb:
+          type: integer
+
+    CurriculumGrade:
+      type: object
+      required: [gradeId, gradeName, targetAgeYears, spacedRepetitionPolicy, subjects]
+      properties:
+        gradeId:
+          type: string
+        gradeName:
+          type: string
+        targetAgeYears:
+          type: string
+        spacedRepetitionPolicy:
+          type: object
+          required: [stabilityGrowthFactor, maxIntervalCapDays, baseScheduleDays]
+          properties:
+            stabilityGrowthFactor:
+              type: number
+            maxIntervalCapDays:
+              type: integer
+            baseScheduleDays:
+              type: array
+              items:
+                type: integer
+        subjects:
+          type: object
+          additionalProperties:
+            type: object
+            required: [totalUnits, totalSkillTopics, units]
+            properties:
+              totalUnits:
+                type: integer
+              totalSkillTopics:
+                type: integer
+              units:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CurriculumUnitSummary"
+
+    CurriculumUnitSummary:
+      type: object
+      required: [unitId, sequenceOrder, title, prerequisiteUnitIds, masteryGate, skillTopics]
+      properties:
+        unitId:
+          type: string
+        sequenceOrder:
+          type: integer
+        title:
+          type: string
+        prerequisiteUnitIds:
+          type: array
+          items:
+            type: string
+        masteryGate:
+          $ref: "#/components/schemas/MasteryGate"
+        skillTopics:
+          type: array
+          items:
+            type: object
+            required: [code, name, topicId]
+            properties:
+              code:
+                type: string
+              name:
+                type: string
+              topicId:
+                type: string
+
+    CurriculumUnit:
+      type: object
+      required: [unitId, gradeId, subject, sequenceOrder, title, prerequisiteUnitIds, masteryGate, skillTopics]
+      properties:
+        unitId:
+          type: string
+        gradeId:
+          type: string
+        subject:
+          type: string
+        sequenceOrder:
+          type: integer
+        title:
+          type: string
+        prerequisiteUnitIds:
+          type: array
+          items:
+            type: string
+        masteryGate:
+          $ref: "#/components/schemas/MasteryGate"
+        skillTopics:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillTopic"
+
+    MasteryGate:
+      type: object
+      required: [questionCount, minAccuracyPercent, maxMedianResponseTimeSec, challengeZoneStreak]
+      properties:
+        questionCount:
+          type: integer
+        minAccuracyPercent:
+          type: number
+        maxMedianResponseTimeSec:
+          type: number
+        challengeZoneStreak:
+          type: integer
+
+    SkillTopic:
+      type: object
+      required: [topicId, code, name, assets]
+      properties:
+        topicId:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        assets:
+          type: object
+          additionalProperties: true
+          description: 9-asset contract payload (song, story, video, game, ...)
+
+    PracticeQuestion:
+      description: Stored practice question (shape is engine-defined and additive)
+      type: object
+      required: [questionId, topicId, unitId, topicCode, topicName, difficultyLevel, interactionType, prompt, visualAid, choices, correctAnswer, misconceptionTags, explanation]
+      properties:
+        questionId:
+          type: string
+        topicId:
+          type: string
+        unitId:
+          type: string
+        topicCode:
+          type: string
+        topicName:
+          type: string
+        difficultyLevel:
+          type: integer
+        interactionType:
+          type: string
+        prompt:
+          type: string
+        visualAid:
+          type: string
+        visualObjects:
+          type: array
+          items: {}
+        targetCount:
+          type: integer
+        maxCounterCells:
+          type: integer
+        counterEmoji:
+          type: string
+        tileBank:
+          type: array
+          items:
+            type: string
+        choices:
+          type: array
+          items: {}
+        correctAnswer:
+          type: string
+        misconceptionTags:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+
+    SpacedRepetitionUpdate:
+      type: object
+      required: [stabilityDays]
+      properties:
+        stabilityDays:
+          type: number
+        cpaStage:
+          type: string
+        nextReviewAt:
+          type: string
+          format: date-time
+        retrievabilityPct:
+          type: number
