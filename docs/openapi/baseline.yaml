@@ -31,6 +31,7 @@ tags:
   - name: system
   - name: students
   - name: auth
+  - name: parents
   - name: curriculum
   - name: practice
   - name: gate
@@ -228,6 +229,292 @@ paths:
                     const: true
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/signup:
+    post:
+      tags: [parents]
+      operationId: signupParent
+      summary: Create a parent account (email stored unverified) and issue an email-verification token
+      description: |
+        Passwords are scrypt-hashed with the shared db.mjs parameters.
+        Duplicate (case-insensitive) email returns 409. The verification
+        token is single-use, expires after 24 hours, and is returned in the
+        response body only in non-production environments (dev email-seam;
+        production sends it via the #63 SMTP seam).
+        Rate limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentSignupRequest"
+      responses:
+        "201":
+          description: Parent created; email not yet verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParentSignupResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/verify-email:
+    post:
+      tags: [parents]
+      operationId: verifyParentEmail
+      summary: Consume an email-verification token and mark the email verified
+      description: |
+        The token is consumed exactly once (atomic consume; replays and
+        expired tokens all fail with the same 400 invalid-token problem, so
+        the failure mode is not an oracle). `email_verified_at` is set only
+        through this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentTokenRequest"
+      responses:
+        "200":
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, emailVerified]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  emailVerified:
+                    type: boolean
+                    const: true
+        "400":
+          $ref: "#/components/responses/Validation"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/login:
+    post:
+      tags: [parents]
+      operationId: loginParent
+      summary: Authenticate a parent by email + password and issue a session token
+      description: |
+        Unknown email and wrong password return byte-identical 401 problems
+        (a dummy scrypt verification runs on the unknown-account path to
+        equalize timing). Login is allowed before email verification; the
+        response carries `emailVerified` so consent-gated surfaces (#41)
+        can enforce verification. Parent session tokens are distinct from
+        student session tokens: student routes reject them with a 403
+        wrong-token-type problem.
+        Rate limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentCredentialsRequest"
+      responses:
+        "200":
+          description: Authenticated; parent session token issued (7-day TTL, 30-day refresh window)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParentLoginResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/refresh:
+    post:
+      tags: [parents]
+      operationId: refreshParentSession
+      summary: Rotate the parent session token within its refresh window
+      description: |
+        Requires a valid, unrevoked parent bearer token. Rotation revokes
+        the presented token and issues a fresh one with a new 7-day TTL and
+        a new 30-day refresh window (sliding per lineage). Beyond the
+        refresh window the reply is a 401 refresh-expired problem.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Rotated; new session token issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParentTokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/logout:
+    post:
+      tags: [parents]
+      operationId: logoutParent
+      summary: Revoke the caller's parent session token
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/logout-all:
+    post:
+      tags: [parents]
+      operationId: logoutAllParentSessions
+      summary: Revoke every active session for the authenticated parent
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: All active sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, revokedSessions]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  revokedSessions:
+                    type: integer
+                    description: Number of sessions that were still active
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/password-reset/request:
+    post:
+      tags: [parents]
+      operationId: requestParentPasswordReset
+      summary: Request a password reset (response is identical whether or not the email exists)
+      description: |
+        Always returns 202 with the same body for known and unknown emails
+        (no account enumeration). When the account exists, a single-use
+        1-hour reset token is minted and any outstanding reset token for
+        the parent is superseded; the token is returned in the response
+        body only in non-production environments (dev email-seam).
+        Rate limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentEmailRequest"
+      responses:
+        "202":
+          description: Reset requested (uniform body; no existence signal)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, message]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  message:
+                    type: string
+                  resetToken:
+                    type: string
+                    description: Dev email-seam only (non-production); never present in production
+                  resetTokenExpiresAt:
+                    type: string
+                    description: Dev email-seam only (non-production)
+        "400":
+          $ref: "#/components/responses/Validation"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parents/password-reset/confirm:
+    post:
+      tags: [parents]
+      operationId: confirmParentPasswordReset
+      summary: Consume a reset token, set the new password, and revoke all sessions
+      description: |
+        The token is consumed exactly once; replays and expired tokens fail
+        with the same 400 invalid-token problem. A successful reset updates
+        the scrypt password hash, revokes every active parent session, and
+        supersedes remaining reset tokens.
+        Rate limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentResetConfirmRequest"
+      responses:
+        "200":
+          description: Password updated; all sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+        "400":
+          $ref: "#/components/responses/Validation"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -510,7 +797,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Forbidden:
-      description: Session does not grant access to the requested student
+      description: Session does not grant access to the requested student, or the token is of the wrong type for the route (e.g. a parent session token on a student route)
       content:
         application/problem+json:
           schema:
@@ -540,6 +827,12 @@ components:
             $ref: "#/components/schemas/Problem"
     Internal:
       description: Unexpected server error (no internals leaked)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Resource already exists (e.g. parent signup with a registered email)
       content:
         application/problem+json:
           schema:
@@ -719,6 +1012,129 @@ components:
           $ref: "#/components/schemas/StudentProfile"
         summary:
           $ref: "#/components/schemas/StudentSummary"
+
+    ParentSignupRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          description: Email address (whitespace-trimmed, stored and matched case-insensitively)
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: Parent password (leading/trailing whitespace trimmed before validation and hashing, so the length bounds apply post-trim; interior spaces allowed); stored as a salted scrypt hash
+
+    ParentCredentialsRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          description: Email address (matched case-insensitively)
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: Parent password (leading/trailing whitespace trimmed; bounds apply post-trim)
+
+    ParentEmailRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+
+    ParentTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 20
+          maxLength: 128
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Single-use base64url token from signup (email verification)
+
+    ParentResetConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          minLength: 20
+          maxLength: 128
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Single-use base64url reset token from password-reset/request
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: New parent password (leading/trailing whitespace trimmed; bounds apply post-trim)
+
+    ParentAccount:
+      type: object
+      required: [parentId, email, emailVerified]
+      properties:
+        parentId:
+          type: string
+          description: App-generated parent identifier (par-... convention)
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        emailVerifiedAt:
+          type:
+            - string
+            - "null"
+
+    ParentSignupResponse:
+      type: object
+      required: [parentId, email, emailVerified]
+      properties:
+        parentId:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+          const: false
+        verificationToken:
+          type: string
+          description: Dev email-seam only (non-production); never present in production
+        verificationTokenExpiresAt:
+          type: string
+          description: Dev email-seam only (non-production)
+
+    ParentLoginResponse:
+      type: object
+      required: [token, parent]
+      properties:
+        token:
+          type: string
+          description: Opaque base64url parent session token (7-day TTL, 30-day refresh window)
+        parent:
+          $ref: "#/components/schemas/ParentAccount"
+
+    ParentTokenResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Rotated parent session token (old token revoked)
 
     StudentPublic:
       type: object

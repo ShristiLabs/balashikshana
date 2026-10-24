@@ -11,6 +11,8 @@ import {
   isLegacyStoredPin,
   createSessionToken
 } from "./db.mjs";
+import { sendProblem, PROBLEM_BASE, STATUS_TITLES } from "./problem.mjs";
+import { parentAuthPlugin, resolveBearerAuth } from "./parent-auth.mjs";
 import {
   median,
   computeMotorBaselineSec,
@@ -31,6 +33,11 @@ import {
 // RATE_LIMIT_PER_IP_MIN       general per-IP requests/minute     (default 120)
 // RATE_LIMIT_PER_TOKEN_MIN    per-token requests/minute          (default 60)
 // RATE_LIMIT_LOGIN_PER_IP_MIN login attempts/minute per IP       (default 10)
+// RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN parent signups/minute per IP  (default 5)
+// RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN  parent logins/minute per IP   (default 10)
+// RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN  parent token-presenting routes/minute per IP
+//                                    (verify-email, reset confirm)  (default 10)
+// RATE_LIMIT_PARENT_RESET_PER_IP_MIN  parent reset requests/minute per IP (default 5)
 const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
 
 function parseAllowedOrigins() {
@@ -53,6 +60,10 @@ const BODY_LIMIT_BYTES = Number(process.env.BODY_LIMIT_BYTES || 65536);
 const RATE_LIMIT_PER_IP_MIN = Number(process.env.RATE_LIMIT_PER_IP_MIN || 120);
 const RATE_LIMIT_PER_TOKEN_MIN = Number(process.env.RATE_LIMIT_PER_TOKEN_MIN || 60);
 const RATE_LIMIT_LOGIN_PER_IP_MIN = Number(process.env.RATE_LIMIT_LOGIN_PER_IP_MIN || 10);
+const RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN || 5);
+const RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN || 10);
+const RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN || 10);
+const RATE_LIMIT_PARENT_RESET_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_RESET_PER_IP_MIN || 5);
 const URL_LENGTH_LIMIT = 2048;
 const SESSION_TTL_MS = 30 * 86400000;
 
@@ -81,61 +92,46 @@ process.on("uncaughtException", (err) => {
 });
 
 // --- RFC 9457 problem+json -------------------------------------------------
+// Envelope lives in problem.mjs (shared with parent-auth.mjs); re-exported
+// here for any existing importer of the server module.
 
-const PROBLEM_BASE = "https://balashikshana.dev/problems";
-const STATUS_TITLES = {
-  400: "Bad Request",
-  401: "Unauthorized",
-  403: "Forbidden",
-  404: "Not Found",
-  413: "Payload Too Large",
-  414: "URI Too Long",
-  429: "Too Many Requests",
-  500: "Internal Server Error"
-};
-
-export function sendProblem(reply, status, { type, title, detail, errors, retryAfterSec } = {}) {
-  const body = {
-    type: type || "about:blank",
-    title: title || STATUS_TITLES[status] || "Error",
-    status,
-    detail: detail || STATUS_TITLES[status] || "Error",
-    instance: reply.request.url
-  };
-  if (errors) body.errors = errors;
-  if (retryAfterSec !== undefined) {
-    reply.header("Retry-After", String(Math.max(1, Math.ceil(retryAfterSec))));
-  }
-  reply.code(status).type("application/problem+json; charset=utf-8").send(body);
-}
+export { sendProblem };
 
 // --- Session authentication ----------------------------------------------
 // Every student-scoped route must pass requireStudentAccess, which binds
 // the requested studentId to the session token from the Authorization
-// header. Missing/unknown/expired tokens -> 401; a valid token for a
-// DIFFERENT student -> 403. Expired rows are lazily deleted on lookup.
+// header. Missing/unknown/expired/revoked tokens -> 401; a valid token for
+// a DIFFERENT student -> 403. Expired rows are lazily deleted on lookup.
+//
+// Token-kind awareness (issue #40): resolveBearerAuth (parent-auth.mjs)
+// resolves the bearer token to a kind — 'student' or 'parent' (#42 adds
+// 'child-device'). A parent token on a student-scoped route is a 403
+// wrong-token-type problem. The public /api/students listing stays lenient:
+// a parent (or unknown) token simply yields the public list without an
+// ownSummary, preserving the M1 contract.
 
 async function getSessionFromRequest(req) {
-  const authHeader = req.headers.authorization || "";
-  const [scheme, token] = authHeader.split(" ");
-  if (scheme !== "Bearer" || !token || /[^A-Za-z0-9_-]/.test(token)) {
-    return { error: "Missing or malformed bearer token" };
+  const auth = await resolveBearerAuth(db, req.headers.authorization);
+  if (auth.error) {
+    return { error: auth.error };
   }
-  const row = await db.get("SELECT * FROM student_sessions WHERE token = $1", [token]);
-  if (!row) {
-    return { error: "Session token is invalid or has been revoked" };
+  if (auth.kind !== "student") {
+    return { wrongType: auth.kind };
   }
-  if (new Date(row.expires_at).getTime() <= Date.now()) {
-    await db.run("DELETE FROM student_sessions WHERE token = $1", [token]);
-    return { error: "Session token has expired" };
-  }
-  return { session: row };
+  return { session: auth.session };
 }
 
 async function requireStudentAccess(req, reply, studentId) {
   const auth = await getSessionFromRequest(req);
   if (auth.error) {
     sendProblem(reply, 401, { type: `${PROBLEM_BASE}/unauthorized`, detail: auth.error });
+    return null;
+  }
+  if (auth.wrongType) {
+    sendProblem(reply, 403, {
+      type: `${PROBLEM_BASE}/wrong-token-type`,
+      detail: "Parent session tokens cannot access student routes."
+    });
     return null;
   }
   if (auth.session.student_id !== studentId) {
@@ -484,7 +480,8 @@ app.addHook("onResponse", (req, reply, done) => {
       statusCode: reply.statusCode,
       durationMs: Date.now() - (req._balashiStartedAt || Date.now()),
       ip: req.ip,
-      studentId: req._balashiStudentId || undefined
+      studentId: req._balashiStudentId || undefined,
+      parentId: req._balashiParentId || undefined
     },
     "request"
   );
@@ -521,6 +518,24 @@ app.setErrorHandler((err, req, reply) => {
 
 app.setNotFoundHandler((req, reply) => {
   sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: "Route not found" });
+});
+
+// Parent auth routes (issue #40): signup/verify-email/login/refresh/
+// logout/logout-all/password-reset. Registered after the global plugins so
+// helmet, CORS, and the rate-limit buckets apply. refresh/logout/logout-all
+// carry bearer tokens and sit behind the global per-IP + per-token buckets;
+// the token-guessing and email-harvesting routes get dedicated route-level
+// buckets (M1 login-bucket pattern).
+await app.register(parentAuthPlugin, {
+  db,
+  isProduction: IS_PRODUCTION,
+  logger,
+  rateLimits: {
+    signup: { max: RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN, timeWindow: "1 minute" },
+    login: { max: RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN, timeWindow: "1 minute" },
+    token: { max: RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN, timeWindow: "1 minute" },
+    reset: { max: RATE_LIMIT_PARENT_RESET_PER_IP_MIN, timeWindow: "1 minute" }
+  }
 });
 
 // --- Routes --------------------------------------------------------------------
@@ -1149,7 +1164,11 @@ app
         rateLimits: {
           perIpMin: RATE_LIMIT_PER_IP_MIN,
           perTokenMin: RATE_LIMIT_PER_TOKEN_MIN,
-          loginPerIpMin: RATE_LIMIT_LOGIN_PER_IP_MIN
+          loginPerIpMin: RATE_LIMIT_LOGIN_PER_IP_MIN,
+          parentSignupPerIpMin: RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN,
+          parentLoginPerIpMin: RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN,
+          parentTokenPerIpMin: RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN,
+          parentResetPerIpMin: RATE_LIMIT_PARENT_RESET_PER_IP_MIN
         }
       },
       "Balashikshana API listening"
