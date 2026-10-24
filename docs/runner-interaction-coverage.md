@@ -47,9 +47,9 @@ then hidden (content timing, not animation); abstract = choices only.
   concrete stage. On native, the widget kit renders the manipulatives
   interactively (the counting frame IS the ten-frame); the visual_aid
   asset stem surfaces as the manipulative-anchor label on the visual
-  scaffold. Full native SVG art parity remains deferred to the M4
-  archetype renderer packs (#54 and later — issue #53's pack A renderers
-  are RN component surfaces over the existing widget kit; see
+  scaffold. Full native SVG art parity remains deferred to the later
+  M4 archetype renderer packs (issues #53 and #54 shipped RN component
+  surfaces over the existing widget kit; see
   `docs/games-coverage.md`).
 - Every seeded row carries a non-empty `choices` array (asserted by the
   coverage test), so the choice grid is the universal degraded-stage

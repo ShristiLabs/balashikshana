@@ -101,6 +101,10 @@ export function GameSessionScreen({
   const audioRef = useRef<AudioCoordinator | null>(null);
   const narrationSecRef = useRef(0);
   const questionStartRef = useRef(0);
+  // Mirror of the latest published draft: the #54 reflex seam
+  // (onSubmitAnswer) fires in the SAME tick as the draft dispatch, so
+  // handleCheck must not wait for the re-render to see it.
+  const draftRef = useRef<string | null>(null);
   const progressByTopicRef = useRef<Record<string, TopicProgressRecord>>({});
   const effectiveGradeRef = useRef<string | null>(null);
   /**
@@ -297,61 +301,80 @@ export function GameSessionScreen({
   // Check + continue (durable recording per response; the engine owns
   // derivation + telemetry stamping).
   // ------------------------------------------------------------------
-  const handleCheck = useCallback(async () => {
-    const activeQuestion = currentGameQuestion(state);
-    const activeItem = state.schedule.items[state.index];
-    if (state.phase !== "question" || !activeQuestion || !state.sessionId || !activeItem) return;
-    const draft = state.draft;
-    if (draft === null || draft.trim() === "") {
-      playMoment("onGentleRetry", activeQuestion.topicId);
-      return;
-    }
-    const rawTimeSec = Math.max(0.1, (Date.now() - questionStartRef.current) / 1000);
-    const isCorrect = draft.trim() === answerTextFor(activeQuestion);
-    try {
-      void audioRef.current?.stopSpeech();
-      const result = await getRunnerEngine().submitResponse(state.sessionId, {
-        topicCode: activeQuestion.topicCode,
-        questionId: activeQuestion.questionId,
-        chosenAnswer: draft,
-        isCorrect,
-        rawTimeSec,
-        audioDurationSec: narrationSecRef.current,
-        misconceptionTags: activeQuestion.misconceptionTags,
-      });
-      dispatch({
-        type: "response-recorded",
-        sessionId: state.sessionId,
-        isCorrect,
-        correctAnswer: answerTextFor(activeQuestion),
-        explanation: activeQuestion.explanation,
-        isRequeue: activeItem.origin === "requeue",
-        fluencyGrade: result.fluencyGrade,
-        cognitiveTimeSec: result.cognitiveTimeSec,
-        origin: activeItem.origin,
-        index: state.index,
-        questionId: activeQuestion.questionId,
-      });
-      playMoment(isCorrect ? "onCorrect" : "onGentleRetry", activeQuestion.topicId);
-      if (isCorrect && result.fluencyGrade === 4) {
-        playMoment("onSpeedTargetBeat", activeQuestion.topicId);
+  // In-flight submit guard (#54 review): a second reflex tap - or a
+  // Check double-tap - that lands while submitResponse is awaited
+  // still sees the stale question-phase closure and would double-
+  // submit the item (duplicate attempts, double re-queue fold). The
+  // ref closes for the whole await span; disabled alone cannot cover
+  // it (it flips only after the response dispatch commits).
+  const checkingRef = useRef(false);
+  const handleCheck = useCallback(
+    async (draftOverride?: string) => {
+      if (checkingRef.current) return;
+      const activeQuestion = currentGameQuestion(state);
+      const activeItem = state.schedule.items[state.index];
+      if (state.phase !== "question" || !activeQuestion || !state.sessionId || !activeItem) return;
+      // The reflex seam passes the just-published draft explicitly; the
+      // Check button path reads the store's copy.
+      const draft = draftOverride ?? state.draft;
+      if (draft === null || draft.trim() === "") {
+        playMoment("onGentleRetry", activeQuestion.topicId);
+        return;
       }
-      const nextStreak = isCorrect ? state.streak + 1 : 0;
-      if (isCorrect && nextStreak >= 3 && nextStreak % 3 === 0) {
-        playMoment("onStreakCombo", activeQuestion.topicId);
+      const rawTimeSec = Math.max(0.1, (Date.now() - questionStartRef.current) / 1000);
+      const isCorrect = draft.trim() === answerTextFor(activeQuestion);
+      checkingRef.current = true;
+      try {
+        void audioRef.current?.stopSpeech();
+        const result = await getRunnerEngine().submitResponse(state.sessionId, {
+          topicCode: activeQuestion.topicCode,
+          questionId: activeQuestion.questionId,
+          chosenAnswer: draft,
+          isCorrect,
+          rawTimeSec,
+          audioDurationSec: narrationSecRef.current,
+          misconceptionTags: activeQuestion.misconceptionTags,
+        });
+        dispatch({
+          type: "response-recorded",
+          sessionId: state.sessionId,
+          isCorrect,
+          correctAnswer: answerTextFor(activeQuestion),
+          explanation: activeQuestion.explanation,
+          isRequeue: activeItem.origin === "requeue",
+          fluencyGrade: result.fluencyGrade,
+          cognitiveTimeSec: result.cognitiveTimeSec,
+          origin: activeItem.origin,
+          index: state.index,
+          questionId: activeQuestion.questionId,
+        });
+        playMoment(isCorrect ? "onCorrect" : "onGentleRetry", activeQuestion.topicId);
+        if (isCorrect && result.fluencyGrade === 4) {
+          playMoment("onSpeedTargetBeat", activeQuestion.topicId);
+        }
+        const nextStreak = isCorrect ? state.streak + 1 : 0;
+        if (isCorrect && nextStreak >= 3 && nextStreak % 3 === 0) {
+          playMoment("onStreakCombo", activeQuestion.topicId);
+        }
+        void audioRef.current?.haptic(isCorrect ? "correct" : "gentle-retry");
+      } catch (error) {
+        // Free sync liveness BEFORE surfacing the failure (#50/#51
+        // doctrine): a failed submit must not strand the session id.
+        getRunnerEngine().abandonSession(state.sessionId);
+        dispatch({
+          type: "summary-failed",
+          sessionId: state.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        // Re-open the submit path (summary-failed ends the session;
+        // response-recorded moves to feedback - both leave the guard
+        // safe to clear).
+        checkingRef.current = false;
       }
-      void audioRef.current?.haptic(isCorrect ? "correct" : "gentle-retry");
-    } catch (error) {
-      // Free sync liveness BEFORE surfacing the failure (#50/#51
-      // doctrine): a failed submit must not strand the session id.
-      getRunnerEngine().abandonSession(state.sessionId);
-      dispatch({
-        type: "summary-failed",
-        sessionId: state.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, [state, playMoment]);
+    },
+    [state, playMoment],
+  );
 
   const handleContinue = useCallback(async () => {
     if (state.phase !== "feedback" || !state.sessionId) return;
@@ -687,10 +710,12 @@ export function GameSessionScreen({
         disabled={state.phase === "feedback"}
         draft={state.draft}
         onDraftChange={(draft) => {
+          draftRef.current = draft;
           if (state.sessionId)
             dispatch({ type: "draft-changed", sessionId: state.sessionId, draft });
         }}
         onReplayPrompt={replayPrompt}
+        onSubmitAnswer={() => void handleCheck(draftRef.current ?? undefined)}
       />
 
       {/* Check + feedback + continue. */}
