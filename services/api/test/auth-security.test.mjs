@@ -387,6 +387,39 @@ describe("token lifecycle", () => {
     assert.equal(reuse.status, 401);
   });
 
+  // #44 fold-in: parent and child-device tokens hitting the student logout
+  // route previously crashed with a 500 (auth.session undefined) instead of
+  // the wrong-token-type 403 every other student route returns.
+  test("logout with a parent or child-device token is a 403 problem, not a 500", async () => {
+    const parent = await createVerifiedParentWithConsent(API);
+    const parentOut = await api("/api/auth/logout", { method: "POST", token: parent.token });
+    assert.equal(parentOut.status, 403);
+    assert.equal(parentOut.json.type, "https://balashikshana.dev/problems/wrong-token-type");
+
+    const child = await api("/api/parent/children", {
+      method: "POST",
+      token: parent.token,
+      body: {
+        nickname: "LogoutKind",
+        pin: "4242",
+        currentGrade: "kindergarten",
+        clientDeviceId: "device-logout-kind-test",
+        platform: "ios"
+      }
+    });
+    assert.equal(child.status, 201, `child creation failed: ${JSON.stringify(child.json)}`);
+    const minted = await api(`/api/parent/children/${child.json.studentId}/device-sessions`, {
+      method: "POST",
+      token: parent.token,
+      body: { clientDeviceId: "device-logout-kind-test", platform: "ios" }
+    });
+    assert.equal(minted.status, 201, `mint failed: ${JSON.stringify(minted.json)}`);
+
+    const childOut = await api("/api/auth/logout", { method: "POST", token: minted.json.token });
+    assert.equal(childOut.status, 403);
+    assert.equal(childOut.json.type, "https://balashikshana.dev/problems/wrong-token-type");
+  });
+
   test("expired session token returns 401 and is deleted", async () => {
     const created = await registerStudent("expireduser", "8080");
     await db.query("UPDATE student_sessions SET expires_at = $1 WHERE token = $2", [

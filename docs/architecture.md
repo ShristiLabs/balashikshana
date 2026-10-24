@@ -48,8 +48,13 @@
 - **App Shell & Design System (M3, issue #43):** the shipped foundation every M3 screen builds on.
   - `apps/mobile/src/design/tokens.ts` — pure-data single source for color (semantic `light`/`dark`/`highContrast` themes + text-grade `statusInk`), spacing, radius, and the kid-scale type ramp; vitest-enforced invariants (>= 48pt touch targets, WCAG contrast floors per theme).
   - Primitives (`Button`, `PressableCard`, `ProgressBar`, `Badge`, `Sheet`) with the tactile 3D treatment and a global reduced-motion provider (`MotionProvider` honors the OS accessibility setting; zero-duration degradation, nothing load-bearing).
-  - `expo-router` skeleton: launcher + placeholder routes for `onboarding` / `journey` / `practice` / `gate` / `parent` (parental-gate seam marked for #44); no dead ends.
+  - `expo-router` tree: launcher + the real onboarding flow (below) + a readiness-guarded `journey` + placeholder `practice` / `gate` runners; no dead ends.
   - Quality gates: ESLint (flat, `eslint-config-expo`) + Prettier + strict `tsc` + vitest, wired into the single CI job.
+- **Onboarding & Consent Chain (M3, issue #44):** the client that drives the M2 parent/consent/child API end to end (`src/onboarding/`).
+  - A pure state machine (`state.ts`) with a resume planner: the step snapshot (one-row `expo-sqlite` table, secret-free) plus secure-store credentials plus a read-only server reconcile (consent status + children) decide the landing step after any interruption. Duplicate safety comes from in-flight markers persisted before the create-child POST — a kill mid-submission adopts the landed child or re-submits, never both.
+  - Storage seams (`storage.ts` + `nativeStores.ts`): every credential (parent session, child-device, pending verification token, draft child PIN, install device id) routes exclusively through `expo-secure-store`; the SQLite snapshot is structurally incapable of carrying a secret, and the vitest suite enforces that on serialized snapshots.
+  - Client consent doctrine: consent is captured before any child-data call, re-asserted server-side before child creation, and a 409 `policy-version-mismatch` always re-renders the new policy text before re-acceptance. A policy bump re-locks child surfaces (the journey guard consults consent status; offline it falls back to the last-known accepted version while the server remains the enforcement authority).
+  - Parental gate: a reusable hold-to-confirm component (3-second continuous press, timer-based — animation settings cannot affect it) guarding onboarding and every parent/settings surface.
 - **Audio & Phonetics Subsystem:**
   - Pre-packaged pure phoneme audio bank (`/m/`, `/s/`, `/a/`, `/sh/`, `/ch/`) for zero-latency phonics blending.
   - On-device Text-to-Speech (US English voice profile) for dynamic math word problem narration so pre-readers are tested on math reasoning rather than reading ability.

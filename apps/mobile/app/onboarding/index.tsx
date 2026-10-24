@@ -1,20 +1,13 @@
 /**
- * Onboarding placeholder. #44 implements the real flow: parental gate
- * (hold-to-confirm) -> parent signup/login -> consent screens -> add
- * child -> grade selection, with interruption-safe resume.
+ * Onboarding flow (issue #44): parental gate (hold-to-confirm) -> parent
+ * signup/login -> email verification -> consent screens -> add child ->
+ * grade selection; resumable after interruption at any step. The driver
+ * reconciles persisted + server state on mount and lands on the right
+ * step. The #43 placeholder is retired by this screen.
  */
 import React from "react";
-import { PlaceholderScreen } from "../../src/shell/PlaceholderScreen";
+import { OnboardingFlow } from "../../src/onboarding/OnboardingFlow";
 
 export default function OnboardingScreen() {
-  return (
-    <PlaceholderScreen
-      title="Onboarding"
-      subtitle="Parent-guided setup for a new device"
-      body="The parental gate, parent account, consent capture, child profile, and grade selection land here in the onboarding milestone."
-      plannedIn="#44"
-      nextLabel="Continue to journey"
-      nextHref="/journey"
-    />
-  );
+  return <OnboardingFlow />;
 }

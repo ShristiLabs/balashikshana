@@ -17,13 +17,7 @@ function read(route: string): string {
   return readFileSync(path, "utf8");
 }
 
-const PLACEHOLDER_ROUTES = [
-  "onboarding/index.tsx",
-  "journey/index.tsx",
-  "practice/index.tsx",
-  "gate/index.tsx",
-  "parent/index.tsx",
-];
+const PLACEHOLDER_ROUTES = ["journey/index.tsx", "practice/index.tsx", "gate/index.tsx"];
 
 describe("route tree", () => {
   it("has a root layout and a launcher", () => {
@@ -44,7 +38,7 @@ describe("route tree", () => {
     }
   });
 
-  it("every placeholder screen uses the shared no-dead-end component", () => {
+  it("remaining placeholder screens use the shared no-dead-end component", () => {
     for (const route of PLACEHOLDER_ROUTES) {
       const source = read(route);
       expect(source, `${route} must use PlaceholderScreen`).toContain("PlaceholderScreen");
@@ -58,16 +52,31 @@ describe("route tree", () => {
     expect(source).toContain('"/journey"');
   });
 
+  it("#44: onboarding mounts the real flow; completion routes to the journey", () => {
+    expect(read("onboarding/index.tsx")).toContain("OnboardingFlow");
+    const complete = readFileSync(
+      join(appDir, "..", "src", "onboarding", "steps", "CompleteStep.tsx"),
+      "utf8",
+    );
+    expect(complete).toContain('"/journey"');
+  });
+
+  it("#44: the parent area is guarded by the hold-to-confirm gate", () => {
+    const source = read("parent/index.tsx");
+    expect(source).toContain("ParentalGate");
+    expect(source).toContain("gatePassed");
+  });
+
+  it("#44: the journey (child surface) checks onboarding readiness", () => {
+    const source = read("journey/index.tsx");
+    expect(source).toContain("childAccessReady");
+    expect(source).toContain('"/onboarding"');
+  });
+
   it("placeholder tour links forward through the M3 flow", () => {
-    expect(read("onboarding/index.tsx")).toContain('"/journey"');
     expect(read("journey/index.tsx")).toContain('"/practice"');
     expect(read("practice/index.tsx")).toContain('"/gate"');
     expect(read("gate/index.tsx")).toContain('"/journey"');
-  });
-
-  it("marks the parent area with the #44 parental-gate seam", () => {
-    expect(read("parent/index.tsx")).toContain("#44");
-    expect(read("parent/index.tsx")).toContain("parental gate");
   });
 
   it("root layout wires theme and reduced-motion providers", () => {
@@ -97,8 +106,10 @@ describe("route tree", () => {
     for (const screen of screens) {
       const source = readFileSync(screen, "utf8");
       expect(
-        /router\.(push|dismissAll|replace|back)|PlaceholderScreen/.test(source),
-        `${screen} must navigate or delegate to PlaceholderScreen`,
+        /router\.(push|dismissAll|replace|back)|PlaceholderScreen|OnboardingFlow|ParentalGate/.test(
+          source,
+        ),
+        `${screen} must navigate or delegate to a flow component`,
       ).toBe(true);
     }
   });
