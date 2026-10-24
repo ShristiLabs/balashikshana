@@ -27,6 +27,7 @@ re-runs only when the questions table is below its expected size.
 | Version | Date | Description | Author |
 | --- | --- | --- | --- |
 | 001 | 2026-10-21 | Initial schema port from the SQLite reference (`services/api/sqlite/001_schema.sql`): grades, units, skill_topics, practice_questions, students, student_sessions, student_unit_progress, student_topic_progress, student_question_attempts. Dialect changes: `AUTOINCREMENT` -> `GENERATED ALWAYS AS IDENTITY`; explicit composite primary keys on the progress tables. | delivery pipeline (issue #30) |
+| 002 | 2026-10-23 | Parent accounts and COPPA consent groundwork (roadmap D4): `parents` (case-insensitively unique email via a functional unique index on `LOWER(email)`, scrypt-format `password_hash`, `email_verified_at` NULL until #40), `parent_children` (composite PK `(parent_id, student_id)`, `relation`, `status` default `claimed`, `claimed_at`), `consent_records` (`policy_version`, `captured_at`, `method`; both FKs `ON DELETE RESTRICT` so consent evidence is never cascade-deleted — #62 handles retention explicitly; `student_id` nullable until #42), `devices` (unique `(parent_id, client_device_id)`, `platform`, `last_seen_at`), and the `audit_students_without_consent` view enumerating students without a matching consent record (pre-#41 baseline). New timestamps are `timestamptz` (Postgres-native tables; 001's TEXT timestamps are a SQLite-port artifact). Schema-only: no route, seed, or dev-data changes; parents exist only via #40 signup. | delivery pipeline (issue #39) |
 
 ## Rules
 
