@@ -73,11 +73,12 @@ describe("CONTENT_DB_MIGRATIONS invariants", () => {
 });
 
 describe("lifecycle DB migrations on real SQLite", () => {
-  it("migrates a fresh database to user_version 1 with every table and index", () => {
+  it("migrates a fresh database to the latest user_version with every table and index", () => {
     const { db } = freshDb();
     runMigrations(db);
+    const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
     expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      1,
+      latest,
     );
 
     const tables = (
@@ -100,6 +101,8 @@ describe("lifecycle DB migrations on real SQLite", () => {
     expect(indexes.has("idx_attempt_log_student")).toBe(true);
     // Partial index over unsynced rows only (#48 sync flag).
     expect(indexes.has("idx_attempt_log_unsynced")).toBe(true);
+    // #47: ordered drain cursor for the #48 sync worker.
+    expect(indexes.has("idx_attempt_log_drain")).toBe(true);
     db.close();
   });
 
@@ -110,8 +113,9 @@ describe("lifecycle DB migrations on real SQLite", () => {
       "INSERT INTO pack_meta (grade_id, content_version, format_version, status, artifact, size_bytes, sha256, key_id, installed_at) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?)",
     ).run("pre-k", "1.0.0", 1, "pack-pre-k-v1.0.0.sqlite", 2048, "a".repeat(64), "dev-local", 42);
     runMigrations(db); // second device launch
+    const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
     expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      1,
+      latest,
     );
     expect((db.prepare("SELECT COUNT(*) n FROM pack_meta").get() as { n: number }).n).toBe(1);
     db.close();
@@ -175,6 +179,81 @@ describe("lifecycle DB migrations on real SQLite", () => {
       .get(first.lastInsertRowid) as { synced: number; audio_duration_sec: number };
     expect(row.synced).toBe(0);
     expect(row.audio_duration_sec).toBe(0);
+    db.close();
+  });
+
+  it("upgrades a v1 database in place to v2, preserving rows and adding the #47 columns", () => {
+    const { db } = freshDb();
+    // A #46-era device: only migration 1 has run, and it holds real rows.
+    db.exec(CONTENT_DB_MIGRATIONS[0]!.statements.join("; "));
+    db.exec("PRAGMA user_version = 1");
+    db.prepare(
+      "INSERT INTO attempt_log (student_id, topic_id, question_id, interaction_type, is_correct, cognitive_time_sec, answered_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run("s1", "K-M1-A", "K-M1-A-Q1", "tap-target", 1, 3.5, 1000);
+    db.prepare(
+      "INSERT INTO topic_progress (student_id, topic_id, unit_id, attempts_count, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("s1", "K-M1-A", "K-M1", 2, 1234);
+    db.prepare(
+      "INSERT INTO unit_progress (student_id, unit_id, status, key_state, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("s1", "K-M1", "in_progress", null, 1234);
+
+    runMigrations(db); // the #47 app version opens the same device
+    expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
+      2,
+    );
+    // v1 rows survived the ALTERs.
+    expect((db.prepare("SELECT COUNT(*) n FROM attempt_log").get() as { n: number }).n).toBe(1);
+    const attempt = db.prepare("SELECT * FROM attempt_log").get() as Record<string, unknown>;
+    expect(attempt.unit_id).toBe("");
+    expect(attempt.session_type).toBe("TOPIC_PRACTICE");
+    expect(attempt.session_id).toBe("");
+    expect(attempt.raw_time_sec).toBe(0);
+    expect(attempt.fluency_grade).toBe(0);
+    expect(attempt.misconception_tags_json).toBe("[]");
+    expect(attempt.chosen_answer).toBe("");
+    const topic = db.prepare("SELECT * FROM topic_progress").get() as Record<string, unknown>;
+    expect(topic.stability_days).toBe(1.0);
+    expect(topic.provisional).toBe(0);
+    const unit = db.prepare("SELECT * FROM unit_progress").get() as Record<string, unknown>;
+    expect(unit.silver_awarded_at).toBe(0);
+    expect(unit.gold_verified_at).toBe(0);
+    expect(unit.cpa_stage).toBe("CONCRETE_INTERACTIVE");
+    db.close();
+  });
+
+  it("v2 attempt_log columns carry the synced-flag contract untouched", () => {
+    const { db } = freshDb();
+    runMigrations(db);
+    db.prepare(
+      `INSERT INTO attempt_log (
+         student_id, topic_id, question_id, interaction_type, is_correct,
+         cognitive_time_sec, answered_at, synced,
+         unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+         misconception_tags_json, chosen_answer
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "s1",
+      "K-M1-A",
+      "K-M1-A-Q1",
+      "tap-target",
+      1,
+      3.5,
+      1000,
+      "K-M1",
+      "GATE",
+      "sess-1",
+      4.2,
+      3,
+      '["a"]',
+      "7",
+    );
+    const row = db.prepare("SELECT * FROM attempt_log WHERE id = 1").get() as Record<
+      string,
+      unknown
+    >;
+    expect(row.synced).toBe(0);
+    expect(row.session_id).toBe("sess-1");
+    expect(row.fluency_grade).toBe(3);
     db.close();
   });
 

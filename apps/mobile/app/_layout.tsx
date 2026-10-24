@@ -8,6 +8,7 @@ import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AudioServiceProvider } from "../src/audio/AudioServiceProvider";
 import { ContentPackProvider } from "../src/content/ContentPackProvider";
+import { PracticeWarmup } from "../src/practice/PracticeWarmup";
 import { ThemeProvider, useTheme } from "../src/design/theme";
 import { MotionProvider } from "../src/design/useMotion";
 
@@ -40,6 +41,7 @@ export default function RootLayout() {
         <MotionProvider>
           <AudioServiceProvider>
             <ContentPackProvider>
+              <PracticeWarmup />
               <RootStack />
             </ContentPackProvider>
           </AudioServiceProvider>

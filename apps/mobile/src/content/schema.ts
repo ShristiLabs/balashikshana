@@ -75,6 +75,53 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
        )`,
     ],
   },
+  {
+    // Migration 2 (issue #47 — offline practice core) widens the #46
+    // tables for the practice module. v1 statements are NEVER edited;
+    // v2 only ADDS columns (SQLite ALTER ... ADD COLUMN with defaults
+    // keeps v1 rows valid) plus one partial index, so a v1 database
+    // upgrades in place with zero data movement. The `synced` flag
+    // contract for #48 is untouched (still NOT NULL DEFAULT 0; only
+    // #48's sync worker may flip it).
+    version: 2,
+    statements: [
+      // attempt_log: the columns the server's student_question_attempts
+      // row carries plus the offline session identity. `id`
+      // (AUTOINCREMENT, v1) IS the strictly monotonic sequence number /
+      // sync cursor for #48's ordered drain.
+      `ALTER TABLE attempt_log ADD COLUMN unit_id TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE attempt_log ADD COLUMN session_type TEXT NOT NULL DEFAULT 'TOPIC_PRACTICE'`,
+      `ALTER TABLE attempt_log ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE attempt_log ADD COLUMN raw_time_sec REAL NOT NULL DEFAULT 0`,
+      `ALTER TABLE attempt_log ADD COLUMN fluency_grade INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE attempt_log ADD COLUMN misconception_tags_json TEXT NOT NULL DEFAULT '[]'`,
+      `ALTER TABLE attempt_log ADD COLUMN chosen_answer TEXT NOT NULL DEFAULT ''`,
+      // Ordered drain cursor for #48: unsynced rows per student in id order.
+      `CREATE INDEX IF NOT EXISTS idx_attempt_log_drain
+         ON attempt_log(student_id, id) WHERE synced = 0`,
+      // topic_progress: spaced-repetition projection columns mirroring
+      // the server's student_topic_progress upsert targets.
+      `ALTER TABLE topic_progress ADD COLUMN topic_code TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE topic_progress ADD COLUMN fluency_grade INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE topic_progress ADD COLUMN stability_days REAL NOT NULL DEFAULT 1.0`,
+      `ALTER TABLE topic_progress ADD COLUMN next_review_at INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE topic_progress ADD COLUMN last_reviewed_at INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE topic_progress ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0`,
+      // unit_progress: gate projection columns mirroring the server's
+      // student_unit_progress upsert targets, the provisional marker
+      // (#48 confirms or rolls back local gate outcomes), and the
+      // two-key timestamps (registry twoKeySleepConsolidationGate:
+      // Silver on day-1 pass; Gold only after >= 14 h + 5-item
+      // verification with >= 4 correct).
+      `ALTER TABLE unit_progress ADD COLUMN best_median_speed_sec REAL NOT NULL DEFAULT 0`,
+      `ALTER TABLE unit_progress ADD COLUMN stability_days REAL NOT NULL DEFAULT 1.0`,
+      `ALTER TABLE unit_progress ADD COLUMN last_reviewed_at INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE unit_progress ADD COLUMN cpa_stage TEXT NOT NULL DEFAULT 'CONCRETE_INTERACTIVE'`,
+      `ALTER TABLE unit_progress ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE unit_progress ADD COLUMN silver_awarded_at INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE unit_progress ADD COLUMN gold_verified_at INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";
