@@ -29,12 +29,13 @@ implementation (mobile src/journey) against the harness's
 The native screen now covers the harness's core journey behaviors
 (unit DAG ordering, unlock gating, gate progression, grade switching)
 with STRICTLY better data guarantees (signed packs, offline-first,
-server-reconciled keys). The harness retains three capabilities the
-native app does not yet have: per-topic stepping-stone granularity
-(lands with #50's practice runner), the per-unit guidebook modal, and
-crowns surfacing (#55). D1 can be retired after #50/#51 land the
-practice/gate surfaces; until then the harness remains the only place
-to demo topic-level flow end to end.
+server-reconciled keys). Since #50 the practice runner covers
+topic-level flow natively (unit node -> topic picker with per-topic
+crowns -> full session), so the harness retains two capabilities the
+native app does not yet have: the per-unit guidebook modal, and the
+gamification crowns ledger (#55). D1 can be retired after #51 lands
+the gate surface; until then the harness remains the only place to
+demo the boss-gate flow end to end.
 
-Recommendation: revisit D1 retirement when #50 and #51 merge. No
-harness code changed in #49.
+Recommendation: revisit D1 retirement when #51 merges. No harness
+code changed in #49 or #50.
