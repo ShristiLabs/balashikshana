@@ -21,6 +21,9 @@
 
 import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth, createVerifiedParentWithConsent } from "./helpers.mjs";
 import {
   median,
@@ -34,6 +37,7 @@ const P = "https://balashikshana.dev/problems";
 
 let serverProcess;
 let testDatabase;
+let packsDir;
 let seq = 0;
 let clock = 1_700_000_000_000; // deterministic client timestamps
 
@@ -149,10 +153,25 @@ async function queryDb(sql, params = []) {
 
 beforeAll(async () => {
   testDatabase = await createTestDatabase();
+  // The content-handshake tests need a PUBLISHED pack index; the real
+  // services/api/content-packs output is gitignored compiler state that
+  // exists on dev machines but never in CI. The suite is therefore
+  // self-contained: a throwaway packs dir with a minimal index (the
+  // handshake reads only index.json, never artifact bytes), injected
+  // via the same env the server documents.
+  packsDir = fs.mkdtempSync(path.join(os.tmpdir(), "balashi-sync-packs-"));
+  fs.writeFileSync(
+    path.join(packsDir, "index.json"),
+    JSON.stringify({
+      generatedAt: new Date(0).toISOString(),
+      packs: [{ gradeId: "kindergarten", contentVersion: "1.0.0", artifact: "pack-kindergarten-v1.0.0.sqlite" }]
+    })
+  );
   serverProcess = await startTestServer({
     port: 4807,
     databaseUrl: testDatabase.url,
     env: {
+      BALASHIKSHANA_CONTENT_PACKS_DIR: packsDir,
       RATE_LIMIT_PER_IP_MIN: "100000",
       RATE_LIMIT_PER_TOKEN_MIN: "100000",
       RATE_LIMIT_SYNC_PER_TOKEN_MIN: "100000",
@@ -170,6 +189,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (serverProcess) serverProcess.kill("SIGTERM");
   if (testDatabase) await dropTestDatabase(testDatabase.name);
+  if (packsDir) fs.rmSync(packsDir, { recursive: true, force: true });
 });
 
 describe("auth scope: child-device tokens only", () => {
