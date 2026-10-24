@@ -90,7 +90,11 @@ describe("verifyPackArtifact (real Ed25519: node:crypto signer, @noble verifier)
   });
 
   it("rejects a checksum field that does not match the bytes", () => {
-    const tamperedChecksum = { ...entry, sha256: `0${entry.sha256.slice(1)}` };
+    // Deterministic tamper: force a first hex char DIFFERENT from the
+    // real one (random bytes give a leading "0" 1-in-16 runs, which made
+    // the old `0 + slice(1)` tamper a no-op and the test flaky).
+    const flip = entry.sha256.startsWith("0") ? "1" : "0";
+    const tamperedChecksum = { ...entry, sha256: `${flip}${entry.sha256.slice(1)}` };
     expect(verifyPackArtifact(packBytes, tamperedChecksum, trusted).reason).toBe(
       "checksum-mismatch",
     );

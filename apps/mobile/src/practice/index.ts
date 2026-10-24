@@ -48,7 +48,11 @@ export {
   generatedToPracticeQuestion,
 } from "./packShapes";
 export type { EngineUnit, EngineTopic, GeneratedQuestionFields } from "./packShapes";
-export { createNativePracticeDeps, getNativePracticeDeps } from "./nativePractice";
+// RN bindings (nativePractice.ts, the only expo-sqlite importer) stay
+// OUT of this barrel per the content-module precedent — node consumers
+// of the barrel must never transitively import native modules (#47
+// review finding 1). The #50 runner obtains deps via
+// getNativePracticeDeps() imported from the module path directly.
 export type {
   AttemptInput,
   AttemptRecord,

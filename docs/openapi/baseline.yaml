@@ -1228,6 +1228,106 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/sync/attempts:
+    post:
+      tags: [sync]
+      operationId: uploadSyncAttempts
+      summary: Batch delta upload of client attempts; idempotent reconciliation via core-engine (D8)
+      description: |
+        CHILD-DEVICE session tokens only (issue #48 sync doctrine): the
+        student AND the idempotency device component come from the token
+        binding, never the body; parent and student PIN tokens get 403
+        wrong-token-type. Consent-required middleware applies (403
+        consent-required, nothing written) and archived children are
+        frozen out (403 child-archived).
+
+        Idempotency is database-enforced: each attempt is uniquely keyed
+        by (student, device, client sequence); a replayed or duplicated
+        batch inserts nothing, reconciles nothing, and returns the same
+        authoritative snapshot (same batch twice = same server state).
+        Protocol contract: a batch carries WHOLE sessions (the client
+        drains at session boundaries); the server replays every uploaded
+        session over the union of its batch rows and any previously
+        persisted rows of the same session, so progress counting is
+        exactly-once per session even if a client violates the contract
+        and splits one across batches (defense-in-depth convergence).
+        Topic/unit progress is recomputed through the same shared
+        derivations as /api/practice/topic/complete and
+        /api/gate/evaluate, with the registry two-key machine (Silver on
+        pass; Gold only via the 14-hour + 5-item verification route).
+        Clock policy: past client timestamps are accepted as-is; a
+        future timestamp beyond the server tolerance (default 5 minutes)
+        is clamped to server receive time and counted in
+        stats.clockSkewAdjusted. One unknown unit/topic fails the whole
+        batch (400 sync-unknown-content) with nothing written. Dedicated
+        per-token sync rate bucket (env RATE_LIMIT_SYNC_PER_TOKEN_MIN,
+        default 30/min) on top of the global buckets.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncUploadRequest"
+      responses:
+        "200":
+          description: Acknowledged sequences, reconciliation stats, and the authoritative progress snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncUploadResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/sync/progress:
+    get:
+      tags: [sync]
+      operationId: getSyncProgress
+      summary: Authoritative progress snapshot + content-version handshake (no upload)
+      description: |
+        CHILD-DEVICE session tokens only (same doctrine as
+        /api/sync/attempts). Returns the server-authoritative unit and
+        topic progress for the token's bound student, the server time
+        (authoritative clock), and — when `packs` is supplied as
+        `gradeId:version,...` — the content-version handshake signal
+        listing installed packs that drifted from the published index so
+        the client can refresh via the #46 pipeline.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - name: packs
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+          description: "Comma-separated `gradeId:contentVersion` pairs of the client's installed packs (max 10)"
+      responses:
+        "200":
+          description: Authoritative snapshot and handshake signal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncProgressResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
 components:
   parameters:
     StudentId:
@@ -1965,6 +2065,241 @@ components:
         currentGrade:
           type: string
           enum: [pre-k, kindergarten, grade-1, grade-2, grade-3]
+
+    SyncAttempt:
+      type: object
+      additionalProperties: false
+      required: [seq, unitId, topicId, questionId, sessionType, sessionId, chosenAnswer, isCorrect, rawTimeSec, answeredAtMs, motorBaselineSec]
+      description: |
+        One immutable client attempt fact (device attempt_log row). Only
+        facts travel the wire: the server derives cognitive time,
+        fluency, and all progress through the core-engine itself —
+        client-computed derivations are never trusted or accepted.
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+          description: Device-local AUTOINCREMENT id of the attempt_log row (monotonic per device)
+        unitId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        topicId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        questionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        sessionType:
+          type: string
+          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION]
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        chosenAnswer:
+          type: string
+          maxLength: 64
+        isCorrect:
+          type: boolean
+        rawTimeSec:
+          type: number
+          minimum: 0
+          maximum: 600
+        audioDurationSec:
+          type: number
+          minimum: 0
+          maximum: 600
+          default: 0
+        misconceptionTags:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 48
+        answeredAtMs:
+          type: integer
+          minimum: 0
+          description: Device-clock epoch ms (server clock policy applies — future skew beyond tolerance is clamped)
+        motorBaselineSec:
+          type: number
+          minimum: 0
+          maximum: 5
+          description: The session's motor baseline (constant across a session's attempts; required for exact engine replay)
+
+    SyncUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [attempts]
+      properties:
+        attempts:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: Whole sessions only (client drains at session boundaries); 200 is the default cap (env SYNC_MAX_ATTEMPTS_PER_BATCH)
+          items:
+            $ref: "#/components/schemas/SyncAttempt"
+        clientPacks:
+          type: array
+          maxItems: 10
+          description: The client's installed packs for the content-version handshake (#46 refresh signal)
+          items:
+            type: object
+            additionalProperties: false
+            required: [gradeId, contentVersion]
+            properties:
+              gradeId:
+                type: string
+                minLength: 1
+                maxLength: 32
+              contentVersion:
+                type: string
+                minLength: 1
+                maxLength: 32
+
+    SyncSnapshotUnit:
+      type: object
+      required: [unitId, status, keyState, bestAccuracyPct, bestMedianSpeedSec, attemptsCount, stabilityDays, lastReviewedAt, cpaStage]
+      properties:
+        unitId:
+          type: string
+        status:
+          type: string
+          enum: [in_progress, MASTERED, REMEDIATION_REQUIRED]
+        keyState:
+          type:
+            - string
+            - "null"
+          enum: [SILVER_KEY, GOLD_KEY, null]
+        bestAccuracyPct:
+          type: number
+        bestMedianSpeedSec:
+          type: number
+        attemptsCount:
+          type: integer
+        stabilityDays:
+          type: number
+        lastReviewedAt:
+          type: string
+        cpaStage:
+          type: string
+        silverAwardedAt:
+          type:
+            - string
+            - "null"
+          description: ISO timestamp of the first Silver award (frozen 14-hour window start); null = never
+        goldVerifiedAt:
+          type:
+            - string
+            - "null"
+          description: ISO timestamp of the Gold verification pass; null = not yet verified
+
+    SyncSnapshotTopic:
+      type: object
+      required: [topicId, unitId, topicCode, completed, crowns, masteryScore, bestAccuracyPct, bestMedianSpeedSec, attemptsCount, fluencyGrade, stabilityDays, nextReviewAt, lastReviewedAt]
+      properties:
+        topicId:
+          type: string
+        unitId:
+          type: string
+        topicCode:
+          type: string
+        completed:
+          type: integer
+        crowns:
+          type: integer
+        masteryScore:
+          type: integer
+        bestAccuracyPct:
+          type: number
+        bestMedianSpeedSec:
+          type: number
+        attemptsCount:
+          type: integer
+        fluencyGrade:
+          type: integer
+        stabilityDays:
+          type: number
+        nextReviewAt:
+          type: string
+        lastReviewedAt:
+          type: string
+
+    SyncProgressSnapshot:
+      type: object
+      required: [units, topics]
+      properties:
+        units:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncSnapshotUnit"
+        topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncSnapshotTopic"
+
+    SyncUploadResponse:
+      type: object
+      required: [ackedSeqs, serverTime, stats, packsOutdated, progress]
+      properties:
+        ackedSeqs:
+          type: array
+          items:
+            type: integer
+          description: Client sequences acknowledged (inserted now or already present — both are safely synced)
+        serverTime:
+          type: string
+          description: Authoritative server clock (ISO-8601)
+        stats:
+          type: object
+          required: [inserted, duplicates, sessionsReplayed, clockSkewAdjusted]
+          properties:
+            inserted:
+              type: integer
+            duplicates:
+              type: integer
+            sessionsReplayed:
+              type: integer
+            clockSkewAdjusted:
+              type: integer
+        packsOutdated:
+          type: array
+          items:
+            type: object
+            required: [gradeId, installedVersion, currentVersion]
+            properties:
+              gradeId:
+                type: string
+              installedVersion:
+                type: string
+              currentVersion:
+                type: string
+        progress:
+          $ref: "#/components/schemas/SyncProgressSnapshot"
+
+    SyncProgressResponse:
+      type: object
+      required: [serverTime, packsOutdated, progress]
+      properties:
+        serverTime:
+          type: string
+          description: Authoritative server clock (ISO-8601)
+        packsOutdated:
+          type: array
+          items:
+            type: object
+            required: [gradeId, installedVersion, currentVersion]
+            properties:
+              gradeId:
+                type: string
+              installedVersion:
+                type: string
+              currentVersion:
+                type: string
+        progress:
+          $ref: "#/components/schemas/SyncProgressSnapshot"
 
     StudentProfile:
       description: Full student record with progress maps (shape is engine-defined and additive)

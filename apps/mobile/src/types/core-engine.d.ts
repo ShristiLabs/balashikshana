@@ -65,17 +65,19 @@ declare module "@balashikshana/core-engine" {
 
   export interface EngineGateVerdict {
     passed: boolean;
-    keyAwarded: string | null;
+    keyAwarded?: string | null;
     overallAccuracyPct?: number;
-    requiredAccuracyPct: number;
+    /** Optional: the engine's empty-responses early return omits every
+     *  field below `passed`/`reason` — coerce at the boundary (`?? 0`). */
+    requiredAccuracyPct?: number;
     medianCogSpeedSec?: number;
-    targetSpeedSec: number;
+    targetSpeedSec?: number;
     p80CogSpeedSec?: number;
-    maxTailAllowedSec: number;
-    rapidGuessViolations: number;
-    finalStreakPassed: boolean;
-    failedTopics: string[];
-    topicBreakdown: {
+    maxTailAllowedSec?: number;
+    rapidGuessViolations?: number;
+    finalStreakPassed?: boolean;
+    failedTopics?: string[];
+    topicBreakdown?: {
       code: string;
       name: string;
       total: number;
@@ -84,9 +86,9 @@ declare module "@balashikshana/core-engine" {
       accuracyPct: number;
       medianSpeedSec: number;
     }[];
-    conditions: Record<string, boolean>;
-    remediationMode: string;
-    remediationPrescription: string;
+    conditions?: Record<string, boolean>;
+    remediationMode?: string;
+    remediationPrescription?: string;
     reason?: string;
   }
 
@@ -116,12 +118,19 @@ declare module "@balashikshana/core-engine" {
 
   export function computeRetrievabilityPct(elapsedDays: number, stabilityDays?: number): number;
 
+  /** Returns the CREDIT ARRAY (one entry per prerequisite), not a map —
+   *  mirrors the engine's array-of-{prerequisiteUnitId, boost} return. */
+  export interface EngineDagCredit {
+    prerequisiteUnitId: string;
+    implicitStabilityBoostDays: number;
+  }
+
   export function propagateImplicitDagCredit(
     unitId: string,
     deltaStabilityDays: number,
     unitMap: Record<string, unknown>,
     creditWeight?: number,
-  ): Record<string, unknown>;
+  ): EngineDagCredit[];
 
   export interface EngineGeneratedQuestion {
     interactionType?: string;

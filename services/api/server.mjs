@@ -22,8 +22,17 @@ import {
 } from "./consent.mjs";
 import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift } from "./children.mjs";
 import { contentPacksPlugin } from "./content-packs.mjs";
+import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
 import {
-  median,
+  deriveTopicSession,
+  deriveTopicFluencyAndSr,
+  perAttemptFluencyGrade,
+  buildGateUnitObject,
+  computeKeyTransition,
+  TOPIC_PROGRESS_UPSERT_SQL,
+  UNIT_PROGRESS_UPSERT_SQL
+} from "./derivations.mjs";
+import {
   computeMotorBaselineSec,
   computeCognitiveTimeSec,
   evaluateMasteryGateAttempt,
@@ -50,6 +59,11 @@ import {
 // RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN  child-claim attempts/minute per IP (default 10; the
 //                                     claim route verifies student PINs, so it gets the
 //                                     M1 login-bucket doctrine)
+// RATE_LIMIT_SYNC_PER_TOKEN_MIN       sync requests/minute per device token (default 30;
+//                                     #48 — sized for batch traffic, env-tunable)
+// SYNC_MAX_ATTEMPTS_PER_BATCH         max attempts per sync batch (default 200)
+// SYNC_FUTURE_CLOCK_TOLERANCE_MS      client-clock future tolerance before clamping to
+//                                     server time (default 300000 = 5 min; #48 clock policy)
 // SEED_DEMO_STUDENTS          seed demo students on an empty DB ("0" disables;
 //                             default 1). The consent-invariant suite boots
 //                             with "0" so a pristine DB proves the #41 gate.
@@ -244,7 +258,10 @@ async function getStudentFullState(studentId) {
       attemptsCount: u.attempts_count,
       stabilityDays: u.stability_days,
       lastReviewedAt: u.last_reviewed_at,
-      cpaStage: u.cpa_stage
+      cpaStage: u.cpa_stage,
+      // #48 two-key timestamps (authoritative; null = never awarded).
+      silverAwardedAt: u.silver_awarded_at ?? null,
+      goldVerifiedAt: u.gold_verified_at ?? null
     };
   }
 
@@ -596,6 +613,15 @@ await app.register(contentPacksPlugin, {
   packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs"),
   problemTypeBase: PROBLEM_BASE,
   logger
+});
+
+// Sync protocol routes (issue #48, D8): child-device-token batch upload
+// + authoritative snapshot. Behind the global per-IP + per-token buckets
+// plus the dedicated sync per-token bucket (batch traffic sizing).
+await app.register(syncPlugin, {
+  db,
+  logger,
+  packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs")
 });
 
 // --- Routes --------------------------------------------------------------------
@@ -1023,27 +1049,27 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
 
   const responses = payload.responses || [];
   const motorSec = payload.motorBaselineSec || stuRow.motor_baseline_sec || 0.42;
-  const total = Math.max(1, responses.length);
-  const correct = responses.filter((r) => r.isCorrect).length;
-  const accPct = Number(((correct / total) * 100).toFixed(1));
-  const cogTimes = responses.map((r) => computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0));
-  const medSpeed = Number(median(cogTimes).toFixed(2));
   const targetSpeed = unitRow.gate_max_speed_sec;
 
-  const passedTopic = accPct >= 80;
-  const crowns = accPct >= 95 && medSpeed <= targetSpeed ? 3 : accPct >= 85 ? 2 : passedTopic ? 1 : 0;
+  // Shared derivation (derivations.mjs — the single source of truth the
+  // #48 sync reconciler reuses; the mobile projector mirrors it).
+  const derivation = deriveTopicSession({ responses, motorBaselineSec: motorSec, targetSpeed });
+  const { accPct, medSpeed, passedTopic, crowns } = derivation;
 
   const prevTopic = await db.get("SELECT * FROM student_topic_progress WHERE student_id = $1 AND topic_id = $2", [studentId, topicId]);
-  const fg = computeFluencyGrade(passedTopic, medSpeed, targetSpeed);
-  const srUpdate = updateTopicMemoryStability({
-    currentStabilityDays: prevTopic ? prevTopic.stability_days : 1.0,
-    fluencyGrade: fg,
-    gradeGrowthFactor: gradeRow ? gradeRow.sr_growth_factor : 2.0,
-    maxIntervalCapDays: gradeRow ? gradeRow.sr_max_interval_days : 45
+  const { fg, srUpdate } = deriveTopicFluencyAndSr({
+    passedTopic,
+    medSpeed,
+    targetSpeed,
+    prevStabilityDays: prevTopic ? prevTopic.stability_days : 1.0,
+    gradeRow
   });
 
   const now = new Date().toISOString();
   const nextReview = new Date(Date.now() + srUpdate.stabilityDays * 86400000).toISOString();
+  // Every online completion gets a session id so all its attempt rows
+  // belong to exactly one session (#48 session-granular ledger).
+  const onlineSessionId = `online-${crypto.randomUUID()}`;
 
   await db.withTransaction(async (client) => {
     for (const r of responses) {
@@ -1052,8 +1078,9 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
         INSERT INTO student_question_attempts (
           student_id, session_type, unit_id, topic_id, question_id,
           chosen_answer, is_correct, raw_time_sec, cognitive_time_sec,
-          fluency_grade, misconception_tags_json, attempted_at
-        ) VALUES ($1, 'TOPIC_PRACTICE', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          fluency_grade, misconception_tags_json, attempted_at,
+          audio_duration_sec, session_id
+        ) VALUES ($1, 'TOPIC_PRACTICE', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, $12)
       `, [
         studentId,
         unitId,
@@ -1063,34 +1090,14 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
         r.isCorrect ? 1 : 0,
         r.rawTimeSec || 3.0,
         cSec,
-        computeFluencyGrade(Boolean(r.isCorrect), cSec, targetSpeed),
+        perAttemptFluencyGrade(r.isCorrect, cSec, targetSpeed),
         JSON.stringify(r.misconceptionTags || []),
-        now
+        now,
+        onlineSessionId
       ]);
     }
 
-    await client.query(`
-      INSERT INTO student_topic_progress (
-        student_id, topic_id, unit_id, topic_code, completed, crowns,
-        mastery_score, best_accuracy_pct, best_median_speed_sec,
-        attempts_count, fluency_grade, stability_days, next_review_at, last_reviewed_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      ON CONFLICT(student_id, topic_id) DO UPDATE SET
-        completed = GREATEST(student_topic_progress.completed, excluded.completed),
-        crowns = GREATEST(student_topic_progress.crowns, excluded.crowns),
-        mastery_score = GREATEST(student_topic_progress.mastery_score, excluded.mastery_score),
-        best_accuracy_pct = GREATEST(student_topic_progress.best_accuracy_pct, excluded.best_accuracy_pct),
-        best_median_speed_sec = CASE
-          WHEN student_topic_progress.best_median_speed_sec > 0
-          THEN LEAST(student_topic_progress.best_median_speed_sec, excluded.best_median_speed_sec)
-          ELSE excluded.best_median_speed_sec
-        END,
-        attempts_count = student_topic_progress.attempts_count + 1,
-        fluency_grade = excluded.fluency_grade,
-        stability_days = excluded.stability_days,
-        next_review_at = excluded.next_review_at,
-        last_reviewed_at = excluded.last_reviewed_at
-    `, [
+    await client.query(TOPIC_PROGRESS_UPSERT_SQL, [
       studentId,
       topicId,
       unitId,
@@ -1104,7 +1111,8 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
       fg,
       srUpdate.stabilityDays,
       nextReview,
-      now
+      now,
+      1
     ]);
 
     if (passedTopic) {
@@ -1153,17 +1161,7 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
   if (!(await requireConsentForStudent(db, req, reply, studentId))) return reply;
 
   const topicRows = await db.all("SELECT * FROM skill_topics WHERE unit_id = $1 ORDER BY sequence_order ASC", [unitId]);
-  const unitObj = {
-    unitId: unitRow.unit_id,
-    title: unitRow.title,
-    masteryGate: {
-      questionCount: unitRow.gate_question_count,
-      minAccuracyPercent: unitRow.gate_min_accuracy_pct,
-      maxMedianResponseTimeSec: unitRow.gate_max_speed_sec,
-      challengeZoneStreak: unitRow.gate_streak_req
-    },
-    skillTopics: topicRows.map((t) => ({ code: t.topic_code, name: t.topic_name }))
-  };
+  const unitObj = buildGateUnitObject({ unitRow: unitRow, topicRows });
 
   const motorSec = payload.motorBaselineSec || stuRow.motor_baseline_sec || 0.42;
   const evalResult = evaluateMasteryGateAttempt({
@@ -1181,34 +1179,50 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
     maxIntervalCapDays: gradeRow ? gradeRow.sr_max_interval_days : 45
   });
 
-  const nextKeyState = evalResult.passed
-    ? (prevProg && (prevProg.key_state === "SILVER_KEY" || prevProg.key_state === "GOLD_KEY") ? "GOLD_KEY" : "SILVER_KEY")
-    : (prevProg ? prevProg.key_state : null);
+  // TWO-KEY MACHINE (#48 port of the #47 registry contract): a pass
+  // awards (re-affirms) Silver; Gold is ONLY reachable through a Gold
+  // verification session (see the sync reconciler). The pre-#48
+  // second-pass GOLD promotion is retired — the window freezes at the
+  // FIRST Silver award and never resets.
+  const keyTransition = computeKeyTransition({
+    prev: prevProg,
+    passed: evalResult.passed,
+    sessionMs: Date.now()
+  });
+  const nextKeyState = keyTransition.keyState;
 
   const now = new Date().toISOString();
+  // Session id for the gate attempts this evaluation logs (#48: the
+  // online path now feeds the same session-granular attempt ledger the
+  // offline sync uploads into).
+  const onlineSessionId = `online-${crypto.randomUUID()}`;
 
   await db.withTransaction(async (client) => {
-    await client.query(`
-      INSERT INTO student_unit_progress (
-        student_id, unit_id, status, key_state, best_accuracy_pct,
-        best_median_speed_sec, attempts_count, stability_days,
-        last_reviewed_at, cpa_stage, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, $10)
-      ON CONFLICT(student_id, unit_id) DO UPDATE SET
-        status = CASE WHEN student_unit_progress.status = 'MASTERED' THEN 'MASTERED' ELSE excluded.status END,
-        key_state = COALESCE(excluded.key_state, student_unit_progress.key_state),
-        best_accuracy_pct = GREATEST(student_unit_progress.best_accuracy_pct, excluded.best_accuracy_pct),
-        best_median_speed_sec = CASE
-          WHEN student_unit_progress.best_median_speed_sec > 0
-          THEN LEAST(student_unit_progress.best_median_speed_sec, excluded.best_median_speed_sec)
-          ELSE excluded.best_median_speed_sec
-        END,
-        attempts_count = student_unit_progress.attempts_count + 1,
-        stability_days = excluded.stability_days,
-        last_reviewed_at = excluded.last_reviewed_at,
-        cpa_stage = excluded.cpa_stage,
-        updated_at = excluded.updated_at
-    `, [
+    for (const r of payload.responses || []) {
+      const cSec = computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, r.audioDurationSec || 0);
+      await client.query(`
+        INSERT INTO student_question_attempts (
+          student_id, session_type, unit_id, topic_id, question_id,
+          chosen_answer, is_correct, raw_time_sec, cognitive_time_sec,
+          fluency_grade, misconception_tags_json, attempted_at,
+          audio_duration_sec, session_id
+        ) VALUES ($1, 'GATE', $2, $3, $4, '', $5, $6, $7, $8, '[]', $9, $10, $11)
+      `, [
+        studentId,
+        unitId,
+        `${unitId}-${r.topicCode}`,
+        `${unitId}-${r.topicCode}-GATE`,
+        r.isCorrect ? 1 : 0,
+        r.rawTimeSec || 3.0,
+        cSec,
+        perAttemptFluencyGrade(r.isCorrect, cSec, unitRow.gate_max_speed_sec),
+        now,
+        r.audioDurationSec || 0,
+        onlineSessionId
+      ]);
+    }
+
+    await client.query(UNIT_PROGRESS_UPSERT_SQL, [
       studentId,
       unitId,
       evalResult.passed ? "MASTERED" : "REMEDIATION_REQUIRED",
@@ -1221,7 +1235,10 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
       srUpdate.stabilityDays,
       now,
       srUpdate.cpaStage,
-      now
+      now,
+      keyTransition.silverAwardedAtMs > 0 ? new Date(keyTransition.silverAwardedAtMs).toISOString() : null,
+      keyTransition.goldVerifiedAtMs > 0 ? new Date(keyTransition.goldVerifiedAtMs).toISOString() : null,
+      1
     ]);
 
     if (evalResult.passed) {
@@ -1257,7 +1274,8 @@ app
           parentLoginPerIpMin: RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN,
           parentTokenPerIpMin: RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN,
           parentResetPerIpMin: RATE_LIMIT_PARENT_RESET_PER_IP_MIN,
-          parentClaimPerIpMin: RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN
+          parentClaimPerIpMin: RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN,
+          syncPerTokenMin: RATE_LIMIT_SYNC_PER_TOKEN_MIN
         }
       },
       "Balashikshana API listening"

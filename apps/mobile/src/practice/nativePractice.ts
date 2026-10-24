@@ -20,6 +20,7 @@
 import * as SQLite from "expo-sqlite";
 import { CONTENT_DB_NAME, CONTENT_DB_MIGRATIONS } from "../content/schema";
 import { contentPackDirectory } from "../content/nativeContent";
+import type { AttemptLogRow, SyncStorage } from "../sync/types";
 import type {
   AttemptInput,
   GradeSrPolicy,
@@ -143,7 +144,7 @@ function lifecycleDb(): Promise<SQLite.SQLiteDatabase> {
   return contentDbStore;
 }
 
-function createStorage(): PracticeStorage {
+function createStorage(): SyncStorage {
   return {
     async insertAttempt(input: AttemptInput, answeredAt: number): Promise<number> {
       const db = await lifecycleDb();
@@ -152,8 +153,8 @@ function createStorage(): PracticeStorage {
            student_id, topic_id, question_id, interaction_type, is_correct,
            cognitive_time_sec, audio_duration_sec, answered_at, synced,
            unit_id, session_type, session_id, raw_time_sec, fluency_grade,
-           misconception_tags_json, chosen_answer
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+           misconception_tags_json, chosen_answer, motor_baseline_sec
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.studentId,
           input.topicId,
@@ -170,9 +171,54 @@ function createStorage(): PracticeStorage {
           input.fluencyGrade,
           JSON.stringify(input.misconceptionTags || []),
           input.chosenAnswer,
+          input.motorBaselineSec,
         ],
       );
       return Number(result.lastInsertRowId);
+    },
+
+    async drainUnsynced(studentId, limit): Promise<AttemptLogRow[]> {
+      const db = await lifecycleDb();
+      // The ONLY read the sync worker needs: unsynced rows in id order
+      // (idx_attempt_log_drain), capped at the batch size.
+      return db.getAllAsync<AttemptLogRow>(
+        `SELECT id, student_id, topic_id, question_id, interaction_type, is_correct,
+                cognitive_time_sec, audio_duration_sec, answered_at, synced,
+                unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+                misconception_tags_json, chosen_answer, motor_baseline_sec
+         FROM attempt_log WHERE student_id = ? AND synced = 0 ORDER BY id ASC LIMIT ?`,
+        [studentId, limit],
+      );
+    },
+
+    async drainUnsyncedAfter(studentId, afterId, limit): Promise<AttemptLogRow[]> {
+      const db = await lifecycleDb();
+      // Beyond-window probe for whole-session batching: unsynced rows
+      // strictly past the drain window's last id, on the same
+      // idx_attempt_log_drain(student_id, id) index. A cursor, never a
+      // re-read of the window (#48 review finding 1).
+      return db.getAllAsync<AttemptLogRow>(
+        `SELECT id, student_id, topic_id, question_id, interaction_type, is_correct,
+                cognitive_time_sec, audio_duration_sec, answered_at, synced,
+                unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+                misconception_tags_json, chosen_answer, motor_baseline_sec
+         FROM attempt_log WHERE student_id = ? AND synced = 0 AND id > ?
+         ORDER BY id ASC LIMIT ?`,
+        [studentId, afterId, limit],
+      );
+    },
+
+    async markSyncedUpTo(studentId, seq): Promise<number> {
+      const db = await lifecycleDb();
+      // THE ONLY mutation permitted on attempt_log anywhere in the app:
+      // the synced-flag flip, after the server snapshot is durably
+      // applied (append-only contract's documented #48 exception; the
+      // source-scan test pins this exact statement shape).
+      const result = await db.runAsync(
+        "UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0",
+        [studentId, seq],
+      );
+      return Number(result.changes ?? 0);
     },
 
     async getTopicProgress(studentId, topicId) {
@@ -389,6 +435,15 @@ function createOpenContent(storage: PracticeStorage): PracticeDeps["openContent"
     if (!reader) {
       reader = openPackReader(artifact);
       readerCache.set(artifact, reader);
+      // Advisory (d) from the #47 review: when a grade's active artifact
+      // changes (supersede) or its pack is pruned, drop this grade's
+      // other cached readers so no query_only handle outlives its
+      // artifact. Artifact names encode the grade (#46 compiler
+      // contract: pack-<gradeId>-v<version>.sqlite).
+      const prefix = `pack-${gradeId}-v`;
+      for (const key of readerCache.keys()) {
+        if (key.startsWith(prefix) && key !== artifact) readerCache.delete(key);
+      }
     }
     return reader;
   };
