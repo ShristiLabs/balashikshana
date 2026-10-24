@@ -17,7 +17,7 @@ function read(route: string): string {
   return readFileSync(path, "utf8");
 }
 
-const PLACEHOLDER_ROUTES = ["gate/index.tsx"];
+const PLACEHOLDER_ROUTES: string[] = []; // #51: the last placeholder (gate) went live
 
 describe("route tree", () => {
   it("has a root layout and a launcher", () => {
@@ -50,6 +50,14 @@ describe("route tree", () => {
     const source = read("practice/index.tsx");
     expect(source, "the #44 consent guard stays").toContain("childAccessReady");
     expect(source, "the real #50 runner is mounted").toContain("PracticeRunnerScreen");
+    expect(source, "the placeholder is gone").not.toContain("PlaceholderScreen");
+    expect(source, "journey params are honored").toContain("useLocalSearchParams");
+  });
+
+  it("#51: the gate route renders the real boss-gate runner behind the consent guard", () => {
+    const source = read("gate/index.tsx");
+    expect(source, "the #44 consent guard stays").toContain("childAccessReady");
+    expect(source, "the real #51 gate runner is mounted").toContain("GateRunnerScreen");
     expect(source, "the placeholder is gone").not.toContain("PlaceholderScreen");
     expect(source, "journey params are honored").toContain("useLocalSearchParams");
   });
@@ -103,7 +111,12 @@ describe("route tree", () => {
       "utf-8",
     );
     expect(runnerScreen).toContain('"/journey"');
-    expect(read("gate/index.tsx")).toContain('"/journey"');
+    // #51: the gate runner (not the route file) owns the journey links.
+    const gateScreen = readFileSync(
+      join(appDir, "..", "src", "gate", "GateRunnerScreen.tsx"),
+      "utf-8",
+    );
+    expect(gateScreen).toContain('"/journey"');
   });
 
   it("root layout wires theme and reduced-motion providers", () => {

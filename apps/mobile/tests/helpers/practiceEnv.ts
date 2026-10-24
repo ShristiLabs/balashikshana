@@ -360,6 +360,28 @@ export const FIXTURE_TOPICS = [
   { code: "I", name: "Number Order" },
 ] as const;
 
+/**
+ * #51 spiral fixture: a prerequisite unit ahead of K-M2 (K-M2's
+ * prerequisite_unit_ids_json points at it when the option is on). Its
+ * topics are also the natural due-review seed targets (tests write
+ * stale topic_progress rows to make them due).
+ */
+export const FIXTURE_PREREQ_UNIT = {
+  unitId: "K-M1",
+  gradeId: "kindergarten",
+  subject: "math",
+  title: "Numbers to 5",
+  gateQuestionCount: 6,
+  gateMinAccuracyPct: 80,
+  gateMaxSpeedSec: 6,
+  gateStreakReq: 4,
+};
+
+export const FIXTURE_PREREQ_TOPICS = [
+  { code: "D", name: "Counting to 5" },
+  { code: "E", name: "Comparing to 5" },
+] as const;
+
 const PACK_DDL = `
   CREATE TABLE pack_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -429,57 +451,80 @@ const PACK_DDL = `
 `;
 
 /** Builds a pack fixture file with 10 questions per topic (compiler difficulty spread). */
-export function buildPackFixture(file: string): void {
+export function buildPackFixture(file: string, options?: { prerequisiteUnit?: boolean }): void {
   const db = new DatabaseSync(file);
   db.exec(PACK_DDL);
+  const withPrereq = options?.prerequisiteUnit === true;
+  const unitCount = withPrereq ? 2 : 1;
+  const topicCount = FIXTURE_TOPICS.length + (withPrereq ? FIXTURE_PREREQ_TOPICS.length : 0);
   db.prepare(
-    "INSERT INTO pack_info (id, pack_format_version, pack_schema_version, grade_id, grade_name, content_version, registry_version, unit_count, topic_count, question_count) VALUES (1, 1, 1, ?, 'Kindergarten', '1.0.0', '1.0.0', 1, ?, ?)",
-  ).run(FIXTURE_GRADE.gradeId, FIXTURE_TOPICS.length, FIXTURE_TOPICS.length * 10);
+    "INSERT INTO pack_info (id, pack_format_version, pack_schema_version, grade_id, grade_name, content_version, registry_version, unit_count, topic_count, question_count) VALUES (1, 1, 1, ?, 'Kindergarten', '1.0.0', '1.0.0', ?, ?, ?)",
+  ).run(FIXTURE_GRADE.gradeId, unitCount, topicCount, topicCount * 10);
   db.prepare("INSERT INTO grades VALUES (?, 'Kindergarten', '5', 2, ?, ?, ?)").run(
     FIXTURE_GRADE.gradeId,
     FIXTURE_GRADE.srGrowthFactor,
     FIXTURE_GRADE.srMaxIntervalDays,
     JSON.stringify(FIXTURE_GRADE.baseScheduleDays),
   );
-  db.prepare("INSERT INTO units VALUES (?, ?, 'math', 1, ?, '[]', ?, ?, ?, ?, '[]', '[]')").run(
-    FIXTURE_UNIT.unitId,
-    FIXTURE_UNIT.gradeId,
-    FIXTURE_UNIT.title,
-    FIXTURE_UNIT.gateQuestionCount,
-    FIXTURE_UNIT.gateMinAccuracyPct,
-    FIXTURE_UNIT.gateMaxSpeedSec,
-    FIXTURE_UNIT.gateStreakReq,
-  );
-  let questionCount = 0;
-  FIXTURE_TOPICS.forEach((topic, tIdx) => {
-    const topicId = `${FIXTURE_UNIT.unitId}-${topic.code}`;
-    db.prepare("INSERT INTO skill_topics VALUES (?, ?, ?, 'math', ?, ?, ?, '[]')").run(
-      topicId,
-      FIXTURE_UNIT.unitId,
-      FIXTURE_GRADE.gradeId,
-      topic.code,
-      topic.name,
-      tIdx + 1,
+  const insertUnit = (
+    unit: typeof FIXTURE_UNIT,
+    sequence: number,
+    prerequisiteJson: string,
+  ): void => {
+    db.prepare("INSERT INTO units VALUES (?, ?, 'math', ?, ?, ?, ?, ?, ?, ?, '[]', '[]')").run(
+      unit.unitId,
+      unit.gradeId,
+      sequence,
+      unit.title,
+      prerequisiteJson,
+      unit.gateQuestionCount,
+      unit.gateMinAccuracyPct,
+      unit.gateMaxSpeedSec,
+      unit.gateStreakReq,
     );
-    for (let n = 1; n <= 10; n += 1) {
-      const difficulty = n <= 3 ? 1 : n <= 7 ? 2 : 3;
-      db.prepare(
-        `INSERT INTO practice_questions VALUES (?, ?, ?, ?, ?, ?, 'multiple-choice', ?, 'assets/images/ten_frame_and_number_line.svg', NULL, NULL, NULL, NULL, NULL, ?, ?, '[]', '')`,
-      ).run(
-        `${topicId}-Q${n}`,
+  };
+  const insertTopics = (
+    unit: typeof FIXTURE_UNIT,
+    topics: readonly { code: string; name: string }[],
+  ): void => {
+    topics.forEach((topic, tIdx) => {
+      const topicId = `${unit.unitId}-${topic.code}`;
+      db.prepare("INSERT INTO skill_topics VALUES (?, ?, ?, 'math', ?, ?, ?, '[]')").run(
         topicId,
-        FIXTURE_UNIT.unitId,
+        unit.unitId,
+        FIXTURE_GRADE.gradeId,
         topic.code,
         topic.name,
-        difficulty,
-        `Fixture prompt ${topic.code} ${n}`,
-        JSON.stringify(["1", "2", "3"]),
-        String(n),
+        tIdx + 1,
       );
-      questionCount += 1;
-    }
-  });
-  void questionCount;
+      for (let n = 1; n <= 10; n += 1) {
+        const difficulty = n <= 3 ? 1 : n <= 7 ? 2 : 3;
+        db.prepare(
+          `INSERT INTO practice_questions VALUES (?, ?, ?, ?, ?, ?, 'multiple-choice', ?, 'assets/images/ten_frame_and_number_line.svg', NULL, NULL, NULL, NULL, NULL, ?, ?, '[]', '')`,
+        ).run(
+          `${topicId}-Q${n}`,
+          topicId,
+          unit.unitId,
+          topic.code,
+          topic.name,
+          difficulty,
+          `Fixture prompt ${topic.code} ${n}`,
+          JSON.stringify(["1", "2", "3"]),
+          String(n),
+        );
+      }
+    });
+  };
+  if (withPrereq) {
+    insertUnit(FIXTURE_PREREQ_UNIT, 1, "[]");
+    insertTopics(FIXTURE_PREREQ_UNIT, FIXTURE_PREREQ_TOPICS);
+  }
+  insertUnit(
+    FIXTURE_UNIT,
+    withPrereq ? 2 : 1,
+    withPrereq ? JSON.stringify([FIXTURE_PREREQ_UNIT.unitId]) : "[]",
+  );
+  insertTopics(FIXTURE_UNIT, FIXTURE_TOPICS);
   db.close();
 }
 
@@ -581,14 +626,17 @@ export interface PracticeTestEnv {
   dispose(): void;
 }
 
-export function createPracticeEnv(options?: { packFileName?: string }): PracticeTestEnv {
+export function createPracticeEnv(options?: {
+  packFileName?: string;
+  prerequisiteUnit?: boolean;
+}): PracticeTestEnv {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "practice-env-"));
   const lifecycle = new DatabaseSync(path.join(dir, CONTENT_DB_NAME));
   runMigrations(lifecycle);
   const storage = new NodePracticeStorage(lifecycle);
 
   const packFile = path.join(dir, options?.packFileName ?? "pack-kindergarten-v1.0.0.sqlite");
-  buildPackFixture(packFile);
+  buildPackFixture(packFile, { prerequisiteUnit: options?.prerequisiteUnit });
   // Register the pack as installed+active, as the #46 service would.
   lifecycle
     .prepare(
