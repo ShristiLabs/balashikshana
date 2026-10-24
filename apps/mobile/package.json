@@ -13,14 +13,17 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=--experimental-sqlite vitest run",
     "doctor": "npx expo-doctor"
   },
   "dependencies": {
+    "@noble/ed25519": "^2.3.0",
+    "@noble/hashes": "^2.4.0",
     "expo": "~58.0.0",
     "expo-asset": "~58.0.18",
     "expo-audio": "~58.0.10",
     "expo-constants": "~58.0.13",
+    "expo-file-system": "~58.0.0",
     "expo-haptics": "~58.0.7",
     "expo-image": "~58.0.17",
     "expo-linking": "~58.0.14",

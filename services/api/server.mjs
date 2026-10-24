@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
@@ -19,6 +21,7 @@ import {
   requireParentWithCurrentConsent
 } from "./consent.mjs";
 import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift } from "./children.mjs";
+import { contentPacksPlugin } from "./content-packs.mjs";
 import {
   median,
   computeMotorBaselineSec,
@@ -582,6 +585,17 @@ await app.register(childrenPlugin, {
   rateLimits: {
     claim: { max: RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN, timeWindow: "1 minute" }
   }
+});
+
+// Content-pack hosting (issue #46): serves the compiled, signed per-grade
+// pack manifest + artifacts from the content-pipeline output directory.
+// Read-only; the global per-IP bucket is sufficient (pack downloads are
+// rare, large responses — a dedicated bucket would only add config).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+await app.register(contentPacksPlugin, {
+  packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs"),
+  problemTypeBase: PROBLEM_BASE,
+  logger
 });
 
 // --- Routes --------------------------------------------------------------------

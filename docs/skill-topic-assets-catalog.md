@@ -54,3 +54,14 @@ Every single one of the **614 Skill Topics** across all **130 Units** (Pre-K to 
 - `interactive_story_detective.svg` — Highlighted Text Evidence & Inference Reader
 - `science_virtual_lab_bench.svg` — Solid, Liquid, and Gas Phase Change Lab
 - `us_geography_and_civics_map.svg` — Compass Rose & 50 US States Map Grid
+
+---
+
+## 3. On-Device Delivery (Content Packs, issue #46)
+
+Each grade's asset contract ships to devices inside a **signed SQLite content pack** compiled by `tools/content-pipeline` from this registry (one `pack-<gradeId>-v<version>.sqlite` per grade, Ed25519-signed and verified on-device before install — see the README "Content Packs" section):
+
+- `skill_topics.assets_json` carries each topic's complete 9-category asset contract verbatim (canonical JSON).
+- `topic_sounds` carries the SFX slice — `sound_pack_id`, `primary_sfx`, and the five feedback moments (`on_interact`, `on_correct`, `on_gentle_retry`, `on_streak_combo`, `on_speed_target_beat`) — feeding the #45 audio coordinator's `{moment, topicId}` resolution on-device.
+- `topic_narration` carries the `voiceNarration` slice (`speakingRateWpm` + SSML scripts) rendered through on-device TTS.
+- **No media bytes travel in packs:** videos and interactive/animation specs resolve by path reference through the bundled repo manifests, vector illustrations through `assets/images/`, and the 16 feedback WAVs resolve through the app's compile-time-pinned static sound registry (#45). Packs measure 0.86–2.33 MB per grade (9.07 MB total) against a 64 MB on-device budget.

@@ -939,6 +939,71 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/content/packs:
+    get:
+      tags: [content]
+      operationId: getContentPackIndex
+      summary: Manifest index of compiled per-grade content packs
+      description: >
+        Per-grade pack manifest entries (content version, artifact name, size,
+        SHA-256 checksum, detached Ed25519 signature, signing key id, and
+        unit/topic/question counts) served from the content-pipeline build
+        output. Devices verify signature and checksum before install; the
+        server only guarantees index/artifact consistency.
+      responses:
+        "200":
+          description: Manifest index for every published grade pack
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [formatVersion, registryVersion, packs]
+                properties:
+                  formatVersion:
+                    type: integer
+                  registryVersion:
+                    type: string
+                  packs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ContentPackManifestEntry"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/ContentPacksUnavailable"
+
+  /api/content/packs/{gradeId}:
+    get:
+      tags: [content]
+      operationId: getContentPackArtifact
+      summary: Signed per-grade content pack artifact (SQLite, octet-stream)
+      parameters:
+        - name: gradeId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]+$"
+          description: Grade identifier (pre-k, kindergarten, grade-1, grade-2, grade-3)
+      responses:
+        "200":
+          description: Pack artifact bytes; ETag is the manifest sha256
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/ContentPacksUnavailable"
+
   /api/curriculum/unit/{unitId}:
     get:
       tags: [curriculum]
@@ -1215,7 +1280,17 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     NotFound:
-      description: Unknown route, student, unit, or topic
+      description: Unknown route, student, unit, topic, or grade pack
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ContentPacksUnavailable:
+      description: |
+        No compiled content-pack index is published on this server, or the
+        published index references a missing/inconsistent/invalidly-named
+        artifact. Serving suspect bytes is refused (problem+json); rebuild
+        via the content-pipeline tool (tools/content-pipeline).
       content:
         application/problem+json:
           schema:
@@ -1251,6 +1326,58 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    ContentPackManifestEntry:
+      type: object
+      required:
+        - formatVersion
+        - gradeId
+        - gradeName
+        - contentVersion
+        - registryVersion
+        - artifact
+        - sizeBytes
+        - sha256
+        - keyId
+        - signature
+        - unitCount
+        - topicCount
+        - questionCount
+      properties:
+        formatVersion:
+          type: integer
+          description: Pack manifest envelope version (device refuses unknown values)
+        gradeId:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        gradeName:
+          type: string
+        contentVersion:
+          type: string
+          description: Semver-like content version derived from the registry version
+        registryVersion:
+          type: string
+        artifact:
+          type: string
+          description: Pack artifact file name (pack-<gradeId>-v<contentVersion>.sqlite)
+        sizeBytes:
+          type: integer
+          format: int64
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        keyId:
+          type: string
+          description: Signing key identifier resolved against the app's pinned key registry
+        signature:
+          type: string
+          description: Detached Ed25519 signature over the artifact bytes (base64, 64 bytes)
+        unitCount:
+          type: integer
+        topicCount:
+          type: integer
+        questionCount:
+          type: integer
+
     Problem:
       description: RFC 9457 problem details; served as application/problem+json on every error
       type: object

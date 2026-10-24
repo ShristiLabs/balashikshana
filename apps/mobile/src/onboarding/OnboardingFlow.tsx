@@ -37,6 +37,7 @@ import { ConsentStep } from "./steps/ConsentStep";
 import { GateStep } from "./steps/GateStep";
 import { GradeStep } from "./steps/GradeStep";
 import { VerifyEmailStep } from "./steps/VerifyEmailStep";
+import type { EnsureResult } from "../content/types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000";
 
@@ -45,6 +46,12 @@ interface FlowDependencies {
   tokens: TokenStore;
   store: OnboardingStore;
   platform: "ios" | "android" | "web";
+  /**
+   * Content-pack seam (#46): triggers the grade-pack download after the
+   * child + device session land. Optional and injected so the flow stays
+   * testable and a missing service never blocks onboarding.
+   */
+  contentPacks?: { ensurePack(gradeId: GradeId): Promise<EnsureResult> };
 }
 
 function newestChild(children: ChildProfileInfo[]): ChildProfileInfo | null {
@@ -62,6 +69,7 @@ export function OnboardingFlow() {
   const [devToken, setDevToken] = useState<string | null>(null);
   const [reconsent, setReconsent] = useState(false);
   const [mintError, setMintError] = useState<ApiError | null>(null);
+  const [contentNote, setContentNote] = useState<string | null>(null);
   const snapshotRef = useRef<OnboardingSnapshot | null>(null);
   const depsRef = useRef<FlowDependencies | null>(null);
   const submittingRef = useRef(false);
@@ -103,6 +111,7 @@ export function OnboardingFlow() {
           tokens,
           store: native.onboardingStore,
           platform: mapPlatform(Platform.OS),
+          contentPacks: native.contentPacks,
         };
 
         let clientDeviceId = await tokens.getClientDeviceId();
@@ -416,6 +425,28 @@ export function OnboardingFlow() {
           await persist(done);
           setMintError(null);
           setStep("complete");
+
+          // SEAM (#46): the content-pack download chains after step 4.
+          // Fire-and-forget: onboarding has ALREADY completed at this
+          // point, so a failed/slow download can never strand the flow;
+          // the launch-time provider and the next ensurePack retry it.
+          const packs = flowDeps.contentPacks;
+          if (packs) {
+            void packs
+              .ensurePack(effectiveGrade)
+              .then((result) => {
+                setContentNote(
+                  result.status === "current" ||
+                    result.status === "installed" ||
+                    result.status === "upgraded"
+                    ? `Learning content for this grade is ready on this device.`
+                    : `Learning content will finish downloading in the background.`,
+                );
+              })
+              .catch(() =>
+                setContentNote(`Learning content will download when you next open the app.`),
+              );
+          }
         });
       } finally {
         submittingRef.current = false;
@@ -534,6 +565,7 @@ export function OnboardingFlow() {
           gradeId={snapshot.gradeId}
           mintError={mintError}
           onRetryMint={() => void remintIfNeeded()}
+          contentNote={contentNote}
         />
       );
     default:
