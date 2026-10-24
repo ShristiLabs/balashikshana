@@ -79,7 +79,14 @@ export const RATE_LIMIT_SYNC_PER_TOKEN_MIN = Number(process.env.RATE_LIMIT_SYNC_
 export const SYNC_MAX_ATTEMPTS_PER_BATCH = Number(process.env.SYNC_MAX_ATTEMPTS_PER_BATCH || 200);
 export const SYNC_FUTURE_CLOCK_TOLERANCE_MS = Number(process.env.SYNC_FUTURE_CLOCK_TOLERANCE_MS || 300000);
 
-const SESSION_TYPES = ["TOPIC_PRACTICE", "GATE", "GOLD_VERIFICATION"];
+// GAME (issue #52): game-framework sessions. Attempts carry the same
+// facts as topic practice; the replay derives topic progress PER TOPIC
+// (a game's 70/20/10 spiral stream mixes prerequisite/review items
+// from other topics — crediting them all to one topic would corrupt
+// mastery), so game play always counts toward the owning topics.
+// Additive: older clients never send it; the OpenAPI baseline enum
+// carries the same value (docs/openapi/baseline.yaml).
+const SESSION_TYPES = ["TOPIC_PRACTICE", "GATE", "GOLD_VERIFICATION", "GAME"];
 
 // --- Schemas -------------------------------------------------------------------
 
@@ -390,6 +397,8 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
         await replayTopicSession({ client, studentId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else if (sessionType === "GATE") {
         await replayGateSession({ client, studentId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
+      } else if (sessionType === "GAME") {
+        await replayGameSession({ client, studentId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else {
         await replayGoldVerificationSession({ client, studentId, unitId: first.unitId, sessionMs, items });
       }
@@ -518,6 +527,109 @@ async function replayTopicSession({ client, studentId, unitId, gradeRow, targetS
       now,
       studentId
     ]);
+  }
+}
+
+/**
+ * GAME session replay (issue #52). A game session's spiral stream mixes
+ * items from the current topic, prerequisite units, and due spaced
+ * review — each attempt row carries its OWN topic/unit. The replay
+ * groups the session's items BY TOPIC and runs the exact
+ * replayTopicSession derivation per group (same deriveTopicSession
+ * call, same upsert SQL, same exactly-once counting and
+ * transition-gated coins), so a game credits every topic it served —
+ * never just the first item's topic.
+ *
+ * Mobile parity: apps/mobile PracticeSessionEngine.completeGameSession
+ * groups identically and calls the mirrored deriveTopicSession per
+ * topic group (tests pin both sides). targetSpeed is the session
+ * unit's gate_max_speed_sec exactly like topic sessions — the
+ * registry's per-game targetResponseSpeedSec is pacing/telemetry on
+ * the client and deliberately never reaches a derivation.
+ */
+async function replayGameSession({ client, studentId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
+  const toResponses = (list) =>
+    list.map(({ a }) => ({
+      isCorrect: a.isCorrect,
+      rawTimeSec: a.rawTimeSec,
+      misconceptionTags: a.misconceptionTags || []
+    }));
+
+  // Group by each item's OWN topic (first-appearance order).
+  const groups = new Map(); // topicId -> { items: [], priorItems: [], unitId }
+  const groupOf = (topicId) => {
+    let group = groups.get(topicId);
+    if (!group) {
+      group = { items: [], priorItems: [], unitId };
+      groups.set(topicId, group);
+    }
+    return group;
+  };
+  for (const item of items) groupOf(item.a.topicId).items.push(item);
+  for (const prior of priorItems) groupOf(prior.a.topicId).priorItems.push(prior);
+  for (const [topicId, group] of groups) {
+    // Foreign-topic items carry their own unit id on the row; the
+    // upsert's unit attribution follows the topic's owning unit.
+    group.unitId = group.items[0]?.a.unitId ?? group.priorItems[0]?.a.unitId ?? unitId;
+    const topicCode = topicId.startsWith(`${group.unitId}-`)
+      ? topicId.slice(group.unitId.length + 1)
+      : topicId;
+
+    const derivation = deriveTopicSession({ responses: toResponses(group.items), motorBaselineSec: motorSec, targetSpeed });
+
+    // Exactly-once counting per topic group (same union-replay seam as
+    // replayTopicSession): a re-replay re-derives over the full union
+    // but adds no count; coins flow only on the pass TRANSITION.
+    const reReplay = group.priorItems.length > 0;
+    const priorPassed = reReplay
+      ? deriveTopicSession({ responses: toResponses(group.priorItems), motorBaselineSec: motorSec, targetSpeed }).passedTopic
+      : false;
+
+    const prevTopic = await clientGet(
+      client,
+      "SELECT stability_days FROM student_topic_progress WHERE student_id = $1 AND topic_id = $2",
+      [studentId, topicId]
+    );
+    const prevStabilityDays = prevTopic ? prevTopic.stability_days : 1.0;
+    const { fg, srUpdate } = deriveTopicFluencyAndSr({
+      passedTopic: derivation.passedTopic,
+      medSpeed: derivation.medSpeed,
+      targetSpeed,
+      prevStabilityDays,
+      gradeRow
+    });
+    // One SR growth step per topic group per session arrival (same
+    // documented split-session rule as replayTopicSession).
+    const stabilityDays = reReplay ? prevStabilityDays : srUpdate.stabilityDays;
+
+    const now = new Date(sessionMs).toISOString();
+    const nextReview = new Date(sessionMs + stabilityDays * 86400000).toISOString();
+
+    await client.query(TOPIC_PROGRESS_UPSERT_SQL, [
+      studentId,
+      topicId,
+      group.unitId,
+      topicCode,
+      derivation.passedTopic ? 1 : 0,
+      derivation.crowns,
+      Math.round(derivation.accPct),
+      derivation.accPct,
+      derivation.medSpeed,
+      1,
+      fg,
+      stabilityDays,
+      nextReview,
+      now,
+      reReplay ? 0 : 1
+    ]);
+    if (derivation.passedTopic && !priorPassed) {
+      const rewardCoins = 15 + derivation.crowns * 5;
+      await client.query("UPDATE students SET star_coins = star_coins + $1, last_active_at = $2 WHERE student_id = $3", [
+        rewardCoins,
+        now,
+        studentId
+      ]);
+    }
   }
 }
 

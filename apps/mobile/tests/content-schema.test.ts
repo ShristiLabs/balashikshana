@@ -225,6 +225,90 @@ describe("lifecycle DB migrations on real SQLite", () => {
     db.close();
   });
 
+  it("upgrades a v3-era database in place to v4 (#52), backfilling the game telemetry defaults", () => {
+    const { db } = freshDb();
+    // A #48-era device: migrations 1-3 have run, attempt_log holds real
+    // rows WITHOUT the four game telemetry columns.
+    for (const migration of CONTENT_DB_MIGRATIONS.filter((m) => m.version <= 3)) {
+      for (const statement of migration.statements) db.exec(statement);
+      db.exec(`PRAGMA user_version = ${migration.version}`);
+    }
+    db.prepare(
+      `INSERT INTO attempt_log (
+         student_id, topic_id, question_id, interaction_type, is_correct,
+         cognitive_time_sec, answered_at, synced,
+         unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+         misconception_tags_json, chosen_answer, motor_baseline_sec
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "s1",
+      "K-M1-A",
+      "K-M1-A-Q1",
+      "tap-target",
+      1,
+      3.5,
+      1000,
+      "K-M1",
+      "GATE",
+      "sess-1",
+      4.2,
+      3,
+      "[]",
+      "7",
+      0.42,
+    );
+
+    runMigrations(db); // the #52 app version opens the same device
+    const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
+    expect(latest).toBe(4);
+    expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
+      4,
+    );
+    // The pre-game row survived and backfilled to the documented
+    // defaults: empty provenance string (NOT NULL ''), zero target,
+    // empty archetype, fallback marker 0.
+    expect((db.prepare("SELECT COUNT(*) n FROM attempt_log").get() as { n: number }).n).toBe(1);
+    const row = db.prepare("SELECT * FROM attempt_log").get() as Record<string, unknown>;
+    expect(row.game_spiral_provenance).toBe("");
+    expect(row.game_target_speed_sec).toBe(0);
+    expect(row.game_archetype).toBe("");
+    expect(row.game_fallback).toBe(0);
+    // New rows may write every telemetry column against the same table.
+    db.prepare(
+      `INSERT INTO attempt_log (
+         student_id, topic_id, question_id, interaction_type, is_correct,
+         cognitive_time_sec, answered_at, synced,
+         unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+         misconception_tags_json, chosen_answer, motor_baseline_sec,
+         game_spiral_provenance, game_target_speed_sec, game_archetype, game_fallback
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 'contrastive', 5.5, 'block-builder', 0)`,
+    ).run(
+      "s1",
+      "K-M1-A",
+      "K-M1-A-Q2",
+      "tap-target",
+      1,
+      3.5,
+      1001,
+      "K-M1",
+      "GAME",
+      "sess-2",
+      4.2,
+      3,
+      "[]",
+      "7",
+      0.42,
+    );
+    const gameRow = db.prepare("SELECT * FROM attempt_log WHERE id = 2").get() as Record<
+      string,
+      unknown
+    >;
+    expect(gameRow.game_spiral_provenance).toBe("contrastive");
+    expect(gameRow.game_target_speed_sec).toBe(5.5);
+    expect(gameRow.game_archetype).toBe("block-builder");
+    db.close();
+  });
+
   it("v2 attempt_log columns carry the synced-flag contract untouched", () => {
     const { db } = freshDb();
     runMigrations(db);

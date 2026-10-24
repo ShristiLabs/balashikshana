@@ -2094,7 +2094,7 @@ components:
           maxLength: 160
         sessionType:
           type: string
-          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION]
+          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]
         sessionId:
           type: string
           minLength: 1

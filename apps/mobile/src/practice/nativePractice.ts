@@ -153,8 +153,9 @@ function createStorage(): SyncStorage {
            student_id, topic_id, question_id, interaction_type, is_correct,
            cognitive_time_sec, audio_duration_sec, answered_at, synced,
            unit_id, session_type, session_id, raw_time_sec, fluency_grade,
-           misconception_tags_json, chosen_answer, motor_baseline_sec
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           misconception_tags_json, chosen_answer, motor_baseline_sec,
+           game_spiral_provenance, game_target_speed_sec, game_archetype, game_fallback
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.studentId,
           input.topicId,
@@ -172,6 +173,10 @@ function createStorage(): SyncStorage {
           JSON.stringify(input.misconceptionTags || []),
           input.chosenAnswer,
           input.motorBaselineSec,
+          input.gameTelemetry?.spiralProvenance ?? "",
+          input.gameTelemetry?.targetResponseSpeedSec ?? 0,
+          input.gameTelemetry?.archetype ?? "",
+          input.gameTelemetry?.fallback ? 1 : 0,
         ],
       );
       return Number(result.lastInsertRowId);

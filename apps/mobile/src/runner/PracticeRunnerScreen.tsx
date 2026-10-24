@@ -22,7 +22,11 @@ import type { AudioCoordinator } from "../audio/coordinator";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
 import { spacing, typeRamp } from "../design/tokens";
-import type { PracticeQuestion, TopicProgressRecord } from "../practice/types";
+import type {
+  GameAttemptTelemetry,
+  PracticeQuestion,
+  TopicProgressRecord,
+} from "../practice/types";
 import { getNativePracticeDeps } from "../practice/nativePractice";
 import { GHOST_FLASH_MS, stageForTopicProgress, stageLabelFor } from "./cpaStages";
 import {
@@ -53,6 +57,13 @@ export interface PracticeRunnerScreenProps {
   unitId: string;
   /** Optional deep-link topic (skips the picker). */
   topicCode?: string;
+  /**
+   * #52 game-framework fallback stamp: present only when the game host
+   * routed this topic here because its archetype has no installed
+   * renderer. Every attempt row of the session records the intended
+   * archetype + fallback marker (telemetry); nothing else changes.
+   */
+  gameFallback?: GameAttemptTelemetry;
 }
 
 /** Local structural draft for the structural widgets (store keeps the string). */
@@ -68,6 +79,7 @@ export function PracticeRunnerScreen({
   gradeId: gradeParam,
   unitId,
   topicCode: topicParam,
+  gameFallback,
 }: PracticeRunnerScreenProps): React.ReactElement {
   const { colors } = useTheme();
   const [state, dispatch] = useReducer(runnerReducer, undefined, initialRunnerState);
@@ -304,6 +316,7 @@ export function PracticeRunnerScreen({
           unitId,
           topicCode,
           motorBaselineSec,
+          gameTelemetry: gameFallback,
         });
         const stageByQuestionId: Record<string, string> = {};
         for (const item of start.questions) {
@@ -326,7 +339,7 @@ export function PracticeRunnerScreen({
         });
       }
     },
-    [gradeParam, unitId, stageFromProgressRef, refreshProgressByTopic],
+    [gradeParam, unitId, stageFromProgressRef, refreshProgressByTopic, gameFallback],
   );
 
   // ------------------------------------------------------------------
@@ -525,29 +538,57 @@ export function PracticeRunnerScreen({
           Pick a topic to practice. Topics you have seen before show your crowns.
         </Text>
         {state.topics.map((topic) => (
-          <Pressable
-            key={topic.topicId}
-            accessibilityRole="button"
-            accessibilityLabel={`Practice topic ${topic.topicName}. ${topic.crowns} crowns. ${stageLabelFor(topic.cpaStage)} stage.`}
-            onPress={() => dispatch({ type: "topic-selected", topicCode: topic.topicCode })}
-            style={({ pressed }) => ({
-              minHeight: 64,
-              justifyContent: "center",
-              gap: spacing.xs,
-              paddingHorizontal: spacing.lg,
-              paddingVertical: spacing.md,
-              borderRadius: 16,
-              borderWidth: 2,
-              borderCurve: "continuous",
-              borderColor: pressed ? colors.info : colors.border,
-              backgroundColor: colors.surface,
-            })}
-          >
-            <Text style={{ ...typeRamp.title, color: colors.text }}>{topic.topicName}</Text>
-            <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted }}>
-              {`${"★".repeat(topic.crowns)}${topic.crowns === 0 ? "No crowns yet" : ""} · ${stageLabelFor(topic.cpaStage)}`}
-            </Text>
-          </Pressable>
+          <View key={topic.topicId} style={{ flexDirection: "row", gap: spacing.sm }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Practice topic ${topic.topicName}. ${topic.crowns} crowns. ${stageLabelFor(topic.cpaStage)} stage.`}
+              onPress={() => dispatch({ type: "topic-selected", topicCode: topic.topicCode })}
+              style={({ pressed }) => ({
+                flex: 1,
+                minHeight: 64,
+                justifyContent: "center",
+                gap: spacing.xs,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.md,
+                borderRadius: 16,
+                borderWidth: 2,
+                borderCurve: "continuous",
+                borderColor: pressed ? colors.info : colors.border,
+                backgroundColor: colors.surface,
+              })}
+            >
+              <Text style={{ ...typeRamp.title, color: colors.text }}>{topic.topicName}</Text>
+              <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted }}>
+                {`${"★".repeat(topic.crowns)}${topic.crowns === 0 ? "No crowns yet" : ""} · ${stageLabelFor(topic.cpaStage)}`}
+              </Text>
+            </Pressable>
+            {/* #52 game entry: routes to the game host; unsupported
+                archetypes fall back to THIS runner transparently. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Play game for topic ${topic.topicName}`}
+              onPress={() =>
+                router.push({
+                  pathname: "/game",
+                  params: { unitId, topicCode: topic.topicCode },
+                })
+              }
+              style={({ pressed }) => ({
+                minWidth: 64,
+                minHeight: 64,
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 16,
+                borderWidth: 2,
+                borderCurve: "continuous",
+                borderColor: pressed ? colors.info : colors.border,
+                backgroundColor: pressed ? colors.surfaceTinted : colors.surface,
+              })}
+            >
+              <Text style={{ ...typeRamp.h3, color: colors.secondary.label }}>{"Play"}</Text>
+              <Text style={{ ...typeRamp.caption, color: colors.textMuted }}>{"game"}</Text>
+            </Pressable>
+          </View>
         ))}
       </ScrollView>
     );

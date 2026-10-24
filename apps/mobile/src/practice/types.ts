@@ -17,7 +17,34 @@
 /** Silver/Gold key lifecycle (registry globalMasteryRules.twoKeySleepConsolidationGate). */
 export type KeyState = "SILVER_KEY" | "GOLD_KEY";
 
-export type SessionType = "TOPIC_PRACTICE" | "GATE" | "GOLD_VERIFICATION";
+/**
+ * Session types. GAME (issue #52) is a game-framework session: attempts
+ * carry the same facts as topic practice and the server derives topic
+ * progress from them exactly like a topic session (per-topic grouping —
+ * a game's spiral stream mixes prerequisite/review items), so game play
+ * always counts toward mastery. The union mirrors the server's sync
+ * SESSION_TYPES enum and the OpenAPI baseline one-for-one.
+ */
+export type SessionType = "TOPIC_PRACTICE" | "GATE" | "GOLD_VERIFICATION" | "GAME";
+
+/**
+ * Per-attempt game telemetry (issue #52, attempt_log migration 4).
+ * LOCAL-ONLY columns: the #48 sync wire carries facts only and is
+ * UNCHANGED; the server derives progress from the same facts it always
+ * had. These fields record the game provenance the wire deliberately
+ * does not carry (spiral bucket, stage speed target, resolved
+ * archetype, fallback marker). No PII (COPPA).
+ */
+export interface GameAttemptTelemetry {
+  /** Spiral bucket the item came from ("" on the practice-fallback path). */
+  spiralProvenance: "current" | "contrastive" | "spaced-review" | "";
+  /** The stage's registry speed target in seconds (0 = untimed guided). */
+  targetResponseSpeedSec: number;
+  /** Archetype the framework resolved for this session. */
+  archetype: string;
+  /** True when the session fell back to the #50 practice runner. */
+  fallback: boolean;
+}
 
 /** A single recorded response — the immutable unit of the attempt log. */
 export interface AttemptInput {
@@ -39,6 +66,8 @@ export interface AttemptInput {
   /** The session's motor baseline (constant per session). #48's server
    *  replay needs it to reproduce the engine math exactly from facts. */
   motorBaselineSec: number;
+  /** #52 game telemetry stamp; absent on non-game sessions (NULL columns). */
+  gameTelemetry?: GameAttemptTelemetry;
 }
 
 export interface AttemptRecord extends AttemptInput {

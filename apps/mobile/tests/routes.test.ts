@@ -38,6 +38,16 @@ describe("route tree", () => {
     }
   });
 
+  it("#52: the game route renders the game host behind the consent guard", () => {
+    const layout = read("_layout.tsx");
+    expect(layout, "layout must register game/index").toContain("game/index");
+    const source = read("game/index.tsx");
+    expect(source, "the #44 consent guard stays").toContain("childAccessReady");
+    expect(source, "the real #52 host is mounted").toContain("GameHostScreen");
+    expect(source, "the placeholder is gone").not.toContain("PlaceholderScreen");
+    expect(source, "journey params are honored").toContain("useLocalSearchParams");
+  });
+
   it("remaining placeholder screens use the shared no-dead-end component", () => {
     for (const route of PLACEHOLDER_ROUTES) {
       const source = read(route);
@@ -117,6 +127,9 @@ describe("route tree", () => {
       "utf-8",
     );
     expect(gateScreen).toContain('"/journey"');
+    // #52: the practice picker offers the game entry (the host falls
+    // back to this runner when the archetype has no renderer).
+    expect(runnerScreen).toContain('"/game"');
   });
 
   it("root layout wires theme and reduced-motion providers", () => {
