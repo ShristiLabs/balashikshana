@@ -18,6 +18,7 @@ import {
   requireConsentForStudent,
   requireParentWithCurrentConsent
 } from "./consent.mjs";
+import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift } from "./children.mjs";
 import {
   median,
   computeMotorBaselineSec,
@@ -43,6 +44,9 @@ import {
 // RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN  parent token-presenting routes/minute per IP
 //                                    (verify-email, reset confirm)  (default 10)
 // RATE_LIMIT_PARENT_RESET_PER_IP_MIN  parent reset requests/minute per IP (default 5)
+// RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN  child-claim attempts/minute per IP (default 10; the
+//                                     claim route verifies student PINs, so it gets the
+//                                     M1 login-bucket doctrine)
 // SEED_DEMO_STUDENTS          seed demo students on an empty DB ("0" disables;
 //                             default 1). The consent-invariant suite boots
 //                             with "0" so a pristine DB proves the #41 gate.
@@ -72,6 +76,7 @@ const RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT
 const RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN || 10);
 const RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN || 10);
 const RATE_LIMIT_PARENT_RESET_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_RESET_PER_IP_MIN || 5);
+const RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN || 10);
 const URL_LENGTH_LIMIT = 2048;
 const SESSION_TTL_MS = 30 * 86400000;
 
@@ -111,20 +116,28 @@ export { sendProblem };
 // header. Missing/unknown/expired/revoked tokens -> 401; a valid token for
 // a DIFFERENT student -> 403. Expired rows are lazily deleted on lookup.
 //
-// Token-kind awareness (issue #40): resolveBearerAuth (parent-auth.mjs)
-// resolves the bearer token to a kind — 'student' or 'parent' (#42 adds
-// 'child-device'). A parent token on a student-scoped route is a 403
-// wrong-token-type problem. The public /api/students listing stays lenient:
-// a parent (or unknown) token simply yields the public list without an
-// ownSummary, preserving the M1 contract.
+// Token-kind awareness (issues #40/#42): resolveBearerAuth (parent-auth.mjs)
+// resolves the bearer token to a kind — 'student', 'child-device', or
+// 'parent'. Student sessions (M1) and child device sessions (#42, minted by
+// a parent, scoped to exactly one student + one device) both authenticate
+// student-scoped routes for THEIR bound student only; a parent token on a
+// student-scoped route is a 403 wrong-token-type problem. Archived child
+// profiles fail every student-scoped route (403 child-archived) — the
+// archive path must freeze the child's access, not just future mints. The
+// public /api/students listing stays lenient: a parent (or unknown) token
+// simply yields the public list without an ownSummary, preserving the M1
+// contract; student and child-device tokens receive their own summary.
 
 async function getSessionFromRequest(req) {
   const auth = await resolveBearerAuth(db, req.headers.authorization);
   if (auth.error) {
     return { error: auth.error };
   }
-  if (auth.kind !== "student") {
+  if (auth.kind === "parent") {
     return { wrongType: auth.kind };
+  }
+  if (auth.kind === "child-device") {
+    return { childSession: auth.childSession };
   }
   return { session: auth.session };
 }
@@ -142,12 +155,21 @@ async function requireStudentAccess(req, reply, studentId) {
     });
     return null;
   }
-  if (auth.session.student_id !== studentId) {
+  const scoped = auth.session || auth.childSession;
+  if (scoped.student_id !== studentId) {
     sendProblem(reply, 403, { type: `${PROBLEM_BASE}/forbidden`, detail: "Session does not grant access to this student" });
     return null;
   }
-  req._balashiStudentId = auth.session.student_id;
-  return auth.session;
+  const stuRow = await db.get("SELECT status FROM students WHERE student_id = $1", [studentId]);
+  if (!stuRow || stuRow.status === "archived") {
+    sendProblem(reply, 403, {
+      type: `${PROBLEM_BASE}/child-archived`,
+      detail: "This child profile has been archived by its parent."
+    });
+    return null;
+  }
+  req._balashiStudentId = scoped.student_id;
+  return scoped;
 }
 
 // --- Per-token rate limiting (in-memory fixed window) ------------------------
@@ -551,6 +573,17 @@ await app.register(parentAuthPlugin, {
 // per-IP + per-token); none is a token-guessing surface.
 await app.register(consentPlugin, { db, isProduction: IS_PRODUCTION, logger });
 
+// Child-profile routes (issue #42): parent-scoped children list/create,
+// legacy claim-or-archive, and child device-session mint/revoke. All sit
+// behind the global per-IP + per-token buckets except claim, which
+// verifies student PINs and gets the M1 login-bucket doctrine.
+await app.register(childrenPlugin, {
+  db,
+  rateLimits: {
+    claim: { max: RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN, timeWindow: "1 minute" }
+  }
+});
+
 // --- Routes --------------------------------------------------------------------
 
 app.get("/api/health", async () => {
@@ -581,10 +614,12 @@ app.get("/api/health", async () => {
 
 // GET /api/students -> Profile cards for the login screen. Without a valid
 // session only public profile fields are returned (no progress data); with
-// a valid session the caller also receives its own full summary.
+// a valid student or child-device session the caller also receives its own
+// full summary. Archived child profiles are excluded (#42: archived
+// students disappear from the login-screen listing).
 app.get("/api/students", async (req, reply) => {
   const rows = await db.all(
-    "SELECT student_id, username, nickname, avatar, age_years, current_grade FROM students ORDER BY created_at ASC"
+    "SELECT student_id, username, nickname, avatar, age_years, current_grade FROM students WHERE status <> 'archived' ORDER BY created_at ASC"
   );
   const students = rows.map((r) => ({
     studentId: r.student_id,
@@ -595,9 +630,10 @@ app.get("/api/students", async (req, reply) => {
     currentGrade: r.current_grade
   }));
   const auth = await getSessionFromRequest(req);
-  if (auth.session) {
-    const own = await getStudentFullState(auth.session.student_id);
-    req._balashiStudentId = auth.session.student_id;
+  if (auth.session || auth.childSession) {
+    const ownId = (auth.session || auth.childSession).student_id;
+    const own = await getStudentFullState(ownId);
+    req._balashiStudentId = ownId;
     return { students, ownSummary: own.summary };
   }
   return { students };
@@ -623,7 +659,10 @@ app.post(
       stuRow = await db.get("SELECT * FROM students WHERE LOWER(username) = $1 OR LOWER(nickname) = $2", [uname, uname]);
     }
 
-    if (!stuRow) {
+    // Archived child profiles (#42) log in exactly like unknown students —
+    // same 401 body, same dummy-verify timing — so archive state is not an
+    // enumeration oracle.
+    if (!stuRow || stuRow.status === "archived") {
       verifyPin(String(payload.pin ?? ""), DUMMY_PIN_HASH);
       return sendProblem(reply, 401, { type: `${PROBLEM_BASE}/unauthorized`, detail: "Incorrect username or PIN." });
     }
@@ -667,11 +706,14 @@ app.post("/api/auth/logout", async (req, reply) => {
 //
 // Consent-required middleware (issue #41, the M2 hard gate): child-data
 // creation now requires a VERIFIED parent session whose latest consent
-// record matches the active policy version. On success the creation
-// transaction inserts the student-scoped BINDING consent row (the parent's
-// standing consent, attributed to this child at creation time — see
-// consent.mjs for why that is attribution, not fabrication, and why legacy
-// students are never back-filled). The 201 response contract is unchanged.
+// record matches the active policy version. Since #42 the creation
+// transaction also inserts the parent_children binding (every new student
+// is claimed by its creating parent — no new standalone students can appear
+// post-migration-005) and re-checks the active policy version INSIDE the
+// transaction (the #41 TOCTOU advisory). The student row, unlock seeds,
+// binding, and consent binding row all live in children.mjs's shared
+// insertStudentProfile — the same core POST /api/parent/children uses. The
+// 201 response contract is unchanged.
 //
 // Note: /api/students/:studentId/calibrate is deliberately NOT gated — it
 // creates no rows (UPDATE only, on a student already scoped by
@@ -697,61 +739,28 @@ app.post("/api/students", { schema: registerSchema, preValidation: trimPinPreVal
   const studentId = `stu-${username}-${Date.now().toString().slice(-4)}`;
   const now = new Date().toISOString();
 
-  await db.withTransaction(async (client) => {
-    await client.query(`
-      INSERT INTO students (
-        student_id, username, pin_hash, nickname, avatar, age_years,
-        current_grade, motor_baseline_sec, streak_days, star_coins, hearts,
-        last_active_at, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 50, 5, $9, $10)
-    `, [
-      studentId,
-      username,
-      hashPinScrypt(payload.pin),
-      nickname,
-      avatar,
-      ageYears,
-      gradeId,
-      ageYears <= 4 ? 0.55 : ageYears <= 6 ? 0.44 : 0.34,
-      now,
-      now
-    ]);
-
-    // Unlock prerequisite grade final units so the chosen grade's Unit 1 is unlocked
-    const prereqSeeds = {
-      "kindergarten": ["PK-M7", "PK-E7"],
-      "grade-1": ["K-M10", "K-E9", "K-S5", "K-SS4"],
-      "grade-2": ["G1-M9", "G1-E10", "G1-S5", "G1-SS4"],
-      "grade-3": ["G2-M9", "G2-E10", "G2-S6", "G2-SS4"]
-    };
-    for (const pid of prereqSeeds[gradeId] || []) {
-      await client.query(`
-        INSERT INTO student_unit_progress (
-          student_id, unit_id, status, key_state, best_accuracy_pct,
-          best_median_speed_sec, attempts_count, stability_days,
-          last_reviewed_at, cpa_stage, updated_at
-        ) VALUES ($1, $2, 'MASTERED', 'GOLD_KEY', 90.0, 4.5, 1, 21.0, $3, 'PURE_ABSTRACT_SYMBOLIC', $4)
-        ON CONFLICT (student_id, unit_id) DO UPDATE SET
-          status = 'MASTERED', key_state = 'GOLD_KEY'
-      `, [studentId, pid, now, now]);
-    }
-
-    // Student-scoped consent binding row (#41): the standing consent just
-    // validated by the gate, attributed to this child at creation time. Same
-    // transaction as the student row — a student can never exist without its
-    // consent evidence (the audit_students_without_consent invariant).
-    await client.query(
-      `INSERT INTO consent_records (consent_id, parent_id, student_id, policy_version, method)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        `con-${crypto.randomBytes(10).toString("hex")}`,
-        gate.parentSession.parent_id,
+  try {
+    await db.withTransaction(async (client) => {
+      await insertStudentProfile(client, {
         studentId,
-        gate.policy.version,
-        gate.standing.method
-      ]
-    );
-  });
+        username,
+        pin: payload.pin,
+        nickname,
+        avatar,
+        ageYears,
+        gradeId,
+        motorBaselineSec: ageYears <= 4 ? 0.55 : ageYears <= 6 ? 0.44 : 0.34,
+        nowIso: now,
+        parentId: gate.parentSession.parent_id,
+        relation: "guardian",
+        policyVersion: gate.policy.version,
+        standingMethod: gate.standing.method
+      });
+    });
+  } catch (err) {
+    if (err instanceof PolicyDriftError) return sendPolicyDrift(reply, err);
+    throw err;
+  }
 
   const token = createSessionToken();
   await db.run("INSERT INTO student_sessions (token, student_id, created_at, expires_at) VALUES ($1, $2, $3, $4)", [
@@ -1221,7 +1230,8 @@ app
           parentSignupPerIpMin: RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN,
           parentLoginPerIpMin: RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN,
           parentTokenPerIpMin: RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN,
-          parentResetPerIpMin: RATE_LIMIT_PARENT_RESET_PER_IP_MIN
+          parentResetPerIpMin: RATE_LIMIT_PARENT_RESET_PER_IP_MIN,
+          parentClaimPerIpMin: RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN
         }
       },
       "Balashikshana API listening"

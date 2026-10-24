@@ -33,6 +33,7 @@ tags:
   - name: auth
   - name: parents
   - name: consent
+  - name: children
   - name: curriculum
   - name: practice
   - name: gate
@@ -66,7 +67,9 @@ paths:
         Returns public profile fields only. With a valid session token the
         response additionally carries `ownSummary` (the caller's own
         progress summary). Progress data for other students is never
-        included.
+        included. Archived child profiles are excluded (#42: archived
+        students disappear from the login-screen listing); student-session
+        and child-device session tokens both receive their own summary.
       parameters:
         - $ref: "#/components/parameters/SessionToken"
       responses:
@@ -101,8 +104,13 @@ paths:
         email-verification-required; no current-version consent -> 403
         consent-required (problem body carries `currentPolicyVersion`).
         On success the student-scoped consent binding row is written in the
-        same transaction as the student row. The 201 response contract is
-        unchanged (student session token issued).
+        same transaction as the student row, together with the
+        parent_children binding to the creating parent (since #42 every
+        creation path binds its student — no new standalone students can
+        appear) and an in-transaction re-check of the active policy version
+        (a version flip between gate and commit aborts the whole
+        transaction with 403 consent-required). The 201 response contract
+        is unchanged (student session token issued).
       requestBody:
         required: true
         content:
@@ -634,6 +642,273 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parent/children:
+    get:
+      tags: [children]
+      operationId: listParentChildren
+      summary: The calling parent's child profiles with binding status and active device-session counts
+      description: |
+        Requires a `Bearer` PARENT session token (student or child-device
+        token -> 403 wrong-token-type). Archived children are listed with
+        their status; the parent portal (#61) manages them.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: The parent's children
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildrenListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+    post:
+      tags: [children]
+      operationId: createChildProfile
+      summary: Create a child profile bound to the caller (avatar + PIN, parent + device)
+      description: |
+        The D4 canonical creation path. Requires a `Bearer` PARENT session
+        token whose email is verified and whose latest consent record
+        matches the active policy version (#41 gates; unverified ->
+        403 email-verification-required, stale/none -> 403
+        consent-required with `currentPolicyVersion`). One transaction
+        writes the students row, the parent_children binding ('claimed'),
+        the student-scoped binding consent row, and upserts the devices row
+        for (parent, clientDeviceId); the active policy version is
+        re-checked inside the transaction. Child PINs use the shared scrypt
+        parameters (identical hardening to M1). No session token is issued
+        here — parents mint child device sessions explicitly via
+        device-sessions.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChildCreateRequest"
+      responses:
+        "201":
+          description: Child profile created and bound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildProfileResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parent/children/claim:
+    post:
+      tags: [children]
+      operationId: claimLegacyStudent
+      summary: Claim a legacy standalone student (exactly once; username + PIN proof of knowledge)
+      description: |
+        The M2 legacy migration story: a verified parent with current-version
+        consent claims a pre-existing standalone student ('legacy' status —
+        the migration-005 population). Anti-hijack: the claim requires the
+        student's username AND PIN (unknown student, wrong PIN, and archived
+        student fail with a byte-identical 403 claim-rejected — no oracle),
+        eligibility is legacy-status-only, and exactly-once is enforced
+        atomically (a second claimant gets 409 already-claimed; the DB
+        partial unique index backs the route's mutex). On success the
+        student flips to active, the parent_children binding and the
+        binding consent row are written in one transaction, and the
+        student's attempt history flows under the parent untouched.
+        Stricter per-IP rate limit (PIN-guessing surface, M1 login-bucket
+        doctrine).
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChildClaimRequest"
+      responses:
+        "201":
+          description: Student claimed and bound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildProfileResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: |
+            already-claimed: the student is bound to a parent (exactly-once
+            claim; a second claimant is rejected).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parent/children/{studentId}/archive:
+    post:
+      tags: [children]
+      operationId: archiveChildProfile
+      summary: Archive a bound child (excluded from listings, sessions killed, mints refused)
+      description: |
+        Requires a `Bearer` PARENT session token and a 'claimed'
+        parent_children binding for the student (none -> 403
+        no-child-binding; already archived -> 409 child-archived). One
+        transaction flips the binding and student status to 'archived',
+        stamps archived_at, revokes every live child device session, and
+        deletes M1 student sessions. Archived students disappear from
+        GET /api/students, cannot log in by PIN, cannot mint device
+        sessions, and fail every student-scoped route.
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Child archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildArchiveResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: child-archived (already archived)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parent/children/{studentId}/device-sessions:
+    post:
+      tags: [children]
+      operationId: mintChildDeviceSession
+      summary: Mint a child device token scoped to exactly one student and one device
+      description: |
+        Requires a `Bearer` PARENT session token with a claimed binding for
+        the student (none -> 403 no-child-binding; archived -> 409
+        child-archived) and current-version consent FOR the student (a
+        policy bump blocks minting until re-consent; 403 consent-required
+        with `currentPolicyVersion`). The token is a 256-bit value stored
+        hashed at rest and returned EXACTLY ONCE in this response; it
+        authenticates child-scoped routes (student state, calibrate,
+        practice, gate) for its bound student only, expires in 30 days,
+        and dies immediately on revocation. Device binding scopes issuance
+        and revocation: revoking one device's session leaves another
+        device's session working.
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceSessionRequest"
+      responses:
+        "201":
+          description: Device session minted (token shown once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceSessionResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: child-archived (cannot mint for an archived child)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/parent/children/{studentId}/device-sessions/{sessionId}:
+    delete:
+      tags: [children]
+      operationId: revokeChildDeviceSession
+      summary: Revoke a child device session (parent-side; kills the token immediately)
+      description: |
+        Requires a `Bearer` PARENT session token and a parent_children
+        binding for the student (none -> 403 no-child-binding). The revoke
+        is soft: the row is kept as lifecycle evidence
+        (revocation_reason 'parent-revoked') and the token fails 401 on its
+        next use. Unknown or already-revoked sessions are a uniform 404.
+        This is the hook the #61 portal revocation UI calls.
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Child device session identifier (cds-...)
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, sessionId, revokedAt]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  sessionId:
+                    type: string
+                  revokedAt:
+                    type: string
+                    format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -1364,6 +1639,187 @@ components:
                   enum: [signup-form, re-consent]
                 studentId:
                   type: [string, "null"]
+
+    ChildCreateRequest:
+      type: object
+      required: [pin, clientDeviceId, platform]
+      additionalProperties: false
+      properties:
+        nickname:
+          type: string
+          maxLength: 32
+        username:
+          type: string
+          maxLength: 32
+        pin:
+          type: string
+          pattern: "^[0-9]{4}$"
+          description: Child PIN; stored with the shared scrypt parameters (M1-identical hardening)
+        currentGrade:
+          type: string
+          enum: [pre-k, kindergarten, grade-1, grade-2, grade-3]
+        ageYears:
+          type: number
+          minimum: 3
+          maximum: 10
+        avatar:
+          type: string
+          maxLength: 8
+        relation:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Guardian relation label (e.g. mother/father/guardian); defaults to guardian
+        clientDeviceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-provided device identifier; unique per parent (re-seen devices upsert)
+        platform:
+          type: string
+          enum: [ios, android, web]
+
+    ChildClaimRequest:
+      type: object
+      required: [username, pin]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+        pin:
+          type: string
+          pattern: "^[0-9]{4}$"
+        relation:
+          type: string
+          minLength: 1
+          maxLength: 32
+
+    DeviceSessionRequest:
+      type: object
+      required: [clientDeviceId, platform]
+      additionalProperties: false
+      properties:
+        clientDeviceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+        platform:
+          type: string
+          enum: [ios, android, web]
+
+    ChildProfileResponse:
+      type: object
+      required: [studentId, username, nickname, avatar, ageYears, currentGrade, relation, parentId, consent]
+      properties:
+        studentId:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        avatar:
+          type: string
+        ageYears:
+          type: integer
+        currentGrade:
+          type: string
+        relation:
+          type: string
+        status:
+          type: string
+          enum: [claimed]
+          description: Present on claim responses; creation responses imply claimed
+        claimedAt:
+          type: string
+          format: date-time
+        parentId:
+          type: string
+        deviceId:
+          type: string
+          description: Present on creation responses (the upserted devices row)
+        consent:
+          type: object
+          required: [policyVersion, method]
+          properties:
+            policyVersion:
+              type: string
+            method:
+              type: string
+              enum: [signup-form, re-consent]
+
+    ChildrenListResponse:
+      type: object
+      required: [parentId, children]
+      properties:
+        parentId:
+          type: string
+        children:
+          type: array
+          items:
+            type: object
+            required:
+              [studentId, username, nickname, avatar, ageYears, currentGrade, relation, status, claimedAt, activeDeviceSessions]
+            properties:
+              studentId:
+                type: string
+              username:
+                type: string
+              nickname:
+                type: string
+              avatar:
+                type: string
+              ageYears:
+                type: integer
+              currentGrade:
+                type: string
+              relation:
+                type: string
+              status:
+                type: string
+                enum: [claimed, archived]
+              claimedAt:
+                type: string
+                format: date-time
+              archivedAt:
+                type: [string, "null"]
+                format: date-time
+              activeDeviceSessions:
+                type: integer
+
+    ChildArchiveResponse:
+      type: object
+      required: [ok, studentId, status, archivedAt]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        studentId:
+          type: string
+        status:
+          type: string
+          const: archived
+        archivedAt:
+          type: string
+          format: date-time
+
+    DeviceSessionResponse:
+      type: object
+      required: [sessionId, token, deviceId, studentId, expiresAt]
+      properties:
+        sessionId:
+          type: string
+        token:
+          type: string
+          description: The raw child device token — shown exactly once, never stored or logged
+        deviceId:
+          type: string
+        studentId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
 
     StudentPublic:
       type: object

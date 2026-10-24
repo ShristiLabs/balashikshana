@@ -1,10 +1,13 @@
 // Parent accounts and consent schema coverage for issue #39 (migration
-// 002) plus the consent policy catalog from issue #41 (migration 004): FK
+// 002), the consent policy catalog from issue #41 (migration 004), and the
+// child-profile/device-session schema from issue #42 (migration 005): FK
 // integrity, the COPPA delete rules (evidence RESTRICTs, live
-// bindings/devices CASCADE), case-insensitive email uniqueness, composite
-// uniqueness on parent_children and devices, the email shape guard, the
-// audit_students_without_consent view, the consent method CHECK + policy
-// FK + single-active-policy index, and 002/003/004 reversibility.
+// bindings/devices/sessions CASCADE), case-insensitive email uniqueness,
+// composite uniqueness on parent_children and devices, the email shape
+// guard, the audit_students_without_consent view, the consent method CHECK
+// + policy FK + single-active-policy index, the 005 value-set CHECKs +
+// students.status lifecycle + exactly-one-claimant partial unique index,
+// and 002/003/004/005 reversibility.
 //
 // Schema-level: it applies migrations to a throwaway database directly
 // through node-pg-migrate with the same options db.mjs runMigrations uses
@@ -354,6 +357,126 @@ describe("consent policy catalog (issue #41, migration 004)", () => {
   });
 });
 
+describe("child profiles and device sessions (issue #42, migration 005)", () => {
+  test("students.status CHECK rejects values outside the set (23514)", async () => {
+    const studentId = await insertStudent();
+    await assert.rejects(
+      db.query("UPDATE students SET status = 'floating' WHERE student_id = $1", [studentId]),
+      (err) => err.code === "23514"
+    );
+  });
+
+  test("a binding-less student can be flagged legacy (the back-fill shape)", async () => {
+    const studentId = await insertStudent();
+    await db.query("UPDATE students SET status = 'legacy' WHERE student_id = $1", [studentId]);
+    const row = (await db.query("SELECT status FROM students WHERE student_id = $1", [studentId])).rows[0];
+    assert.equal(row.status, "legacy");
+  });
+
+  test("parent_children.status CHECK rejects values outside the set (23514)", async () => {
+    const parentId = await insertParent("pc-status-ck@example.com");
+    const studentId = await insertStudent();
+    await db.query("INSERT INTO parent_children (parent_id, student_id, relation) VALUES ($1, $2, 'mother')", [
+      parentId,
+      studentId
+    ]);
+    await assert.rejects(
+      db.query("UPDATE parent_children SET status = 'pending' WHERE student_id = $1", [studentId]),
+      (err) => err.code === "23514"
+    );
+  });
+
+  test("devices.platform CHECK rejects values outside the set (23514)", async () => {
+    const parentId = await insertParent("platform-ck@example.com");
+    await assert.rejects(
+      db.query(
+        "INSERT INTO devices (device_id, parent_id, client_device_id, platform) VALUES ($1, $2, 'ck-client', 'blackberry')",
+        [uid("dev"), parentId]
+      ),
+      (err) => err.code === "23514"
+    );
+  });
+
+  test("exactly-one-claimant: the partial unique index rejects a second 'claimed' binding for a student (23505)", async () => {
+    const winner = await insertParent("claim-winner@example.com");
+    const loser = await insertParent("claim-loser@example.com");
+    const studentId = await insertStudent();
+    await db.query("INSERT INTO parent_children (parent_id, student_id, relation) VALUES ($1, $2, 'mother')", [
+      winner,
+      studentId
+    ]);
+    await assert.rejects(
+      db.query("INSERT INTO parent_children (parent_id, student_id, relation) VALUES ($1, $2, 'father')", [
+        loser,
+        studentId
+      ]),
+      (err) => err.code === "23505"
+    );
+    // Archived bindings do NOT occupy the claim slot (the index is partial).
+    await db.query("UPDATE parent_children SET status = 'archived', archived_at = now() WHERE student_id = $1", [
+      studentId
+    ]);
+    await db.query("INSERT INTO parent_children (parent_id, student_id, relation) VALUES ($1, $2, 'guardian')", [
+      loser,
+      studentId
+    ]);
+  });
+
+  test("child_device_sessions: token_hash is unique and FKs to parents/students/devices", async () => {
+    const parentId = await insertParent("cds-fk@example.com");
+    const studentId = await insertStudent();
+    const deviceId = uid("dev");
+    await db.query(
+      "INSERT INTO devices (device_id, parent_id, client_device_id, platform) VALUES ($1, $2, 'cds-client', 'ios')",
+      [deviceId, parentId]
+    );
+    await db.query(
+      `INSERT INTO child_device_sessions (session_id, token_hash, parent_id, student_id, device_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5, now() + interval '30 days')`,
+      [uid("cds"), "a".repeat(64), parentId, studentId, deviceId]
+    );
+    await assert.rejects(
+      db.query(
+        `INSERT INTO child_device_sessions (session_id, token_hash, parent_id, student_id, device_id, expires_at)
+         VALUES ($1, $2, $3, $4, $5, now() + interval '30 days')`,
+        [uid("cds"), "a".repeat(64), parentId, studentId, deviceId]
+      ),
+      (err) => err.code === "23505"
+    );
+    await assert.rejects(
+      db.query(
+        `INSERT INTO child_device_sessions (session_id, token_hash, parent_id, student_id, device_id, expires_at)
+         VALUES ($1, $2, $3, 'stu-does-not-exist', $4, now() + interval '30 days')`,
+        [uid("cds"), "b".repeat(64), parentId, deviceId]
+      ),
+      (err) => err.code === "23503"
+    );
+  });
+
+  test("deleting a student cascades to their child_device_sessions", async () => {
+    const parentId = await insertParent("cds-cascade@example.com");
+    const studentId = await insertStudent();
+    const deviceId = uid("dev");
+    await db.query(
+      "INSERT INTO devices (device_id, parent_id, client_device_id, platform) VALUES ($1, $2, 'cds-casc-client', 'android')",
+      [deviceId, parentId]
+    );
+    const sessionId = uid("cds");
+    await db.query(
+      `INSERT INTO child_device_sessions (session_id, token_hash, parent_id, student_id, device_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5, now() + interval '30 days')`,
+      [sessionId, "c".repeat(64), parentId, studentId, deviceId]
+    );
+
+    // Student delete cascades (handle consent evidence first if any — none here).
+    await db.query("DELETE FROM students WHERE student_id = $1", [studentId]);
+    const gone = (
+      await db.query("SELECT 1 FROM child_device_sessions WHERE session_id = $1", [sessionId])
+    ).rows[0];
+    assert.equal(gone, undefined, "sessions must cascade-delete with the student");
+  });
+});
+
 describe("audit_students_without_consent view", () => {
   test("lists exactly the students lacking a consent_records row and excludes consented ones", async () => {
     const parentId = await insertParent("audit-view@example.com");
@@ -382,13 +505,14 @@ describe("audit_students_without_consent view", () => {
 describe("migration 002 reversibility", () => {
   // Runs last in this file on purpose: `down` drops every 002 object and
   // the rows earlier tests created in them. No later test depends on them.
-  // 003 (issue #40) layers parent_sessions/parent_tokens on top of 002, and
-  // 004 (issue #41) layers the consent policy catalog + consent_records
-  // constraints on top of that, so the rollback removes all three M2-parent
+  // 003 (issue #40) layers parent_sessions/parent_tokens on top of 002, 004
+  // (issue #41) layers the consent policy catalog + consent_records
+  // constraints on top of that, and 005 (issue #42) layers the child
+  // profiles/device sessions, so the rollback removes all four M2-parent
   // migrations (in order) and the up restores them; the reversibility
   // contract is unchanged.
-  test("down removes exactly the 002+003+004 objects, up restores them", async () => {
-    await migrate({ direction: "down", count: 3 });
+  test("down removes exactly the 002+003+004+005 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 4 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -403,7 +527,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('audit_students_without_consent') AS audit_view,
            to_regclass('parent_sessions') AS parent_sessions,
            to_regclass('parent_tokens') AS parent_tokens,
-           to_regclass('consent_policy_versions') AS consent_policy_versions`
+           to_regclass('consent_policy_versions') AS consent_policy_versions,
+           to_regclass('child_device_sessions') AS child_device_sessions`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -414,16 +539,29 @@ describe("migration 002 reversibility", () => {
       audit_view: null,
       parent_sessions: null,
       parent_tokens: null,
-      consent_policy_versions: null
+      consent_policy_versions: null,
+      child_device_sessions: null
     });
+
+    // 005's students.status column is gone with the rollback.
+    const statusGone = await db.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'students' AND column_name = 'status'`
+    );
+    assert.equal(statusGone.rows.length, 0, "students.status must be removed by 005 down");
 
     await migrate({ direction: "up" });
 
     names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(
       names,
-      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens", "004_consent_policy_versions"],
-      "up must re-apply 002, 003 and 004"
+      [
+        "001_initial_schema",
+        "002_parent_accounts_consent",
+        "003_parent_auth_tokens",
+        "004_consent_policy_versions",
+        "005_child_profiles_device_sessions"
+      ],
+      "up must re-apply 002, 003, 004 and 005"
     );
 
     const back = (
@@ -436,11 +574,19 @@ describe("migration 002 reversibility", () => {
            to_regclass('audit_students_without_consent') AS audit_view,
            to_regclass('parent_sessions') AS parent_sessions,
            to_regclass('parent_tokens') AS parent_tokens,
-           to_regclass('consent_policy_versions') AS consent_policy_versions`
+           to_regclass('consent_policy_versions') AS consent_policy_versions,
+           to_regclass('child_device_sessions') AS child_device_sessions`
       )
     ).rows[0];
     for (const [object, regclass] of Object.entries(back)) {
       assert.ok(regclass, `${object} must exist again after up`);
     }
+
+    // The up back-fill re-derives 'legacy' from the parent_children
+    // population: the students earlier tests inserted had their bindings
+    // dropped by the rollback, so they all re-emerge flagged legacy —
+    // exactly the documented semantics of the status-only migration.
+    const flags = (await db.query("SELECT DISTINCT status FROM students")).rows.map((r) => r.status);
+    assert.deepEqual(flags, ["legacy"], "re-running up re-derives the legacy flag for binding-less students");
   });
 });

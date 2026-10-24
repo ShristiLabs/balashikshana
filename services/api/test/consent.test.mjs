@@ -242,17 +242,31 @@ describe("POST /api/consent/records (capture)", () => {
     await captureConsent(parent.token, "1");
     const student = await registerGatedStudent(parent, { username: `bound${++seq}`, nickname: "Bound" });
 
-    // Pre-#42 no binding exists: naming any student is refused.
-    const refused = await captureConsent(parent.token, "1", { studentId: student.student.studentId });
+    // Since #42, registration itself writes the binding, so an UNBOUND
+    // student only exists as pre-#42 dev data: insert one directly (the
+    // migration-005 legacy shape) for the refusal case.
+    const unboundId = `stu-unbound-${++seq}`;
+    await db.query(
+      `INSERT INTO students (student_id, username, pin_hash, nickname, avatar, age_years, current_grade, last_active_at, created_at, status)
+       VALUES ($1, $2, $3, 'Unbound', 'fox', 6, 'kindergarten', now(), now(), 'legacy')`,
+      [unboundId, `unbound${unboundId}`, hashPinScrypt("4848")]
+    );
+    const refused = await captureConsent(parent.token, "1", { studentId: unboundId });
     assert.equal(refused.status, 403);
     assert.equal(refused.json.type, "https://balashikshana.dev/problems/no-child-binding");
+    // The unbound row is test scaffolding, not a route-created student:
+    // remove it so the suite-end invariant check stays meaningful.
+    await db.query("DELETE FROM students WHERE student_id = $1", [unboundId]);
 
-    // The #42 future: once a binding row exists (inserted directly here),
-    // the capture names the student.
-    await db.query("INSERT INTO parent_children (parent_id, student_id, relation) VALUES ($1, $2, 'mother')", [
-      parent.parentId,
-      student.student.studentId
-    ]);
+    // The #42 reality: the gated student carries its creation-time binding,
+    // so the same parent can scope consent to it without any manual row.
+    const binding = (
+      await db.query("SELECT 1 FROM parent_children WHERE parent_id = $1 AND student_id = $2", [
+        parent.parentId,
+        student.student.studentId
+      ])
+    ).rows[0];
+    assert.ok(binding, "registration must write the parent_children binding since #42");
     const ok = await captureConsent(parent.token, "1", { studentId: student.student.studentId });
     assert.equal(ok.status, 201, JSON.stringify(ok.json));
     assert.equal(ok.json.studentId, student.student.studentId);
