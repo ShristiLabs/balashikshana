@@ -1,15 +1,44 @@
-import { Stack } from "expo-router/stack";
+/**
+ * Root layout: safe-area, theme, and reduced-motion providers wrap the
+ * expo-router stack. Header colors come from semantic tokens; the
+ * background comes from the active theme, never a hardcoded value.
+ */
+import React from "react";
+import { Stack } from "expo-router";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ThemeProvider, useTheme } from "../src/design/theme";
+import { MotionProvider } from "../src/design/useMotion";
 
-export default function RootLayout() {
+function RootStack() {
+  const { colors } = useTheme();
   return (
     <Stack
       screenOptions={{
-        headerLargeTitle: true,
         headerShadowVisible: false,
-        contentStyle: { backgroundColor: "#FFFDF7" }
+        headerLargeTitle: true,
+        contentStyle: { backgroundColor: colors.background },
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.text,
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Balashikshana (Pre-K to Grade 3)" }} />
+      <Stack.Screen name="index" options={{ title: "Balashikshana" }} />
+      <Stack.Screen name="onboarding/index" options={{ title: "Onboarding" }} />
+      <Stack.Screen name="journey/index" options={{ title: "Journey" }} />
+      <Stack.Screen name="practice/index" options={{ title: "Practice" }} />
+      <Stack.Screen name="gate/index" options={{ title: "Boss Gate" }} />
+      <Stack.Screen name="parent/index" options={{ title: "Parent Area" }} />
     </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <MotionProvider>
+          <RootStack />
+        </MotionProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

@@ -3,9 +3,9 @@
     "name": "Balashikshana",
     "slug": "balashikshana",
     "version": "1.0.0",
-    "orientation": "default",
+    "orientation": "portrait",
     "scheme": "balashikshana",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.shristilabs.balashikshana"
@@ -13,6 +13,17 @@
     "android": {
       "package": "com.shristilabs.balashikshana"
     },
-    "plugins": ["expo-router", "expo-sqlite", "expo-audio"]
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-audio",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#58CC02",
+          "dark": { "backgroundColor": "#14211F" }
+        }
+      ]
+    ]
   }
 }
