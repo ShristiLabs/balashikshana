@@ -692,11 +692,23 @@ app.post(
   }
 );
 
-// POST /api/auth/logout -> Revoke the caller's session token
+// POST /api/auth/logout -> Revoke the caller's session token. Parent and
+// child-device tokens cannot be revoked here (they are not student_sessions
+// rows; their own logout/revoke surfaces are /api/parents/logout and the
+// parent-side device-session DELETE). Before the #44 guard, a parent token
+// fell through to auth.session.token and crashed with a 500 (fail closed,
+// but as an unstructured error); the 403 mirrors requireStudentAccess's
+// wrong-type doctrine.
 app.post("/api/auth/logout", async (req, reply) => {
   const auth = await getSessionFromRequest(req);
   if (auth.error) {
     return sendProblem(reply, 401, { type: `${PROBLEM_BASE}/unauthorized`, detail: auth.error });
+  }
+  if (auth.wrongType || auth.childSession) {
+    return sendProblem(reply, 403, {
+      type: `${PROBLEM_BASE}/wrong-token-type`,
+      detail: "Parent and child device tokens cannot be revoked at this route; use /api/parents/logout or the parent device-session revoke."
+    });
   }
   await db.run("DELETE FROM student_sessions WHERE token = $1", [auth.session.token]);
   return { ok: true };
