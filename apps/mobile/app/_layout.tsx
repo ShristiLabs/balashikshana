@@ -6,6 +6,7 @@
 import React from "react";
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AudioServiceProvider } from "../src/audio/AudioServiceProvider";
 import { ThemeProvider, useTheme } from "../src/design/theme";
 import { MotionProvider } from "../src/design/useMotion";
 
@@ -36,7 +37,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <MotionProvider>
-          <RootStack />
+          <AudioServiceProvider>
+            <RootStack />
+          </AudioServiceProvider>
         </MotionProvider>
       </ThemeProvider>
     </SafeAreaProvider>
