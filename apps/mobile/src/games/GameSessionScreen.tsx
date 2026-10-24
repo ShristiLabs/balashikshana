@@ -94,6 +94,9 @@ export function GameSessionScreen({
   const [state, dispatch] = useReducer(gameReducer, undefined, initialGameState);
   const [exitSheetOpen, setExitSheetOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  /** #53 carry-over fix 1: play-again double-start guard (the summary
+   * unmounts on the transition; this closes the double-tap window). */
+  const [restarting, setRestarting] = useState(false);
 
   const audioRef = useRef<AudioCoordinator | null>(null);
   const narrationSecRef = useRef(0);
@@ -358,6 +361,8 @@ export function GameSessionScreen({
       try {
         const summary = await getRunnerEngine().completeGameSession(state.sessionId);
         dispatch({ type: "summary-ready", sessionId: state.sessionId, summary });
+        // Re-arm the play-again guard for the next summary visit.
+        setRestarting(false);
         if (summary.metGoal) {
           playMoment("onCorrect", currentGameQuestion(state)?.topicId);
           void audioRef.current
@@ -438,6 +443,56 @@ export function GameSessionScreen({
     );
   }
 
+  if (state.phase === "stage-pick") {
+    // #53 carry-over fix 3: EVERY resolution (single stage included)
+    // routes through this explicit affordance - the child taps the
+    // stage card before any warm-up or session starts.
+    return (
+      <ScrollView contentContainerStyle={{ padding: spacing.xl, gap: spacing.md }}>
+        <Text style={{ ...typeRamp.h2, color: colors.text }}>
+          {state.topicName ?? "Ready to play"}
+        </Text>
+        <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted }}>
+          {"Pick how you want to play."}
+        </Text>
+        {state.offeredStages.map((offered) => (
+          <Pressable
+            key={offered}
+            accessibilityRole="button"
+            accessibilityLabel={
+              offered === "guided"
+                ? "Guided explorer game. Untimed with hints."
+                : "Fluency sprint game. Beat the clock."
+            }
+            onPress={() => dispatch({ type: "stage-selected", stage: offered })}
+            testID={`game-stage-${offered}`}
+            style={({ pressed }) => ({
+              minHeight: 64,
+              justifyContent: "center",
+              gap: spacing.xs,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+              borderRadius: 16,
+              borderWidth: 2,
+              borderCurve: "continuous",
+              borderColor: pressed ? colors.info : colors.border,
+              backgroundColor: colors.surface,
+            })}
+          >
+            <Text style={{ ...typeRamp.title, color: colors.text }}>
+              {offered === "guided" ? "Guided Explorer" : "Fluency Sprint"}
+            </Text>
+            <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted }}>
+              {offered === "guided"
+                ? "Take your time. Hints and pictures help you."
+                : "Answer fast. Beat your best time."}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    );
+  }
+
   if (state.phase === "warmup") {
     return (
       <MotorWarmup onComplete={(baseline) => void startSession(baseline)} testID="game-warmup" />
@@ -446,7 +501,13 @@ export function GameSessionScreen({
 
   if (state.phase === "summary" && state.summary) {
     const summary = state.summary;
-    const current = summary.perTopic[0];
+    // #53 carry-over fix 2: select THIS session's topic row by topic
+    // id - a spiral-heavy stream can order a foreign topic first, so
+    // perTopic[0] is not the current topic. Missing row hides the chip
+    // rather than showing a foreign topic.
+    const current = state.topicId
+      ? (summary.perTopic.find((row) => row.topicId === state.topicId) ?? null)
+      : null;
     return (
       <ScrollView
         contentContainerStyle={{ padding: spacing.xxl, gap: spacing.lg, alignItems: "center" }}
@@ -457,7 +518,7 @@ export function GameSessionScreen({
         <Text style={{ ...typeRamp.body, color: colors.textMuted, textAlign: "center" }}>
           {summary.metGoal
             ? "You beat the game's goal. Keep it up!"
-            : `Reach ${summary.archetype ? "" : ""}${summary.stage === "fluency" ? "the speed goal" : "the accuracy goal"} next time.`}
+            : `Reach ${summary.stage === "fluency" ? "the speed goal" : "the accuracy goal"} next time.`}
         </Text>
         <View
           style={{
@@ -504,9 +565,16 @@ export function GameSessionScreen({
         <Button
           label="Play again"
           variant="outline"
+          disabled={restarting}
           onPress={() => {
+            // #53 carry-over fix 1: the ONLY transition is back to the
+            // stage affordance -> warm-up, whose motor calibration
+            // produces the baseline for the next startSession call.
+            // The direct startSession(0.42) (double-start against the
+            // warm-up's own start, hardcoded baseline) is gone.
+            if (restarting) return;
+            setRestarting(true);
             dispatch({ type: "stage-selected", stage: summary.stage });
-            void startSession(0.42);
           }}
           accessibilityHint="Start another game session on this topic"
         />
@@ -607,8 +675,11 @@ export function GameSessionScreen({
         ) : null}
       </View>
 
-      {/* The archetype renderer owns the answer surface. */}
+      {/* The archetype renderer owns the answer surface. Keyed by the
+       * item id so every item (and every re-queued repeat) starts from
+       * the renderer's pristine internal state - no reset effects. */}
       <Renderer
+        key={question.questionId}
         question={question}
         stage={cpaStage}
         gameStage={stage}

@@ -1,13 +1,16 @@
 /**
  * Stub archetype renderer (issue #52) - the THIN proof-of-pipeline
- * renderer for "block-builder", registered until #53 ships the real
+ * renderer that carried "block-builder" until #53 shipped the real
  * Block Builder + Market Cashier renderers into ARCHETYPE_RENDERERS.
+ * UNREGISTERED since #53; it stays in the tree as the authoring
+ * template for the #54 pack (bubble-pop-blitz, monster-phoneme-feeder
+ * start from this shape and the GameRendererProps contract).
  *
  * It implements the GameRendererProps contract exactly as a real
  * archetype would: game chrome (title banner + stage framing) around
  * the shared #50/#51 rendering substrate (QuestionBody -> renderPlanFor
  * matrix -> widget kit), reporting drafts upward. A child playing a
- * block-builder topic today gets a real, playable, data-driven session
+ * block-builder topic got a real, playable, data-driven session
  * through the whole framework - registry games block -> route
  * resolution -> GAME session -> spiral stream -> telemetry -> sync.
  *

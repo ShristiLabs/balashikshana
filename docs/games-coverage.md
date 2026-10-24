@@ -1,6 +1,6 @@
 # Game-Archetype Coverage Checklist
 
-Issue #52 acceptance artifact. The archetype inventory is **enumerated
+Issues #52/#53 acceptance artifact. The archetype inventory is **enumerated
 from the data**, never hand-listed: `docs/us-curriculum-registry.json`
 references exactly 11 archetype ids across unit-level `games` blocks and
 the per-topic `assets.games` bindings (all 614 topics carry BOTH a
@@ -17,19 +17,24 @@ error screen.
 
 ## Renderer inventory
 
-| archetype id | Status | Renderer | Lands with |
-|---|---|---|---|
-| `block-builder` | installed (stub) | `StubArchetypeGame` — proves the framework pipeline end-to-end on real registry data; the most common guided archetype | real renderer replaces the stub in #53 |
-| `market-cashier` | not installed | practice fallback | #53 (archetype pack A) |
-| `bubble-pop-blitz` | not installed | practice fallback | #54 (archetype pack B) |
-| `monster-phoneme-feeder` | not installed | practice fallback | #54 (archetype pack B) |
-| `tactile-sorter` | not installed | practice fallback | later packs |
-| `trace-draw-studio` | not installed | practice fallback | later packs (unit-level registry binding) |
-| `lilypad-jumper` | not installed | practice fallback | later packs |
-| `bridge-builder` | not installed | practice fallback | later packs |
-| `array-grid-architect` | not installed | practice fallback | later packs |
-| `slice-share-kitchen` | not installed | practice fallback | later packs |
-| `story-detective` | not installed | practice fallback | later packs |
+| archetype id | Status | Renderer | Stage variants | Lands with |
+|---|---|---|---|---|
+| `block-builder` | installed | `BlockBuilderGame` (issue #53, pack A) — bundled build rail, item-data-driven surfaces | guided + fluency | shipped in #53 |
+| `market-cashier` | installed | `MarketCashierGame` (issue #53, pack A) — checkout coin pad, price/paid/change | guided + fluency | shipped in #53 |
+| `bubble-pop-blitz` | not installed | practice fallback | - | #54 (archetype pack B) |
+| `monster-phoneme-feeder` | not installed | practice fallback | - | #54 (archetype pack B) |
+| `tactile-sorter` | not installed | practice fallback | - | later packs |
+| `trace-draw-studio` | not installed | practice fallback | - | later packs (unit-level registry binding) |
+| `lilypad-jumper` | not installed | practice fallback | - | later packs |
+| `bridge-builder` | not installed | practice fallback | - | later packs |
+| `array-grid-architect` | not installed | practice fallback | - | later packs |
+| `slice-share-kitchen` | not installed | practice fallback | - | later packs |
+| `story-detective` | not installed | practice fallback | - | later packs |
+
+History: `block-builder` was carried by the #52 proof-of-pipeline
+`StubArchetypeGame` until #53 shipped the real renderer; the stub is
+now UNREGISTERED and stays in the tree as the authoring template for
+the #54 pack.
 
 Note: `docs/games-and-study-materials.md` section 2 catalogues "10
 archetypes" — it presents `bubble-pop-blitz` and `story-detective` in
@@ -62,16 +67,38 @@ plays in practice mode for now").
   gate keeps the registry default, so #51 behavior is unchanged).
 - Session length for BOTH stages is `guidedPracticeGame.minQuestionsToComplete`
   (8 across today's registry) — the registry's single length knob.
+- Both installed renderers implement the two variants off the SAME
+  contract props (`gameStage` + `targetResponseSpeedSec`): guided
+  surfaces the step-by-step hint chain and the full scaffold; fluency
+  suppresses renderer hints and paces off the framework header's speed
+  target. No renderer carries a clock.
+
+## Pack A coverage footprint (issue #53, data-derived)
+
+The registry binds these two archetypes at topic level on the GUIDED
+side only — their topics' Stage 3 fluency sprint is
+`bubble-pop-blitz`/`bridge-builder` and stays on the practice fallback
+until #54+ register those renderers:
+
+- `block-builder` — 136 topics' `guidedPracticeGame` (counting and
+  place-value strands across PK–G3).
+- `market-cashier` — 32 topics' `guidedPracticeGame` (money,
+  measurement, and the social-studies cashier units).
+
+`tests/games-registry-catalog.test.ts` route-flip pins this: EVERY
+guided block-builder/market-cashier topic resolves to `kind: "game"`
+against the installed renderer set (never fallback).
 
 ## Notes and decisions
 
 - This checklist is the human mirror of the data-derived inventory. The
   registry side is test-enforced (`games-registry-catalog.test.ts`
-  re-enumerates and pins `ARCHETYPE_IDS`, both-stages-per-topic, and the
-  single 70/20/10 mix); the installed-renderer column above is NOT
-  test-pinned to this file (unlike `docs/runner-interaction-coverage.md`,
-  whose checklist its test asserts) — keep it in sync when a pack
-  registers renderers.
-- The stub renderer is a framework proof, not a shipped game: #53
-  replaces the `block-builder` entry; the `GameRendererProps` contract
-  stays the same (architecture detail: `docs/architecture.md` section 2.10).
+  re-enumerates and pins `ARCHETYPE_IDS`, both-stages-per-topic, the
+  single 70/20/10 mix, and the pack A route flip); the
+  installed-renderer column above is NOT test-pinned to this file
+  (unlike `docs/runner-interaction-coverage.md`, whose checklist its
+  test asserts) — keep it in sync when a pack registers renderers.
+- The #52 stub renderer was a framework proof, not a shipped game; #53
+  replaced its registration with the real `BlockBuilderGame`
+  (`GameRendererProps` contract unchanged — architecture detail:
+  `docs/architecture.md` section 2.10).

@@ -52,7 +52,13 @@ import type {
   UnitProgressRecord,
 } from "./types";
 
-const DEFAULT_MOTOR_BASELINE_SEC = 0.42;
+/**
+ * The documented default motor baseline (seconds). #53 carry-over fix
+ * 5: exported so every default site shares ONE named constant (the
+ * attempt_log schema migration's SQL DEFAULT is a fixed historical
+ * value and stays as-is).
+ */
+export const DEFAULT_MOTOR_BASELINE_SEC = 0.42;
 const DEFAULT_TOPIC_QUESTION_COUNT = 8;
 
 /** Prerequisite unit ids off the pack row's JSON column ([] on parse failure). */

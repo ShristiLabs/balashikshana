@@ -66,7 +66,7 @@ function startFixture(overrides: Partial<GameSessionStart> = {}): GameSessionSta
 }
 
 describe("gameReducer", () => {
-  it("resolved with two stages -> stage-pick; one stage -> warmup", () => {
+  it("resolved -> stage-pick for BOTH one and two offered stages (#53 carry-over fix 3: single-stage never auto-advances past the explicit affordance)", () => {
     const both = gameReducer(initialGameState(), {
       type: "resolved",
       unitId: "K-M2",
@@ -85,7 +85,68 @@ describe("gameReducer", () => {
       topicName: "Counting",
       offeredStages: ["fluency"],
     });
-    expect(one.phase).toBe("warmup");
+    expect(one.phase).toBe("stage-pick");
+  });
+
+  it("stage-selected -> warmup AND clears the finished session's leftovers (#53 carry-over fix 1: no stale id, draft, or summary rides a restart)", () => {
+    let state = gameReducer(initialGameState(), {
+      type: "resolved",
+      unitId: "K-M2",
+      unitTitle: "T",
+      topicCode: "G",
+      topicName: "Counting",
+      offeredStages: ["fluency"],
+    });
+    state = gameReducer(state, {
+      type: "session-started",
+      sessionId: "sess-1",
+      start: startFixture(),
+      stageByQuestionId: {},
+    });
+    state = gameReducer(state, {
+      type: "summary-ready",
+      sessionId: "sess-1",
+      summary: {
+        sessionId: "sess-1",
+        stage: "fluency",
+        archetype: "block-builder",
+        metGoal: true,
+        accuracyPct: 100,
+        medianCogSpeedSec: 1,
+        targetSpeedSec: 6,
+        speed: { targetSec: 5.5, medianRawSec: 2, medianCognitiveSec: 1, beatTargetPct: 50 },
+        provenanceCounts: { current: 1, contrastive: 1, "spaced-review": 0 },
+        perTopic: [],
+      },
+    });
+    expect(state.phase).toBe("summary");
+
+    const restarted = gameReducer(state, { type: "stage-selected", stage: "fluency" });
+    expect(restarted.phase).toBe("warmup");
+    expect(restarted.sessionId).toBeNull();
+    expect(restarted.draft).toBeNull();
+    expect(restarted.checked).toBeNull();
+    expect(restarted.summary).toBeNull();
+    expect(restarted.schedule.items).toHaveLength(0);
+    expect(restarted.answeredCount).toBe(0);
+  });
+
+  it("session-started records the session topicId (summary selection keys on it, #53 fix 2)", () => {
+    let state = gameReducer(initialGameState(), {
+      type: "resolved",
+      unitId: "K-M2",
+      unitTitle: "T",
+      topicCode: "G",
+      topicName: "Counting",
+      offeredStages: ["fluency"],
+    });
+    state = gameReducer(state, {
+      type: "session-started",
+      sessionId: "sess-1",
+      start: startFixture(),
+      stageByQuestionId: {},
+    });
+    expect(state.topicId).toBe("K-M2-G");
   });
 
   it("session-started builds the schedule, lookups, and route banner", () => {

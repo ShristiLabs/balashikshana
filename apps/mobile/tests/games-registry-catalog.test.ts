@@ -115,10 +115,33 @@ describe("registry games catalog (data-derived)", () => {
         }
       }
     }
-    // The #52 stub (block-builder) serves real topics; everything else
-    // falls back until #53/#54 register their renderers.
+    // The #53 pack A renderers (block-builder, market-cashier) serve
+    // the guided stage of their 136 + 32 topics; the fluency stage of
+    // those topics (bubble-pop-blitz / bridge-builder) still falls
+    // back until #54+ register their renderers.
     expect(registeredEntries).toContain("block-builder");
+    expect(registeredEntries).toContain("market-cashier");
     expect(games).toBeGreaterThan(0);
     expect(fallbacks).toBeGreaterThan(0);
+  });
+
+  it("#53 route flip: EVERY guided block-builder / market-cashier topic now routes to game (never fallback)", () => {
+    let packAGuided = 0;
+    for (const { block } of topicBlocks) {
+      const guided = block.guidedPracticeGame;
+      if (
+        guided &&
+        (guided.archetype === "block-builder" || guided.archetype === "market-cashier")
+      ) {
+        packAGuided += 1;
+        const decision = resolveGameRoute(block, "guided", SUPPORTED);
+        expect(decision.kind).toBe("game");
+        expect(decision.archetype).toBe(guided.archetype);
+      }
+    }
+    // The data-derived pack A footprint (136 block-builder + 32
+    // market-cashier); the count is enumerated FROM the registry, so a
+    // registry change re-pins itself.
+    expect(packAGuided).toBe(168);
   });
 });

@@ -110,7 +110,7 @@ export function GameHostScreen({
         if (cancelled) return;
         setResolution({
           status: decision.kind === "game" ? "game" : "fallback",
-          stage: decision.kind === "game" ? decision.stage : decision.stage,
+          stage: decision.stage,
           archetype: decision.archetype,
           gameTitle: decision.kind === "game" ? decision.gameTitle : "",
           targetResponseSpeedSec:
