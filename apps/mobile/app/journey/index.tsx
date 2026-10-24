@@ -1,24 +1,25 @@
 /**
- * Journey map screen (issue #44 seam): a CHILD surface, so it stays
+ * Journey map screen (#44 guard, #49 map): a CHILD surface, so it stays
  * locked until onboarding is complete and consent is current (a policy
  * version bump routes back through onboarding's re-consent screens before
  * this unlocks - the #44 acceptance criterion). Offline tolerance: when
  * the consent status cannot be refreshed (no network), the last-known
  * consent version from the snapshot stands in, so a completed setup keeps
- * working on a plane. The full winding-path map is the #49 (journey map)
- * issue; until then this renders the placeholder behind the guard.
+ * working on a plane. Behind the guard sits the real #49 winding-path
+ * journey map (pack data + engine-derived progress; see
+ * src/journey/JourneyScreen.tsx).
  */
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { router } from "expo-router";
 import { useTheme } from "../../src/design/theme";
 import { spacing, typeRamp } from "../../src/design/tokens";
+import { JourneyScreen as JourneyMapScreen } from "../../src/journey/JourneyScreen";
 import { createApiClient } from "../../src/onboarding/api";
 import { childAccessReady } from "../../src/onboarding/flowGuard";
 import { createNativeDependencies } from "../../src/onboarding/nativeStores";
 import { TokenStore } from "../../src/onboarding/storage";
 import type { ConsentStatusInfo } from "../../src/onboarding/types";
-import { PlaceholderScreen } from "../../src/shell/PlaceholderScreen";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000";
 
@@ -89,14 +90,5 @@ export default function JourneyScreen() {
     );
   }
 
-  return (
-    <PlaceholderScreen
-      title="Journey"
-      subtitle="Your learning path through the units"
-      body="The winding journey map with unit banners, topic stones, key states, and the grade switcher arrives with the journey-map milestone."
-      plannedIn="#49 journey map"
-      nextLabel="Start a practice session"
-      nextHref="/practice"
-    />
-  );
+  return <JourneyMapScreen />;
 }
