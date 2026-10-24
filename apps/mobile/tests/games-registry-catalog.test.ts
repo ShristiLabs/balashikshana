@@ -116,11 +116,14 @@ describe("registry games catalog (data-derived)", () => {
       }
     }
     // The #53 pack A renderers (block-builder, market-cashier) serve
-    // the guided stage of their 136 + 32 topics; the fluency stage of
-    // those topics (bubble-pop-blitz / bridge-builder) still falls
-    // back until #54+ register their renderers.
+    // the guided stage of their 136 + 32 topics; the #54 pack B
+    // renderers (bubble-pop-blitz, monster-phoneme-feeder) serve the
+    // fluency side of every bubble-pop-blitz topic and the guided side
+    // of every feeder topic. The remaining archetypes still fall back.
     expect(registeredEntries).toContain("block-builder");
     expect(registeredEntries).toContain("market-cashier");
+    expect(registeredEntries).toContain("bubble-pop-blitz");
+    expect(registeredEntries).toContain("monster-phoneme-feeder");
     expect(games).toBeGreaterThan(0);
     expect(fallbacks).toBeGreaterThan(0);
   });
@@ -143,5 +146,85 @@ describe("registry games catalog (data-derived)", () => {
     // market-cashier); the count is enumerated FROM the registry, so a
     // registry change re-pins itself.
     expect(packAGuided).toBe(168);
+  });
+
+  it("#54 route flip: EVERY fluency bubble-pop-blitz topic routes to game (never fallback)", () => {
+    let packBFluency = 0;
+    let gentleTier = 0;
+    let sprintTier = 0;
+    for (const { topicId, block } of topicBlocks) {
+      const fluency = block.fluencySprintGame;
+      if (fluency && fluency.archetype === "bubble-pop-blitz") {
+        packBFluency += 1;
+        const decision = resolveGameRoute(block, "fluency", SUPPORTED);
+        expect(decision.kind).toBe("game");
+        if (decision.kind !== "game") return;
+        expect(decision.archetype).toBe("bubble-pop-blitz");
+        // Every flipped sprint target is positive data the renderer
+        // paces from; grade tier follows the structural topic prefix.
+        expect(fluency.targetResponseSpeedSec).toBeGreaterThan(0);
+        const grade = topicId.split("-")[0] ?? "";
+        if (grade === "G2" || grade === "G3") sprintTier += 1;
+        else gentleTier += 1;
+      }
+    }
+    // The data-derived pack B fluency footprint (250 topics across all
+    // five grades; both D6 tiers carry real sprint targets).
+    expect(packBFluency).toBe(250);
+    expect(gentleTier).toBeGreaterThan(0);
+    expect(sprintTier).toBeGreaterThan(0);
+  });
+
+  it("#54 route flip: EVERY guided monster-phoneme-feeder topic routes to game (never fallback)", () => {
+    let packBGuided = 0;
+    for (const { block } of topicBlocks) {
+      const guided = block.guidedPracticeGame;
+      if (guided && guided.archetype === "monster-phoneme-feeder") {
+        packBGuided += 1;
+        const decision = resolveGameRoute(block, "guided", SUPPORTED);
+        expect(decision.kind).toBe("game");
+        if (decision.kind !== "game") return;
+        expect(decision.archetype).toBe("monster-phoneme-feeder");
+      }
+    }
+    // The data-derived ELA feeder footprint (102 topics, 22 units).
+    expect(packBGuided).toBe(102);
+  });
+
+  it("#54 route flip: the feeder topics flip BOTH stages (guided feeder + fluency blitz)", () => {
+    let bothStages = 0;
+    for (const { block } of topicBlocks) {
+      const guided = block.guidedPracticeGame;
+      const fluency = block.fluencySprintGame;
+      if (guided?.archetype === "monster-phoneme-feeder") {
+        // Registry fact: every feeder topic's fluency sprint IS a
+        // bubble-pop-blitz - after #54 neither stage falls back.
+        expect(fluency?.archetype).toBe("bubble-pop-blitz");
+        expect(resolveGameRoute(block, "guided", SUPPORTED).kind).toBe("game");
+        expect(resolveGameRoute(block, "fluency", SUPPORTED).kind).toBe("game");
+        bothStages += 1;
+      }
+    }
+    expect(bothStages).toBe(102);
+  });
+
+  it("the remaining archetypes still fall back until their packs land", () => {
+    const stillUnsupported = new Set<string>();
+    for (const { block } of topicBlocks) {
+      for (const stage of ["guided", "fluency"] as const) {
+        const decision = resolveGameRoute(block, stage, SUPPORTED);
+        if (decision.kind === "practice-fallback" && decision.archetype) {
+          stillUnsupported.add(decision.archetype);
+        }
+      }
+    }
+    expect([...stillUnsupported].sort()).toEqual([
+      "array-grid-architect",
+      "bridge-builder",
+      "lilypad-jumper",
+      "slice-share-kitchen",
+      "story-detective",
+      "tactile-sorter",
+    ]);
   });
 });

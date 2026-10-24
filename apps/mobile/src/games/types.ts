@@ -114,4 +114,15 @@ export interface GameRendererProps {
   onDraftChange: (draft: string | null) => void;
   /** Replay the item's narration (audio seam lives in the screen). */
   onReplayPrompt: () => void;
+  /**
+   * Reflex submit seam (issue #54, pack B - the one conscious
+   * GameRendererProps extension, added WITH tests): tap-to-answer
+   * archetypes (bubble-pop-blitz) call this immediately after
+   * onDraftChange so the answer submits on the tap itself - a
+   * build-then-Check flow would double the motor cost and break the
+   * registry's targetResponseSpeedSec pacing semantics. Optional and
+   * deliberately absent for pack A: build-then-check manipulatives
+   * keep the framework Check button and ignore this seam.
+   */
+  onSubmitAnswer?: () => void;
 }

@@ -12,6 +12,22 @@
 // Pure (vitest/node, no React Native).
 export { ARCHETYPE_IDS, resolveGameRoute, type ArchetypeId } from "./archetypes";
 export {
+  bubbleFieldFor,
+  BUBBLE_SHAPES,
+  guidedHintForField,
+  MAX_FIELD_BUBBLES,
+  phaseRank,
+  PRESSURE_TICK_MS,
+  pressureDriftBoundSec,
+  pressureLabelFor,
+  pressurePhaseFor,
+  pressureTierForTopicId,
+  type BubbleShape,
+  type BubbleSpec,
+  type PressurePhase,
+  type PressureTier,
+} from "./bubblePopBlitz";
+export {
   buildBankFor,
   buildPlanFor,
   buildTargetFor,
@@ -26,6 +42,14 @@ export {
   type BuildValidation,
   type BundleView,
 } from "./blockBuilder";
+export {
+  draftForPlaced,
+  feederPlanFor,
+  guidedHintForFeed,
+  phonemeSegmentsForLabel,
+  type FeederPlan,
+  type FeederPlanKind,
+} from "./monsterPhonemeFeeder";
 export {
   availableStages,
   gameConfigForStage,
@@ -97,6 +121,8 @@ export { GameSessionScreen } from "./GameSessionScreen";
 // #53 pack A renderers (registered in archetypeRegistry).
 export { BlockBuilderGame } from "./BlockBuilderGame";
 export { MarketCashierGame } from "./MarketCashierGame";
-// #52 proof-of-pipeline renderer - unregistered since #53; kept as the
-// authoring template for the #54 pack.
-export { StubArchetypeGame } from "./StubArchetypeGame";
+// #54 pack B renderers (registered in archetypeRegistry). The #52
+// StubArchetypeGame is retired: the four real renderers are the
+// authoring templates now.
+export { BubblePopBlitzGame } from "./BubblePopBlitzGame";
+export { MonsterPhonemeFeederGame } from "./MonsterPhonemeFeederGame";
