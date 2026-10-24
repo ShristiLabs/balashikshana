@@ -17,7 +17,7 @@ function read(route: string): string {
   return readFileSync(path, "utf8");
 }
 
-const PLACEHOLDER_ROUTES = ["practice/index.tsx", "gate/index.tsx"];
+const PLACEHOLDER_ROUTES = ["gate/index.tsx"];
 
 describe("route tree", () => {
   it("has a root layout and a launcher", () => {
@@ -44,6 +44,14 @@ describe("route tree", () => {
       expect(source, `${route} must use PlaceholderScreen`).toContain("PlaceholderScreen");
       expect(source, `${route} must default-export a screen`).toContain("export default");
     }
+  });
+
+  it("#50: the practice route renders the real runner behind the consent guard", () => {
+    const source = read("practice/index.tsx");
+    expect(source, "the #44 consent guard stays").toContain("childAccessReady");
+    expect(source, "the real #50 runner is mounted").toContain("PracticeRunnerScreen");
+    expect(source, "the placeholder is gone").not.toContain("PlaceholderScreen");
+    expect(source, "journey params are honored").toContain("useLocalSearchParams");
   });
 
   it("#49: the journey route renders the real map behind the consent guard", () => {
@@ -88,7 +96,13 @@ describe("route tree", () => {
     );
     expect(journeyScreen).toContain('"/practice"');
     expect(journeyScreen).toContain('"/gate"');
-    expect(read("practice/index.tsx")).toContain('"/gate"');
+    // #50: the practice runner routes back to the journey (its exit,
+    // no-pack, and summary surfaces) instead of the gate placeholder.
+    const runnerScreen = readFileSync(
+      join(appDir, "..", "src", "runner", "PracticeRunnerScreen.tsx"),
+      "utf-8",
+    );
+    expect(runnerScreen).toContain('"/journey"');
     expect(read("gate/index.tsx")).toContain('"/journey"');
   });
 

@@ -577,6 +577,19 @@ export class PracticeSessionEngine {
     return [...this.sessions.keys()];
   }
 
+  /**
+   * Drops an open session WITHOUT projecting it (issue #50 exit path).
+   * Every already-recorded attempt stays durable in the append-only log
+   * (responses are INSERTed the moment they arrive — the log is the
+   * source of truth and #48 reconciliation re-derives progress from
+   * it), but no topic/unit projection row is written and the session
+   * leaves the liveness map so sync batching is never wedged by an
+   * abandoned session. Returns false when the session id was unknown.
+   */
+  abandonSession(sessionId: string): boolean {
+    return this.sessions.delete(sessionId);
+  }
+
   // ------------------------------------------------------------------
   // Internals
   // ------------------------------------------------------------------
