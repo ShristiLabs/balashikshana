@@ -77,11 +77,22 @@ function rowToQuestion(row: PackRow): PracticeQuestion {
   };
 }
 
+/**
+ * The built pack DBs are LOCAL-ONLY artifacts (services/api/
+ * content-packs/ is gitignored; `npm run packs:build` generates them
+ * from the registry). Wherever they exist - developer machines and
+ * any environment that runs packs:build - this matrix proves the
+ * pack-B modules against every live row; where they do not (the
+ * cheap CI job does not build packs), it skips instead of passing
+ * vacuously. The synthetic matrices below run everywhere.
+ */
+const PACK_PATHS = PACK_GRADES.map(
+  (grade) => `${repoRoot}/services/api/content-packs/pack-${grade}-v1.0.0.sqlite`,
+).filter((path) => existsSync(path));
+
 /** Read-only pass over every real pack DB. */
 function* realPackRows(): Generator<{ question: PracticeQuestion; raw: PackRow }> {
-  for (const grade of PACK_GRADES) {
-    const path = `${repoRoot}/services/api/content-packs/pack-${grade}-v1.0.0.sqlite`;
-    if (!existsSync(path)) continue;
+  for (const path of PACK_PATHS) {
     const db = new DatabaseSync(path, { readOnly: true });
     try {
       const rows = db
@@ -96,74 +107,78 @@ function* realPackRows(): Generator<{ question: PracticeQuestion; raw: PackRow }
   }
 }
 
-describe("real-pack item matrix (every live row, all five grades)", () => {
-  it("EVERY practice row fields a bubble surface: labels are an exact permutation of the choices", () => {
-    let rows = 0;
-    for (const { question } of realPackRows()) {
-      rows += 1;
-      const field = bubbleFieldFor(question);
-      expect(field, question.questionId).not.toBeNull();
-      expect(field!.map((b) => b.label).sort(), question.questionId).toEqual(
-        question.choices.map((c) => String(c)).sort(),
-      );
-    }
-    expect(rows).toBeGreaterThan(5000); // the packs carry ~6k rows total
-  });
-
-  it("EVERY phoneme-shaped tile-bank row mounts a valid feed plan; non-phoneme banks correctly refuse", () => {
-    let feedRows = 0;
-    let refusedRows = 0;
-    let feederTopics = new Set<string>();
-    const SEGMENT = /^[a-z]{1,4}$/;
-    for (const { question, raw } of realPackRows()) {
-      if (raw.tile_bank_json === null) continue;
-      const bank = JSON.parse(raw.tile_bank_json) as string[];
-      const target = raw.correct_answer.trim().split(/\s+/);
-      const phonemeShaped =
-        bank.every((token) => SEGMENT.test(token)) &&
-        target.length >= 2 &&
-        target.every((segment) => SEGMENT.test(segment));
-      const plan = feederPlanFor(question);
-      if (!phonemeShaped) {
-        // Math ordering rows (digit tiles: "3","1","2") refuse the
-        // anchored grammar - they belong to pack A surfaces, never the
-        // feeder. The refusal is the correctness property.
-        expect(plan.kind, question.questionId).toBe("substrate");
-        refusedRows += 1;
-        continue;
+describe.skipIf(PACK_PATHS.length === 0)(
+  "real-pack item matrix (every live row, all five grades)",
+  () => {
+    it("EVERY practice row fields a bubble surface: labels are an exact permutation of the choices", () => {
+      let rows = 0;
+      for (const { question } of realPackRows()) {
+        rows += 1;
+        const field = bubbleFieldFor(question);
+        expect(field, question.questionId).not.toBeNull();
+        expect(field!.map((b) => b.label).sort(), question.questionId).toEqual(
+          question.choices.map((c) => String(c)).sort(),
+        );
       }
-      expect(plan.kind, question.questionId).toBe("feed");
-      if (plan.kind !== "feed") continue;
-      feedRows += 1;
-      feederTopics.add(question.topicId);
-      // The target segments must all be servable from the bank.
-      const byLabel = (label: string) => plan.bank.find((tile) => tile.label === label);
-      const fed = plan.targetSegments.map(byLabel);
-      expect(
-        fed.every((tile) => tile !== undefined),
-        question.questionId,
-      ).toBe(true);
-      // Grading by construction, on real data: draft === correct_answer.
-      expect(draftForPlaced(fed as NonNullable<(typeof fed)[number]>[]), question.questionId).toBe(
-        raw.correct_answer,
-      );
-    }
-    expect(feedRows).toBeGreaterThan(40); // the ELA phoneme tile inventory (49 today)
-    expect(refusedRows).toBeGreaterThan(30); // the math digit-tile rows (42 today)
-    expect(feederTopics.size).toBeGreaterThan(15); // feeder-guided ELA topics
-    feederTopics = new Set();
-  });
+      expect(rows).toBeGreaterThan(5000); // the packs carry ~6k rows total
+    });
 
-  it("rows WITHOUT a tile bank are substrate BY DESIGN (whole-word multiple choice)", () => {
-    let substrateRows = 0;
-    for (const { question, raw } of realPackRows()) {
-      if (raw.tile_bank_json !== null) continue;
-      substrateRows += 1;
-      expect(feederPlanFor(question).kind, question.questionId).toBe("substrate");
-    }
-    expect(substrateRows).toBeGreaterThan(1000);
-  });
-});
+    it("EVERY phoneme-shaped tile-bank row mounts a valid feed plan; non-phoneme banks correctly refuse", () => {
+      let feedRows = 0;
+      let refusedRows = 0;
+      let feederTopics = new Set<string>();
+      const SEGMENT = /^[a-z]{1,4}$/;
+      for (const { question, raw } of realPackRows()) {
+        if (raw.tile_bank_json === null) continue;
+        const bank = JSON.parse(raw.tile_bank_json) as string[];
+        const target = raw.correct_answer.trim().split(/\s+/);
+        const phonemeShaped =
+          bank.every((token) => SEGMENT.test(token)) &&
+          target.length >= 2 &&
+          target.every((segment) => SEGMENT.test(segment));
+        const plan = feederPlanFor(question);
+        if (!phonemeShaped) {
+          // Math ordering rows (digit tiles: "3","1","2") refuse the
+          // anchored grammar - they belong to pack A surfaces, never the
+          // feeder. The refusal is the correctness property.
+          expect(plan.kind, question.questionId).toBe("substrate");
+          refusedRows += 1;
+          continue;
+        }
+        expect(plan.kind, question.questionId).toBe("feed");
+        if (plan.kind !== "feed") continue;
+        feedRows += 1;
+        feederTopics.add(question.topicId);
+        // The target segments must all be servable from the bank.
+        const byLabel = (label: string) => plan.bank.find((tile) => tile.label === label);
+        const fed = plan.targetSegments.map(byLabel);
+        expect(
+          fed.every((tile) => tile !== undefined),
+          question.questionId,
+        ).toBe(true);
+        // Grading by construction, on real data: draft === correct_answer.
+        expect(
+          draftForPlaced(fed as NonNullable<(typeof fed)[number]>[]),
+          question.questionId,
+        ).toBe(raw.correct_answer);
+      }
+      expect(feedRows).toBeGreaterThan(40); // the ELA phoneme tile inventory (49 today)
+      expect(refusedRows).toBeGreaterThan(30); // the math digit-tile rows (42 today)
+      expect(feederTopics.size).toBeGreaterThan(15); // feeder-guided ELA topics
+      feederTopics = new Set();
+    });
+
+    it("rows WITHOUT a tile bank are substrate BY DESIGN (whole-word multiple choice)", () => {
+      let substrateRows = 0;
+      for (const { question, raw } of realPackRows()) {
+        if (raw.tile_bank_json !== null) continue;
+        substrateRows += 1;
+        expect(feederPlanFor(question).kind, question.questionId).toBe("substrate");
+      }
+      expect(substrateRows).toBeGreaterThan(1000);
+    });
+  },
+);
 
 describe("seed handling: permutation-only across seeds", () => {
   const base: PracticeQuestion = {
