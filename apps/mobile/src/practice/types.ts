@@ -170,8 +170,20 @@ export interface GradeSrPolicy {
 export interface PackContentReader {
   gradePolicy(gradeId: string): Promise<GradeSrPolicy | null>;
   unit(unitId: string): Promise<PackUnitRow | null>;
+  /**
+   * All units of the grade in journey order (subject ASC, then registry
+   * sequence, then unit id as the tiebreaker — deterministic). The #49
+   * journey map renders exactly this list.
+   */
+  unitsForGrade(gradeId: string): Promise<PackUnitRow[]>;
   /** Topics of a unit in registry sequence order (same as the server's ORDER BY). */
   topicsForUnit(unitId: string): Promise<PackTopicRow[]>;
+  /**
+   * All topics of the grade in journey order (subject ASC, unit sequence
+   * ASC, topic sequence ASC) — the #49 model derives per-unit completion
+   * fractions from this single read.
+   */
+  topicsForGrade(gradeId: string): Promise<PackTopicRow[]>;
   topic(topicId: string): Promise<PackTopicRow | null>;
   /** Stored questions for a topic: difficulty ASC, question_id ASC, LIMIT count (server order). */
   questionsForTopic(topicId: string, count: number): Promise<PackQuestionRow[]>;
@@ -198,12 +210,19 @@ export interface PracticeStorage {
   upsertTopicProgress(record: TopicProgressRecord): Promise<void>;
   getUnitProgress(studentId: string, unitId: string): Promise<UnitProgressRecord | null>;
   upsertUnitProgress(record: UnitProgressRecord): Promise<void>;
+  /** All unit-progress rows of a student (#49 journey-model input). */
+  allUnitProgress(studentId: string): Promise<UnitProgressRecord[]>;
   /** Read-only #48 seam: how many attempts are still unsynced. */
   unsyncedAttemptCount(studentId: string): Promise<number>;
   /** All topic-progress rows of a student (review-queue input). */
   allTopicProgress(studentId: string): Promise<TopicProgressRecord[]>;
   /** Active pack artifact file name for a grade (pack_meta), or null. */
   activePackArtifact(gradeId: string): Promise<string | null>;
+  /**
+   * Every grade's ACTIVE pack row (grade + content version) straight off
+   * pack_meta — the #48/#49 clientPacks handshake input. Read-only.
+   */
+  activePackVersions(): Promise<{ gradeId: string; contentVersion: string }[]>;
 }
 
 export interface PracticeDeps {

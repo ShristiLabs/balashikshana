@@ -188,6 +188,16 @@ export class NodePracticeStorage implements PracticeStorage {
     return row ? this.unitRecord(row) : null;
   }
 
+  async allUnitProgress(studentId: string) {
+    return (
+      this.db
+        .prepare(
+          `SELECT ${UNIT_COLUMNS} FROM unit_progress WHERE student_id = ? ORDER BY unit_id ASC`,
+        )
+        .all(studentId) as unknown as UnitRecordRow[]
+    ).map((r) => this.unitRecord(r));
+  }
+
   async upsertUnitProgress(record: UnitProgressRecord): Promise<void> {
     this.db
       .prepare(
@@ -233,6 +243,15 @@ export class NodePracticeStorage implements PracticeStorage {
       )
       .get(gradeId) as unknown as { artifact: string } | undefined;
     return row?.artifact ?? null;
+  }
+
+  async activePackVersions() {
+    const rows = this.db
+      .prepare(
+        "SELECT grade_id, content_version FROM pack_meta WHERE status = 'active' ORDER BY grade_id ASC",
+      )
+      .all() as unknown as { grade_id: string; content_version: string }[];
+    return rows.map((row) => ({ gradeId: row.grade_id, contentVersion: row.content_version }));
   }
 
   private topicRecord(row: TopicRecordRow): TopicProgressRecord {
@@ -500,12 +519,26 @@ export function openPackReader(file: string): PackContentReader & { close(): voi
           .get(unitId) as unknown as PackUnitRow | undefined) ?? null
       );
     },
+    async unitsForGrade(gradeId: string) {
+      return db
+        .prepare(
+          `SELECT unit_id, grade_id, subject, sequence_order, title, prerequisite_unit_ids_json, gate_question_count, gate_min_accuracy_pct, gate_max_speed_sec, gate_streak_req FROM units WHERE grade_id = ? ORDER BY subject ASC, sequence_order ASC, unit_id ASC`,
+        )
+        .all(gradeId) as unknown as PackUnitRow[];
+    },
     async topicsForUnit(unitId: string) {
       return db
         .prepare(
           `SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order, assets_json FROM skill_topics WHERE unit_id = ? ORDER BY sequence_order ASC`,
         )
         .all(unitId) as unknown as PackTopicRow[];
+    },
+    async topicsForGrade(gradeId: string) {
+      return db
+        .prepare(
+          `SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order, assets_json FROM skill_topics WHERE grade_id = ? ORDER BY subject ASC, unit_id ASC, sequence_order ASC`,
+        )
+        .all(gradeId) as unknown as PackTopicRow[];
     },
     async topic(topicId: string) {
       return (

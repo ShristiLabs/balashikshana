@@ -288,6 +288,15 @@ function createStorage(): SyncStorage {
       return rows[0] ? unitRowToRecord(rows[0]) : null;
     },
 
+    async allUnitProgress(studentId) {
+      const db = await lifecycleDb();
+      const rows = await db.getAllAsync<UnitProgressSqlRow>(
+        `SELECT ${UNIT_COLUMNS} FROM unit_progress WHERE student_id = ? ORDER BY unit_id ASC`,
+        [studentId],
+      );
+      return rows.map(unitRowToRecord);
+    },
+
     async upsertUnitProgress(record: UnitProgressRecord): Promise<void> {
       const db = await lifecycleDb();
       await db.runAsync(
@@ -342,6 +351,14 @@ function createStorage(): SyncStorage {
       );
       return rows[0]?.artifact ?? null;
     },
+
+    async activePackVersions() {
+      const db = await lifecycleDb();
+      const rows = await db.getAllAsync<{ grade_id: string; content_version: string }>(
+        "SELECT grade_id, content_version FROM pack_meta WHERE status = 'active' ORDER BY grade_id ASC",
+      );
+      return rows.map((row) => ({ gradeId: row.grade_id, contentVersion: row.content_version }));
+    },
   };
 }
 
@@ -391,11 +408,27 @@ async function openPackReader(artifact: string): Promise<PackContentReader> {
       );
       return rows[0] ?? null;
     },
+    async unitsForGrade(gradeId): Promise<PackUnitRow[]> {
+      return db.getAllAsync<PackUnitRow>(
+        `SELECT unit_id, grade_id, subject, sequence_order, title, prerequisite_unit_ids_json,
+                gate_question_count, gate_min_accuracy_pct, gate_max_speed_sec, gate_streak_req
+         FROM units WHERE grade_id = ? ORDER BY subject ASC, sequence_order ASC, unit_id ASC`,
+        [gradeId],
+      );
+    },
     async topicsForUnit(unitId): Promise<PackTopicRow[]> {
       return db.getAllAsync<PackTopicRow>(
         `SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order, assets_json
          FROM skill_topics WHERE unit_id = ? ORDER BY sequence_order ASC`,
         [unitId],
+      );
+    },
+    async topicsForGrade(gradeId): Promise<PackTopicRow[]> {
+      return db.getAllAsync<PackTopicRow>(
+        `SELECT topic_id, unit_id, grade_id, subject, topic_code, topic_name, sequence_order, assets_json
+         FROM skill_topics WHERE grade_id = ?
+         ORDER BY subject ASC, unit_id ASC, sequence_order ASC`,
+        [gradeId],
       );
     },
     async topic(topicId): Promise<PackTopicRow | null> {
