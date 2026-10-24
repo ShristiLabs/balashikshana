@@ -14,6 +14,11 @@ import {
 import { sendProblem, PROBLEM_BASE, STATUS_TITLES } from "./problem.mjs";
 import { parentAuthPlugin, resolveBearerAuth } from "./parent-auth.mjs";
 import {
+  consentPlugin,
+  requireConsentForStudent,
+  requireParentWithCurrentConsent
+} from "./consent.mjs";
+import {
   median,
   computeMotorBaselineSec,
   computeCognitiveTimeSec,
@@ -38,6 +43,9 @@ import {
 // RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN  parent token-presenting routes/minute per IP
 //                                    (verify-email, reset confirm)  (default 10)
 // RATE_LIMIT_PARENT_RESET_PER_IP_MIN  parent reset requests/minute per IP (default 5)
+// SEED_DEMO_STUDENTS          seed demo students on an empty DB ("0" disables;
+//                             default 1). The consent-invariant suite boots
+//                             with "0" so a pristine DB proves the #41 gate.
 const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
 
 function parseAllowedOrigins() {
@@ -538,6 +546,11 @@ await app.register(parentAuthPlugin, {
   }
 });
 
+// Consent routes (issue #41): policy/latest (public), records capture, and
+// status. Same bucket posture as the parent-auth bearer routes (global
+// per-IP + per-token); none is a token-guessing surface.
+await app.register(consentPlugin, { db, isProduction: IS_PRODUCTION, logger });
+
 // --- Routes --------------------------------------------------------------------
 
 app.get("/api/health", async () => {
@@ -650,8 +663,23 @@ app.post("/api/auth/logout", async (req, reply) => {
   return { ok: true };
 });
 
-// POST /api/students -> Register a new student account
+// POST /api/students -> Register a new student account.
+//
+// Consent-required middleware (issue #41, the M2 hard gate): child-data
+// creation now requires a VERIFIED parent session whose latest consent
+// record matches the active policy version. On success the creation
+// transaction inserts the student-scoped BINDING consent row (the parent's
+// standing consent, attributed to this child at creation time — see
+// consent.mjs for why that is attribution, not fabrication, and why legacy
+// students are never back-filled). The 201 response contract is unchanged.
+//
+// Note: /api/students/:studentId/calibrate is deliberately NOT gated — it
+// creates no rows (UPDATE only, on a student already scoped by
+// requireStudentAccess); the invariant guards row CREATION.
 app.post("/api/students", { schema: registerSchema, preValidation: trimPinPreValidation }, async (req, reply) => {
+  const gate = await requireParentWithCurrentConsent(db, req, reply);
+  if (!gate) return reply;
+
   const payload = req.body;
   const nickname = String(payload.nickname || "Explorer").trim();
   const baseUsername = String(payload.username || nickname).toLowerCase().replace(/[^a-z0-9]/g, "") || "student";
@@ -707,6 +735,22 @@ app.post("/api/students", { schema: registerSchema, preValidation: trimPinPreVal
           status = 'MASTERED', key_state = 'GOLD_KEY'
       `, [studentId, pid, now, now]);
     }
+
+    // Student-scoped consent binding row (#41): the standing consent just
+    // validated by the gate, attributed to this child at creation time. Same
+    // transaction as the student row — a student can never exist without its
+    // consent evidence (the audit_students_without_consent invariant).
+    await client.query(
+      `INSERT INTO consent_records (consent_id, parent_id, student_id, policy_version, method)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        `con-${crypto.randomBytes(10).toString("hex")}`,
+        gate.parentSession.parent_id,
+        studentId,
+        gate.policy.version,
+        gate.standing.method
+      ]
+    );
   });
 
   const token = createSessionToken();
@@ -937,6 +981,11 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
     return sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: "Student or Unit not found" });
   }
 
+  // Consent-required middleware (#41): refuse progress writes for a student
+  // without current-version consent — nothing is written (legacy standalone
+  // students hit this until #42's claim-or-archive).
+  if (!(await requireConsentForStudent(db, req, reply, studentId))) return reply;
+
   const responses = payload.responses || [];
   const motorSec = payload.motorBaselineSec || stuRow.motor_baseline_sec || 0.42;
   const total = Math.max(1, responses.length);
@@ -1063,6 +1112,10 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
   if (!stuRow || !unitRow) {
     return sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: "Student or Unit not found" });
   }
+
+  // Consent-required middleware (#41): refuse unit-progress writes for a
+  // student without current-version consent — nothing is written.
+  if (!(await requireConsentForStudent(db, req, reply, studentId))) return reply;
 
   const topicRows = await db.all("SELECT * FROM skill_topics WHERE unit_id = $1 ORDER BY sequence_order ASC", [unitId]);
   const unitObj = {

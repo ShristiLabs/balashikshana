@@ -32,6 +32,7 @@ tags:
   - name: students
   - name: auth
   - name: parents
+  - name: consent
   - name: curriculum
   - name: practice
   - name: gate
@@ -90,7 +91,18 @@ paths:
     post:
       tags: [students]
       operationId: registerStudent
-      summary: Register a new student account and open a session
+      summary: Register a new student account and open a session (consent-gated)
+      description: |
+        Consent-required middleware (issue #41): child-profile creation
+        requires a `Bearer` PARENT session token whose account email is
+        verified and whose latest consent record matches the active
+        consent-policy version. Missing/invalid token -> 401; a student
+        token or an unverified parent -> 403 wrong-token-type /
+        email-verification-required; no current-version consent -> 403
+        consent-required (problem body carries `currentPolicyVersion`).
+        On success the student-scoped consent binding row is written in the
+        same transaction as the student row. The 201 response contract is
+        unchanged (student session token issued).
       requestBody:
         required: true
         content:
@@ -106,6 +118,10 @@ paths:
                 $ref: "#/components/schemas/AuthStateResponse"
         "400":
           $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "429":
@@ -520,6 +536,109 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/consent/policy/latest:
+    get:
+      tags: [consent]
+      operationId: getLatestConsentPolicy
+      summary: The active consent policy version and text (public)
+      description: |
+        Returns the single active row of the append-only
+        `consent_policy_versions` catalog for the client to render before
+        onboarding. Public by design (policy text is not personal data).
+        The seeded v1 text is a placeholder clearly marked NON-LEGAL; the
+        production text arrives with the M6 compliance pack.
+      responses:
+        "200":
+          description: Active policy version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentPolicyResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/consent/records:
+    post:
+      tags: [consent]
+      operationId: captureConsentRecord
+      summary: Record timestamped verifiable parental consent (append-only)
+      description: |
+        Requires a `Bearer` PARENT session token whose account email is
+        verified (unverified -> 403 email-verification-required; student
+        token -> 403 wrong-token-type). The body names the policy version
+        being accepted; anything other than the active version is a 409
+        policy-version-mismatch whose problem body carries
+        `currentPolicyVersion`. An optional `studentId` scopes the consent
+        to a bound child (403 no-child-binding without a parent_children
+        row; parent-level capture leaves it out until #42). Timestamps are
+        server-side only and the capture method is derived server-side
+        (signup-form for a first acceptance, re-consent thereafter); the
+        schema is closed, so clients cannot assert either. Consent rows are
+        immutable — corrections are new rows.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentRecordRequest"
+      responses:
+        "201":
+          description: Consent recorded (append-only insert)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentRecordResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: |
+            policy-version-mismatch: the requested version is not the
+            active one; the problem body carries `currentPolicyVersion`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/consent/status:
+    get:
+      tags: [consent]
+      operationId: getConsentStatus
+      summary: The parent's latest consent and whether it matches the active policy version
+      description: |
+        Requires a `Bearer` PARENT session token (student token -> 403
+        wrong-token-type). `consentCurrent` false means the client must
+        surface the policy and parental gate again (re-consent) before any
+        child-data creation will succeed.
+      responses:
+        "200":
+          description: Consent status for the calling parent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentStatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
   /api/curriculum/summary:
     get:
       tags: [curriculum]
@@ -647,7 +766,13 @@ paths:
       tags: [practice]
       operationId: completeTopicPractice
       summary: Persist a topic-practice session (attempts, crowns, spaced repetition)
-      description: Session token must belong to `studentId`.
+      description: |
+        Session token must belong to `studentId`. Consent-required
+        middleware (issue #41): the student must have current-version
+        consent (the creation-time binding row, or a parent-level row at
+        the active version via consent lineage); otherwise 403
+        consent-required with `currentPolicyVersion` and nothing is
+        written.
       parameters:
         - $ref: "#/components/parameters/SessionToken"
       requestBody:
@@ -703,7 +828,13 @@ paths:
       tags: [gate]
       operationId: evaluateGate
       summary: Evaluate a Unit Boss Gate attempt and persist unit mastery
-      description: Session token must belong to `studentId`.
+      description: |
+        Session token must belong to `studentId`. Consent-required
+        middleware (issue #41): the student must have current-version
+        consent (the creation-time binding row, or a parent-level row at
+        the active version via consent lineage); otherwise 403
+        consent-required with `currentPolicyVersion` and nothing is
+        written.
       parameters:
         - $ref: "#/components/parameters/SessionToken"
       requestBody:
@@ -797,7 +928,13 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Forbidden:
-      description: Session does not grant access to the requested student, or the token is of the wrong type for the route (e.g. a parent session token on a student route)
+      description: |
+        Session does not grant access to the requested student, the token
+        is of the wrong type for the route (e.g. a parent session token on
+        a student route), the parent email is unverified on a consent
+        surface, or current-version parental consent is missing
+        (consent-required / no-child-binding; the consent problems carry
+        `currentPolicyVersion` where applicable).
       content:
         application/problem+json:
           schema:
@@ -861,6 +998,12 @@ components:
           items:
             type: object
             additionalProperties: true
+        currentPolicyVersion:
+          type: string
+          description: |
+            RFC 9457 extension member present on consent problems
+            (consent-required, policy-version-mismatch): the active consent
+            policy version the parent must accept.
 
     HealthResponse:
       type: object
@@ -1135,6 +1278,92 @@ components:
         token:
           type: string
           description: Rotated parent session token (old token revoked)
+
+    ConsentPolicyResponse:
+      type: object
+      required: [version, locale, policyText, createdAt, active]
+      properties:
+        version:
+          type: string
+          description: Active policy version (e.g. "1"); the value consent captures must reference
+        locale:
+          type: string
+        policyText:
+          type: string
+          description: Full policy text (v1 is a placeholder clearly marked NON-LEGAL until the M6 compliance pack)
+        createdAt:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+          const: true
+
+    ConsentRecordRequest:
+      type: object
+      additionalProperties: false
+      required: [policyVersion]
+      properties:
+        policyVersion:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: The policy version being accepted; must equal the active version (else 409)
+        studentId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: |
+            Optional: scope the consent to a bound child. Requires an
+            existing parent_children binding (#42 creates those); pre-#42
+            captures are parent-level (omit the field).
+
+    ConsentRecordResponse:
+      type: object
+      required: [consentId, parentId, studentId, policyVersion, method, capturedAt]
+      properties:
+        consentId:
+          type: string
+        parentId:
+          type: string
+        studentId:
+          type: [string, "null"]
+          description: The bound child, or null for a parent-level capture
+        policyVersion:
+          type: string
+        method:
+          type: string
+          enum: [signup-form, re-consent]
+          description: Server-derived (first acceptance vs. acceptance after a policy bump); never client-asserted
+        capturedAt:
+          type: string
+          format: date-time
+          description: Server-stamped capture time (timestamptz now(); clients never supply it)
+
+    ConsentStatusResponse:
+      type: object
+      required: [currentPolicyVersion, consentCurrent, latestConsent]
+      properties:
+        currentPolicyVersion:
+          type: [string, "null"]
+        consentCurrent:
+          type: boolean
+          description: False means re-consent is required before child-data creation will succeed
+        latestConsent:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [policyVersion, capturedAt, method, studentId]
+              properties:
+                policyVersion:
+                  type: string
+                capturedAt:
+                  type: string
+                  format: date-time
+                method:
+                  type: string
+                  enum: [signup-form, re-consent]
+                studentId:
+                  type: [string, "null"]
 
     StudentPublic:
       type: object

@@ -1,14 +1,15 @@
 // Parent accounts and consent schema coverage for issue #39 (migration
-// 002): FK integrity, the COPPA delete rules (evidence RESTRICTs, live
+// 002) plus the consent policy catalog from issue #41 (migration 004): FK
+// integrity, the COPPA delete rules (evidence RESTRICTs, live
 // bindings/devices CASCADE), case-insensitive email uniqueness, composite
 // uniqueness on parent_children and devices, the email shape guard, the
-// audit_students_without_consent view, and 002 reversibility.
+// audit_students_without_consent view, the consent method CHECK + policy
+// FK + single-active-policy index, and 002/003/004 reversibility.
 //
-// Schema-only: no route touches these tables yet (#40-#42 add behavior),
-// so unlike the sibling suites this one never boots the API server — it
-// applies migrations to a throwaway database directly through
-// node-pg-migrate with the same options db.mjs runMigrations uses. That
-// also lets the reversibility case run `down` for exactly one migration.
+// Schema-level: it applies migrations to a throwaway database directly
+// through node-pg-migrate with the same options db.mjs runMigrations uses
+// (the route-level consent behavior lives in consent.test.mjs). That also
+// lets the reversibility case run `down` for exactly the M2-parent stack.
 
 import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
@@ -67,7 +68,7 @@ async function insertConsent(parentId, studentId = null) {
   const consentId = uid("con");
   await db.query(
     `INSERT INTO consent_records (consent_id, parent_id, student_id, policy_version, method)
-     VALUES ($1, $2, $3, 'coppa-v1', 'signup-form')`,
+     VALUES ($1, $2, $3, '1', 'signup-form')`,
     [consentId, parentId, studentId]
   );
   return consentId;
@@ -121,7 +122,7 @@ describe("foreign key integrity (issue #39)", () => {
     await assert.rejects(
       db.query(
         `INSERT INTO consent_records (consent_id, parent_id, policy_version, method)
-         VALUES ($1, $2, 'coppa-v1', 'signup-form')`,
+         VALUES ($1, $2, '1', 'signup-form')`,
         [uid("con"), "par-does-not-exist"]
       ),
       (err) => err.code === "23503"
@@ -133,7 +134,7 @@ describe("foreign key integrity (issue #39)", () => {
     await assert.rejects(
       db.query(
         `INSERT INTO consent_records (consent_id, parent_id, student_id, policy_version, method)
-         VALUES ($1, $2, $3, 'coppa-v1', 'signup-form')`,
+         VALUES ($1, $2, $3, '1', 'signup-form')`,
         [uid("con"), parentId, "stu-does-not-exist"]
       ),
       (err) => err.code === "23503"
@@ -295,6 +296,64 @@ describe("uniqueness and shape guards", () => {
   });
 });
 
+describe("consent policy catalog (issue #41, migration 004)", () => {
+  test("v1 placeholder policy is seeded active with NON-LEGAL marking", async () => {
+    const row = (await db.query("SELECT * FROM consent_policy_versions WHERE version = '1'")).rows[0];
+    assert.ok(row, "v1 policy row must be seeded");
+    assert.equal(row.active, true);
+    assert.equal(row.locale, "en-US");
+    assert.match(row.policy_text, /NOT LEGAL ADVICE/, "seed text must be clearly marked non-legal");
+  });
+
+  test("the partial unique index rejects a second active policy per locale (23505)", async () => {
+    await assert.rejects(
+      db.query(
+        "INSERT INTO consent_policy_versions (version, locale, policy_text, active) VALUES ($1, 'en-US', $2, true)",
+        ["1-dup", "second active policy for the same locale"]
+      ),
+      (err) => err.code === "23505"
+    );
+    // An inactive row for the same locale is fine (history is append-only).
+    await db.query(
+      "INSERT INTO consent_policy_versions (version, locale, policy_text, active) VALUES ($1, 'en-US', $2, false)",
+      ["0.9", "retired draft"]
+    );
+  });
+
+  test("consent_records method CHECK rejects values outside the set (23514)", async () => {
+    const parentId = await insertParent("method-ck@example.com");
+    await assert.rejects(
+      db.query(
+        `INSERT INTO consent_records (consent_id, parent_id, policy_version, method)
+         VALUES ($1, $2, '1', 'carrier-pigeon')`,
+        [uid("con"), parentId]
+      ),
+      (err) => err.code === "23514"
+    );
+  });
+
+  test("consent_records policy_version FK rejects an unknown version (23503)", async () => {
+    const parentId = await insertParent("policy-fk@example.com");
+    await assert.rejects(
+      db.query(
+        `INSERT INTO consent_records (consent_id, parent_id, policy_version, method)
+         VALUES ($1, $2, 'does-not-exist', 'signup-form')`,
+        [uid("con"), parentId]
+      ),
+      (err) => err.code === "23503"
+    );
+  });
+
+  test("an active policy version with consent evidence is RESTRICTed from delete (23503)", async () => {
+    const parentId = await insertParent("policy-restrict@example.com");
+    await insertConsent(parentId);
+    await assert.rejects(
+      db.query("DELETE FROM consent_policy_versions WHERE version = '1'"),
+      (err) => err.code === "23503"
+    );
+  });
+});
+
 describe("audit_students_without_consent view", () => {
   test("lists exactly the students lacking a consent_records row and excludes consented ones", async () => {
     const parentId = await insertParent("audit-view@example.com");
@@ -323,11 +382,13 @@ describe("audit_students_without_consent view", () => {
 describe("migration 002 reversibility", () => {
   // Runs last in this file on purpose: `down` drops every 002 object and
   // the rows earlier tests created in them. No later test depends on them.
-  // 003 (issue #40) layers parent_sessions/parent_tokens on top of 002, so
-  // the rollback now removes both M2-parent migrations (in order) and the
-  // up restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002+003 objects, up restores them", async () => {
-    await migrate({ direction: "down", count: 2 });
+  // 003 (issue #40) layers parent_sessions/parent_tokens on top of 002, and
+  // 004 (issue #41) layers the consent policy catalog + consent_records
+  // constraints on top of that, so the rollback removes all three M2-parent
+  // migrations (in order) and the up restores them; the reversibility
+  // contract is unchanged.
+  test("down removes exactly the 002+003+004 objects, up restores them", async () => {
+    await migrate({ direction: "down", count: 3 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -341,7 +402,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('devices') AS devices,
            to_regclass('audit_students_without_consent') AS audit_view,
            to_regclass('parent_sessions') AS parent_sessions,
-           to_regclass('parent_tokens') AS parent_tokens`
+           to_regclass('parent_tokens') AS parent_tokens,
+           to_regclass('consent_policy_versions') AS consent_policy_versions`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -351,7 +413,8 @@ describe("migration 002 reversibility", () => {
       devices: null,
       audit_view: null,
       parent_sessions: null,
-      parent_tokens: null
+      parent_tokens: null,
+      consent_policy_versions: null
     });
 
     await migrate({ direction: "up" });
@@ -359,8 +422,8 @@ describe("migration 002 reversibility", () => {
     names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(
       names,
-      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens"],
-      "up must re-apply 002 and 003"
+      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens", "004_consent_policy_versions"],
+      "up must re-apply 002, 003 and 004"
     );
 
     const back = (
@@ -372,7 +435,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('devices') AS devices,
            to_regclass('audit_students_without_consent') AS audit_view,
            to_regclass('parent_sessions') AS parent_sessions,
-           to_regclass('parent_tokens') AS parent_tokens`
+           to_regclass('parent_tokens') AS parent_tokens,
+           to_regclass('consent_policy_versions') AS consent_policy_versions`
       )
     ).rows[0];
     for (const [object, regclass] of Object.entries(back)) {

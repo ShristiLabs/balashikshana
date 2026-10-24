@@ -11,7 +11,7 @@ import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth, registerConsentedStudent } from "./helpers.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API = "http://127.0.0.1:4798";
@@ -188,13 +188,14 @@ describe("rate limiting", () => {
   });
 
   test("per-TOKEN limit returns 429 for an over-active valid session", async () => {
-    const reg = await fetch(`${API}/api/students`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "TokenBurst", username: "tokenburst", currentGrade: "kindergarten", pin: "5566" })
+    // #41: registration is consent-gated; a fresh consented parent keeps the
+    // parent token at 2 uses (consent + create), safely under this suite's
+    // tuned per-token cap of 3 — the burst below targets the STUDENT token.
+    const { token, student } = await registerConsentedStudent(API, {
+      nickname: "TokenBurst",
+      username: "tokenburst",
+      pin: "5566"
     });
-    assert.equal(reg.status, 201);
-    const { token, student } = await reg.json();
 
     const statuses = [];
     for (let i = 0; i < 5; i++) {
@@ -274,12 +275,11 @@ describe("structured logging and request IDs", () => {
   });
 
   test("authenticated requests log the session's studentId", async () => {
-    const reg = await fetch(`${API}/api/students`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "LogProbe", username: "logprobe", currentGrade: "kindergarten", pin: "7788" })
+    const { token, student } = await registerConsentedStudent(API, {
+      nickname: "LogProbe",
+      username: "logprobe",
+      pin: "7788"
     });
-    const { token, student } = await reg.json();
     stdoutLines = [];
     await fetch(`${API}/api/students/${student.studentId}`, {
       headers: { Authorization: `Bearer ${token}` }

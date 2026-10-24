@@ -8,7 +8,7 @@
 import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { Client } from "pg";
-import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth, createVerifiedParentWithConsent } from "./helpers.mjs";
 
 const API = "http://127.0.0.1:4797";
 
@@ -34,9 +34,16 @@ async function api(pathname, { method = "GET", token, body } = {}) {
   return { status: res.status, json };
 }
 
+// #41: POST /api/students is consent-gated; one shared consented parent
+// covers this suite's registrations (buckets are wide open here; consent
+// behavior is covered in consent.test.mjs).
+let suiteParent;
+
 async function registerStudent(name, pin = "5533") {
+  suiteParent ||= await createVerifiedParentWithConsent(API);
   const res = await api("/api/students", {
     method: "POST",
+    token: suiteParent.token,
     body: { nickname: name, username: name, currentGrade: "kindergarten", pin }
   });
   assert.equal(res.status, 201, `registration failed: ${JSON.stringify(res.json)}`);
@@ -75,7 +82,7 @@ describe("migration tracking", () => {
     const rows = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows;
     assert.deepEqual(
       rows.map((r) => r.name),
-      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens"]
+      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens", "004_consent_policy_versions"]
     );
   });
 });
@@ -125,6 +132,11 @@ describe("referential integrity", () => {
       ["stray-session-token", created.student.studentId, new Date().toISOString(), new Date().toISOString()]
     );
 
+    // #41: gated registration writes the consent binding row; students are
+    // RESTRICT from delete while consent evidence cites them (002). Handle
+    // the evidence first — the documented #62 data-rights order — then the
+    // student row delete demonstrates the session cascade.
+    await db.query("DELETE FROM consent_records WHERE student_id = $1", [created.student.studentId]);
     await db.query("DELETE FROM students WHERE student_id = $1", [created.student.studentId]);
 
     const row = (await db.query("SELECT token FROM student_sessions WHERE student_id = $1", [

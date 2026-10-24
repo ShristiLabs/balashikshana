@@ -123,7 +123,9 @@ export async function resolveBearerAuth(db, authorizationHeader) {
   return { error: "Session token is invalid or has been revoked" };
 }
 
-async function requireParentAuth(db, req, reply) {
+// Exported since #41: the consent module (consent.mjs) layers the
+// email-verified and consent-required checks on top of this guard.
+export async function requireParentAuth(db, req, reply) {
   const auth = await resolveBearerAuth(db, req.headers.authorization);
   if (auth.error) {
     sendProblem(reply, 401, { type: `${PROBLEM_BASE}/unauthorized`, detail: auth.error });

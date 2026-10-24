@@ -18,7 +18,7 @@ import { test, describe, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { Client } from "pg";
-import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth, createVerifiedParentWithConsent } from "./helpers.mjs";
 
 const API = "http://127.0.0.1:4794";
 const TUNED_API = "http://127.0.0.1:4793";
@@ -76,9 +76,16 @@ const resetConfirmP = (token, newPassword) =>
   api(API, "/api/parents/password-reset/confirm", { method: "POST", body: { token, newPassword } });
 const verifyEmailP = (token) => api(API, "/api/parents/verify-email", { method: "POST", body: { token } });
 
+// #41: POST /api/students is consent-gated; one shared consented parent
+// covers this suite's registrations (buckets are wide open here; the consent
+// behaviors themselves live in consent.test.mjs).
+let suiteParent;
+
 async function registerStudent(name, pin = "4321") {
+  suiteParent ||= await createVerifiedParentWithConsent(API);
   const res = await api(API, "/api/students", {
     method: "POST",
+    token: suiteParent.token,
     body: { nickname: name, username: name, currentGrade: "kindergarten", pin }
   });
   assert.equal(res.status, 201, `student registration failed: ${JSON.stringify(res.json)}`);
