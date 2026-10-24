@@ -147,6 +147,16 @@ npx expo export --platform ios --platform android   # prove the bundles build
 - **Trust model:** development builds pin the committed `dev-local` public key; **production trusts no keys yet** — the release key is provisioned with the M6 store submission, so until then a production build refuses to install any pack (fail closed: an empty trust list never falls back to the dev key, since anyone can regenerate the dev keypair).
 - **Measured sizes (registry v1.0.0):** 0.86–2.33 MB per grade, 9.07 MB for all five grades, against a 64 MB on-device storage budget — over 27x headroom for the largest pack. Packs carry zero media bytes: SVG/audio/video assets resolve by path reference through the bundled repo manifests, and the 16 feedback WAVs ship with the app binary.
 
+### 8. Offline Practice Core (`apps/mobile/src/practice`, issue #47)
+The engine is now in the app: `apps/mobile` consumes `@balashikshana/core-engine` as a `file:` workspace link (`packages/core-engine` itself stays zero-dependency and unmodified — the RN-side types live in `apps/mobile/src/types/core-engine.d.ts`), and the dual-platform Hermes export is asserted to contain the engine in both bundles. Everything runs offline against an installed #46 pack; there is no network code in `src/practice/`.
+
+- **Append-only attempt log:** every answered item is INSERT-ed into `attempt_log` (lifecycle DB, schema v2 — additive `ALTER`s via `PRAGMA user_version`) the moment it is answered, with raw/cognitive time, audio duration, fluency grade 1–4, topic/unit ids, session id, and client timestamp. There is no UPDATE or DELETE path on `attempt_log` anywhere in the mobile tree (enforced by a source-scan test); the AUTOINCREMENT `id` is the strictly monotonic **sync cursor** for #48, and the `synced` flag stays 0 until #48's worker flips it (partial index `idx_attempt_log_drain` exists for the ordered drain).
+- **Local progress projection == server derivation:** topic/unit progress rows are computed by the SAME core-engine calls with the SAME rounding, crowns rule (3/2/1/0 at 95%+speed / 85% / 80%), GREATEST/LEAST merge semantics, sticky `MASTERED`, and key-COALESCE behavior as `services/api`'s `POST /api/practice/topic/complete` and `POST /api/gate/evaluate` — proven by tests that run identical attempt streams (fixed + seeded-random) through both paths and by a tripwire that pins the server's own derivation lines. Documented divergences (see `src/practice/goldKey.ts` and `progressProjector.ts`): the local two-key machine awards Gold only after the registry's 14-hour consolidation window plus a 5-item verification with >= 4 correct (the server currently promotes on a second pass — a #48 reconciliation item); topic-path cognitive time uses audio 0 exactly like the server; gate attempts are logged locally (the server does not persist them today). All local gate outcomes and key states carry a `provisional` flag until #48 confirms.
+- **Two-key sleep consolidation:** Day-1 gate pass awards `SILVER_KEY` (provisional); Gold becomes eligible exactly `silver_awarded_at + 14 h` and requires the verification session; transitions are forward-only (Silver -> Gold, never regress locally); the window is measured from the FIRST Silver award and never re-armed by re-passes.
+- **Spaced repetition:** review queues are built from the engine's retrievability curve over the local `topic_progress` rows, with intervals age-capped per grade from the pack's `sr_max_interval_days` (Pre-K 21 / K 30 / G1 45 / G2–G3 60 days).
+- **Module layout (DI doctrine):** pure node-testable core — `PracticeSessionEngine` (session orchestration), `AttemptRecorder`, `progressProjector`, `goldKey`, `reviewQueue`, `packShapes` (pack rows -> engine shapes, field-identical to the server's `mapQuestionRow`) — plus exactly one RN adapter (`nativePractice.ts`, expo-sqlite + query_only pack reader) and a root-mounted `PracticeWarmup` bootstrap that pre-opens the reader at launch. Tests: 129 tests across the ten `apps/mobile/tests/practice-*.test.ts` suites run in plain vitest (node:sqlite), including the airplane-mode end-to-end: full topic session, boss gate, and Gold verification against an installed pack fixture with zero network.
+
+
 ---
 
 ## Repository Structure & Documentation
@@ -170,7 +180,7 @@ balashikshana/
 │       ├── migrations/                       # node-pg-migrate migrations (served datastore, PostgreSQL)
 │       └── sqlite/                           # On-device SQLite schema reference (offline store, roadmap D2)
 ├── apps/
-│   └── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router) + static web dev harness (public/)
+│   └── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router, offline practice core) + static web dev harness (public/)
 ├── tools/
 │   └── content-pipeline/                     # Signed per-grade content-pack compiler (node:sqlite + node:crypto, zero runtime deps)
 ├── docs/

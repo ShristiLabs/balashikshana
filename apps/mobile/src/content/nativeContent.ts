@@ -62,6 +62,11 @@ function packDir(): Directory {
   return dir;
 }
 
+/** The on-device pack directory (shared with the #47 practice reader). */
+export function contentPackDirectory(): Directory {
+  return packDir();
+}
+
 function packFile(fileName: string): File {
   return new File(packDir(), fileName);
 }
