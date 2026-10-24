@@ -122,6 +122,18 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
       `ALTER TABLE unit_progress ADD COLUMN gold_verified_at INTEGER NOT NULL DEFAULT 0`,
     ],
   },
+  {
+    // Migration 3 (issue #48 — sync protocol) adds ONE column: the
+    // session motor baseline on every attempt row. The sync upload
+    // carries it so the server's reconciliation replays the exact
+    // engine math (computeCognitiveTimeSec) from facts alone — no
+    // client-computed derivations are trusted. v2 rows backfill to the
+    // 0.42 default, which is the mobile PracticeDeps default baseline.
+    version: 3,
+    statements: [
+      `ALTER TABLE attempt_log ADD COLUMN motor_baseline_sec REAL NOT NULL DEFAULT 0.42`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";

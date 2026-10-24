@@ -41,6 +41,7 @@ function attempt(n: number, sessionId: string): AttemptInput {
     misconceptionTags: [],
     sessionType: "TOPIC_PRACTICE",
     sessionId,
+    motorBaselineSec: 0.42,
   };
 }
 
@@ -121,8 +122,17 @@ describe("SQL mutation surface of both adapters", () => {
       expect(attemptSegment.slice(0, 700)).not.toMatch(/ON CONFLICT/);
       expect(attemptSegment.slice(0, 700)).not.toMatch(/DO UPDATE/);
       // No UPDATE/DELETE statements at all beyond upsert DO UPDATE SET
-      // clauses scoped to the two progress tables.
-      expect(source).not.toMatch(/UPDATE attempt_log/i);
+      // clauses scoped to the two progress tables — with ONE documented
+      // #48 exception: the sync worker's synced-flag flip, which must
+      // be EXACTLY this statement (never another column, never without
+      // the synced = 0 guard).
+      const attemptUpdates = [...source.matchAll(/UPDATE attempt_log\s+SET[^"']*/gi)].map((m) =>
+        m[0].replace(/\s+/g, " ").trim(),
+      );
+      const allowedFlip =
+        "UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0";
+      expect(attemptUpdates.length).toBe(1);
+      expect(attemptUpdates[0]).toBe(allowedFlip);
       expect(source).not.toMatch(/DELETE FROM attempt_log/i);
       expect(source).not.toMatch(/DELETE FROM (topic|unit)_progress/i);
       expect(source).not.toMatch(/UPDATE (topic|unit)_progress SET/i);

@@ -39,6 +39,7 @@ function attempt(sessionId: string, n: number): AttemptInput {
     misconceptionTags: [],
     sessionType: "TOPIC_PRACTICE",
     sessionId,
+    motorBaselineSec: 0.42,
   };
 }
 
@@ -112,15 +113,26 @@ describe("append-only source scan (no UPDATE/DELETE on attempt_log anywhere)", (
     return out;
   }
 
-  it("contains zero mutation statements targeting attempt_log", () => {
+  it("contains zero mutation statements targeting attempt_log beyond the sync worker's synced flip", () => {
+    // The append-only contract holds with ONE documented exception
+    // (#48): the sync worker's synced-flag flip, which must be EXACTLY
+    // the whitelisted statement below — never another column, never a
+    // DELETE, never an UPDATE without the synced = 0 guard.
+    const whitelist =
+      "UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0";
     const offenders: string[] = [];
     for (const root of roots) {
       for (const file of tsFiles(root)) {
         const source = fs.readFileSync(file, "utf8");
-        // Matches UPDATE attempt_log ... / DELETE FROM attempt_log ...
-        // in any template literal or string, case-insensitive.
-        const pattern = /(?:UPDATE\s+attempt_log\b|DELETE\s+FROM\s+attempt_log\b)/i;
-        if (pattern.test(source.replace(/\s+/g, " "))) offenders.push(file);
+        const normalized = source.replace(/\s+/g, " ");
+        const mutations = [
+          ...normalized.matchAll(
+            /UPDATE\s+attempt_log[^;"]*;?|DELETE\s+FROM\s+attempt_log[^;"]*;?/gi,
+          ),
+        ]
+          .map((m) => m[0].trim())
+          .filter((stmt) => stmt !== whitelist && !whitelist.startsWith(stmt));
+        if (mutations.length > 0) offenders.push(`${file}: ${mutations[0]}`);
       }
     }
     expect(offenders).toEqual([]);

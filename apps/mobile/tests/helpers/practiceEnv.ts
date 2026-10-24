@@ -69,6 +69,38 @@ export class NodePracticeStorage implements PracticeStorage {
     this.db = db;
   }
 
+  async drainUnsynced(studentId: string, limit: number) {
+    return this.db
+      .prepare(
+        `SELECT id, student_id, topic_id, question_id, interaction_type, is_correct,
+                  cognitive_time_sec, audio_duration_sec, answered_at, synced,
+                  unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+                  misconception_tags_json, chosen_answer, motor_baseline_sec
+           FROM attempt_log WHERE student_id = ? AND synced = 0 ORDER BY id ASC LIMIT ?`,
+      )
+      .all(studentId, limit) as unknown as import("../../src/sync/types").AttemptLogRow[];
+  }
+
+  async drainUnsyncedAfter(studentId: string, afterId: number, limit: number) {
+    return this.db
+      .prepare(
+        `SELECT id, student_id, topic_id, question_id, interaction_type, is_correct,
+                  cognitive_time_sec, audio_duration_sec, answered_at, synced,
+                  unit_id, session_type, session_id, raw_time_sec, fluency_grade,
+                  misconception_tags_json, chosen_answer, motor_baseline_sec
+           FROM attempt_log WHERE student_id = ? AND synced = 0 AND id > ?
+           ORDER BY id ASC LIMIT ?`,
+      )
+      .all(studentId, afterId, limit) as unknown as import("../../src/sync/types").AttemptLogRow[];
+  }
+
+  async markSyncedUpTo(studentId: string, seq: number): Promise<number> {
+    const result = this.db
+      .prepare("UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0")
+      .run(studentId, seq);
+    return Number(result.changes);
+  }
+
   async insertAttempt(input: AttemptInput, answeredAt: number): Promise<number> {
     const result = this.db
       .prepare(
@@ -76,8 +108,8 @@ export class NodePracticeStorage implements PracticeStorage {
            student_id, topic_id, question_id, interaction_type, is_correct,
            cognitive_time_sec, audio_duration_sec, answered_at, synced,
            unit_id, session_type, session_id, raw_time_sec, fluency_grade,
-           misconception_tags_json, chosen_answer
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+           misconception_tags_json, chosen_answer, motor_baseline_sec
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.studentId,
@@ -95,6 +127,7 @@ export class NodePracticeStorage implements PracticeStorage {
         input.fluencyGrade,
         JSON.stringify(input.misconceptionTags || []),
         input.chosenAnswer,
+        input.motorBaselineSec,
       );
     return Number(result.lastInsertRowid);
   }

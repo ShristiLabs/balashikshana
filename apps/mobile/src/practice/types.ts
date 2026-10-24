@@ -36,6 +36,9 @@ export interface AttemptInput {
   misconceptionTags: string[];
   sessionType: SessionType;
   sessionId: string;
+  /** The session's motor baseline (constant per session). #48's server
+   *  replay needs it to reproduce the engine math exactly from facts. */
+  motorBaselineSec: number;
 }
 
 export interface AttemptRecord extends AttemptInput {

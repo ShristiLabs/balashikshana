@@ -66,7 +66,7 @@ describe("gate transitions: {none, SILVER, GOLD} x {pass, fail}", () => {
   const cases: [KeyState | null, boolean, KeyState | null][] = [
     [null, true, "SILVER_KEY"], // day-1 pass awards Silver
     [null, false, null], // fail keeps no key
-    ["SILVER_KEY", true, "SILVER_KEY"], // DIVERGENCE: re-pass stays Silver locally
+    ["SILVER_KEY", true, "SILVER_KEY"], // registry rule: re-pass stays Silver (server agrees since #48)
     ["SILVER_KEY", false, "SILVER_KEY"], // fail never revokes Silver
     ["GOLD_KEY", true, "GOLD_KEY"], // Gold sticky
     ["GOLD_KEY", false, "GOLD_KEY"], // fail never revokes Gold

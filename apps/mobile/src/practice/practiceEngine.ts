@@ -259,6 +259,9 @@ export class PracticeSessionEngine {
       misconceptionTags: response.misconceptionTags || question.misconceptionTags || [],
       sessionType: session.kind,
       sessionId,
+      // The session's motor baseline rides every attempt row so #48's
+      // server replay reproduces the engine math exactly.
+      motorBaselineSec: session.motorBaselineSec,
     };
     const recorded = await this.recorder.record(input);
     session.responses.push(response);
@@ -415,8 +418,13 @@ export class PracticeSessionEngine {
     const unitObj = packUnitToEngineUnit(unit, topicRows);
     const verdict = evaluateMasteryGateAttempt({
       unit: unitObj,
+      // Topic attribution comes from the PACK rows the session's
+      // questions were built from — the trusted source — with the
+      // caller-supplied code only as a fallback for responses whose
+      // question left the session set.
       responses: session.responses.map((r) => ({
-        topicCode: r.topicCode,
+        topicCode:
+          session.questions.find((q) => q.questionId === r.questionId)?.topicCode ?? r.topicCode,
         isCorrect: r.isCorrect,
         rawTimeSec: r.rawTimeSec,
         audioDurationSec: r.audioDurationSec || 0,
@@ -447,12 +455,14 @@ export class PracticeSessionEngine {
       keyState: merged.keyState,
       provisional: merged.provisional,
       overallAccuracyPct: verdict.overallAccuracyPct ?? 0,
-      requiredAccuracyPct: verdict.requiredAccuracyPct,
+      requiredAccuracyPct: verdict.requiredAccuracyPct ?? 0,
       medianCogSpeedSec: verdict.medianCogSpeedSec ?? 0,
       targetSpeedSec: unit.gate_max_speed_sec,
-      remediationMode: verdict.remediationMode,
-      remediationPrescription: verdict.remediationPrescription,
-      conditions: verdict.conditions,
+      // The engine's empty-responses early return omits these; coerce at
+      // the boundary (typed-seam advisory, #47 review finding 2).
+      remediationMode: verdict.remediationMode ?? "",
+      remediationPrescription: verdict.remediationPrescription ?? "",
+      conditions: verdict.conditions ?? {},
       unitProgress: merged,
     };
   }
@@ -559,6 +569,12 @@ export class PracticeSessionEngine {
   /** #48 seam: pending unsynced attempts. */
   async unsyncedAttemptCount(studentId: string): Promise<number> {
     return this.recorder.unsyncedCount(studentId);
+  }
+
+  /** #48 seam: live session ids (the sync liveness probe — open
+   *  sessions are deferred so batches carry only whole sessions). */
+  activeSessionIds(): string[] {
+    return [...this.sessions.keys()];
   }
 
   // ------------------------------------------------------------------

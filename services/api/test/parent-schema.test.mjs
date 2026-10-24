@@ -507,12 +507,13 @@ describe("migration 002 reversibility", () => {
   // the rows earlier tests created in them. No later test depends on them.
   // 003 (issue #40) layers parent_sessions/parent_tokens on top of 002, 004
   // (issue #41) layers the consent policy catalog + consent_records
-  // constraints on top of that, and 005 (issue #42) layers the child
-  // profiles/device sessions, so the rollback removes all four M2-parent
-  // migrations (in order) and the up restores them; the reversibility
-  // contract is unchanged.
-  test("down removes exactly the 002+003+004+005 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 4 });
+  // constraints on top of that, 005 (issue #42) layers the child
+  // profiles/device sessions, and 006 (issue #48) layers the sync attempt
+  // ledger, so the rollback removes all five post-001 migrations (in
+  // order) and the up restores them; the reversibility contract is
+  // unchanged.
+  test("down removes exactly the 002..006 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 5 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -559,9 +560,10 @@ describe("migration 002 reversibility", () => {
         "002_parent_accounts_consent",
         "003_parent_auth_tokens",
         "004_consent_policy_versions",
-        "005_child_profiles_device_sessions"
+        "005_child_profiles_device_sessions",
+        "006_sync_attempt_ledger"
       ],
-      "up must re-apply 002, 003, 004 and 005"
+      "up must re-apply 002 through 006"
     );
 
     const back = (

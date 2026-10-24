@@ -4,17 +4,18 @@
  * server's — identical verdicts for both consumption paths").
  *
  * The `server*` helpers below are faithful line-by-line ports of the
- * server handlers in services/api/server.mjs (topic-complete and
- * gate-evaluate, including the exact ON CONFLICT merge semantics of
- * the Postgres upserts). The local projector runs the same response
- * streams; every projected progress field must match EXACTLY, for both
- * consumption paths, because both sides call the same core-engine
- * functions with the same parameters.
+ * shared server derivations in services/api/derivations.mjs (extracted
+ * from the server.mjs handlers by #48 so the online routes AND the
+ * sync reconciler reuse one source of truth, including the exact ON
+ * CONFLICT merge semantics of the Postgres upserts). The local
+ * projector runs the same response streams; every projected progress
+ * field must match EXACTLY, for both consumption paths, because both
+ * sides call the same core-engine functions with the same parameters.
  *
- * The ONE documented divergence (local two-key machine vs the server's
- * second-pass GOLD promotion) is asserted explicitly, not hidden: the
- * projections agree on everything except keyState when a Silver holder
- * passes the gate again.
+ * #47's one documented divergence (the server's second-pass GOLD
+ * promotion vs the local two-key machine) was RESOLVED by #48: the
+ * server adopted the registry two-key machine, and the equivalence
+ * below now holds on every field including key state.
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -219,8 +220,13 @@ function serverGateEvaluate(
     maxIntervalCapDays: SR.maxIntervalCapDays,
   });
 
+  // TWO-KEY MACHINE (#48 port — mirrors services/api/derivations.mjs,
+  // which /api/gate/evaluate and the sync reconciler both use): a pass
+  // awards (re-affirms) Silver; a Gold holder keeps Gold. The pre-#48
+  // second-pass GOLD promotion is retired; Gold goes ONLY through the
+  // 14-hour + 5-item verification route.
   const nextKeyState = evalResult.passed
-    ? prev && (prev.key_state === "SILVER_KEY" || prev.key_state === "GOLD_KEY")
+    ? prev && prev.key_state === "GOLD_KEY"
       ? "GOLD_KEY"
       : "SILVER_KEY"
     : prev
@@ -461,7 +467,7 @@ describe("gate projection equivalence: local projector == server derivation", ()
     }
   });
 
-  it("DOCUMENTED DIVERGENCE: a Silver holder passing again gets GOLD server-side, stays SILVER locally", () => {
+  it("DIVERGENCE RESOLVED (#48): a Silver holder passing again stays SILVER on BOTH sides — Gold is verification-only", () => {
     const silverRow: ServerUnitRow = {
       status: "MASTERED",
       key_state: "SILVER_KEY",
@@ -482,14 +488,12 @@ describe("gate projection equivalence: local projector == server derivation", ()
     ];
     const server = serverGateEvaluate(pass, silverRow);
     const local = localGateEvaluate(pass, silverRow);
-    expect(server.key_state).toBe("GOLD_KEY");
+    // #47's documented divergence (server GOLD vs local SILVER) was
+    // resolved by #48's server-side two-key port: the projections now
+    // agree on every field, key state included.
+    expect(server.key_state).toBe("SILVER_KEY");
     expect(local.key_state).toBe("SILVER_KEY");
-    // Everything else about the projection still agrees.
-    const { key_state: _serverKey, ...serverRest } = server;
-    const { key_state: _localKey, ...localRest } = local;
-    void _serverKey;
-    void _localKey;
-    expect(localRest).toEqual(serverRest);
+    expect(local).toEqual(server);
   });
 });
 
@@ -559,41 +563,65 @@ describe("randomized equivalence: 50 seeded streams, topic + gate, first and mer
 
 // ----------------------------------------------------------------------
 // Server-source tripwire (tester pass): the ports above are only a
-// proof while they match the REAL server code. If services/api/
-// server.mjs changes any of these load-bearing lines, this tripwire
-// fails so the port (and this whole file) is re-verified instead of
-// silently proving a stale equivalence.
+// proof while they match the REAL server code. #48 moved the
+// load-bearing derivation lines from server.mjs into
+// services/api/derivations.mjs (single source of truth for the online
+// handlers AND the sync reconciler) — the tripwire follows the move
+// and additionally pins the two-key machine the local goldKey.ts
+// mirrors. If derivations.mjs changes any of these lines, this
+// tripwire fails so the port (and this whole file) is re-verified
+// instead of silently proving a stale equivalence.
 // ----------------------------------------------------------------------
-describe("server-source tripwire: the ported derivation still matches server.mjs", () => {
+describe("server-source tripwire: the ported derivation still matches derivations.mjs", () => {
+  const derivationsSource = fs.readFileSync(
+    path.join(__dirname, "..", "..", "..", "services", "api", "derivations.mjs"),
+    "utf8",
+  );
   const serverSource = fs.readFileSync(
     path.join(__dirname, "..", "..", "..", "services", "api", "server.mjs"),
     "utf8",
   );
 
   const loadBearingLines: string[] = [
-    // topic-complete derivation
+    // topic-complete derivation (unchanged since #47; now in derivations.mjs)
     "const total = Math.max(1, responses.length);",
     "const accPct = Number(((correct / total) * 100).toFixed(1));",
     "const medSpeed = Number(median(cogTimes).toFixed(2));",
     "const passedTopic = accPct >= 80;",
     "const crowns = accPct >= 95 && medSpeed <= targetSpeed ? 3 : accPct >= 85 ? 2 : passedTopic ? 1 : 0;",
     // audio-0 topic rule
-    "computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0)",
+    "computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorBaselineSec, 0)",
     // SR parameter mapping
     "gradeRow ? gradeRow.sr_growth_factor : 2.0",
     "gradeRow ? gradeRow.sr_max_interval_days : 45",
-    // gate key promotion (the documented divergence target)
-    'prevProg && (prevProg.key_state === "SILVER_KEY" || prevProg.key_state === "GOLD_KEY")',
+    // gate key promotion — the #48 two-key port (goldKey.ts mirrors it)
+    'if (prevKeyState === "GOLD_KEY") return "GOLD_KEY";',
+    'return "SILVER_KEY";',
+    // frozen silver window
+    "return prevSilverMs && prevSilverMs > 0 ? prevSilverMs : sessionMs;",
   ];
 
-  it("contains every load-bearing derivation line the port mirrors", () => {
+  it("derivations.mjs contains every load-bearing derivation line the port mirrors", () => {
     for (const line of loadBearingLines) {
-      expect(serverSource).toContain(line);
+      expect(derivationsSource).toContain(line);
     }
   });
 
-  it("gate handler still reconstructs the unitObj shape the local pack reader builds", () => {
-    expect(serverSource).toContain("challengeZoneStreak: unitRow.gate_streak_req");
-    expect(serverSource).toContain("skillTopics: topicRows.map");
+  it("gate unitObj reconstruction still matches the local pack reader", () => {
+    expect(derivationsSource).toContain("challengeZoneStreak: unitRow.gate_streak_req");
+    expect(derivationsSource).toContain("skillTopics: topicRows.map");
+  });
+
+  it("server handlers still consume the shared derivations (no forked copy)", () => {
+    expect(serverSource).toContain('from "./derivations.mjs"');
+    expect(serverSource).toContain("deriveTopicSession({");
+    expect(serverSource).toContain("buildGateUnitObject({");
+    expect(serverSource).toContain("computeKeyTransition({");
+  });
+
+  it("the two-key constants match the registry rules mobile pins in goldKey.ts", () => {
+    expect(derivationsSource).toContain("minSleepConsolidationHours: 14");
+    expect(derivationsSource).toContain("day2GoldKeyVerificationItems: 5");
+    expect(derivationsSource).toContain("day2MinPassCount: 4");
   });
 });

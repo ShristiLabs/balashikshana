@@ -51,7 +51,7 @@ describe("pack reader SQL parity: production adapter == test adapter", () => {
 });
 
 describe("storage SQL parity", () => {
-  it("attempt_log INSERT uses the identical 15-column list in both adapters", () => {
+  it("attempt_log INSERT uses the identical 16-column list in both adapters", () => {
     const extractColumns = (source: string): string => {
       const match = source.match(/INSERT INTO attempt_log \( ([^)]+) \) VALUES/);
       expect(match).not.toBeNull();
@@ -68,5 +68,19 @@ describe("storage SQL parity", () => {
   it("unit_progress upsert conflicts on (student_id, unit_id) in both", () => {
     expect(native).toContain("ON CONFLICT(student_id, unit_id) DO UPDATE SET");
     expect(helper).toContain("ON CONFLICT(student_id, unit_id) DO UPDATE SET");
+  });
+
+  it("sync drain reads the identical 18-column ordered window in both", () => {
+    const columns =
+      "SELECT id, student_id, topic_id, question_id, interaction_type, is_correct, cognitive_time_sec, audio_duration_sec, answered_at, synced, unit_id, session_type, session_id, raw_time_sec, fluency_grade, misconception_tags_json, chosen_answer, motor_baseline_sec FROM attempt_log WHERE student_id = ? AND synced = 0 ORDER BY id ASC LIMIT ?";
+    expect(native).toContain(columns);
+    expect(helper).toContain(columns);
+  });
+
+  it("the synced-flag flip is byte-identical in both (the ONLY attempt_log mutation)", () => {
+    const flip =
+      "UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0";
+    expect(native).toContain(flip);
+    expect(helper).toContain(flip);
   });
 });

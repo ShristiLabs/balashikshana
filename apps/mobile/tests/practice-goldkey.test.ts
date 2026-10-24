@@ -62,9 +62,10 @@ describe("forward-only key transitions on a gate pass", () => {
     expect(nextKeyAfterGatePass(null)).toBe("SILVER_KEY");
   });
 
-  it("a Silver holder passing again stays Silver locally (Gold only via verification)", () => {
-    // DELIBERATE DIVERGENCE from today's server (second pass -> GOLD);
-    // documented in goldKey.ts and reconciled in #48.
+  it("a Silver holder passing again stays Silver (Gold only via verification)", () => {
+    // #48 resolved the #47 divergence: the server adopted this exact
+    // machine (services/api/derivations.mjs), so local and server now
+    // agree — Gold is verification-only on BOTH sides.
     expect(nextKeyAfterGatePass("SILVER_KEY")).toBe("SILVER_KEY");
   });
 

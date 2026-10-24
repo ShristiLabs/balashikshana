@@ -16,12 +16,11 @@
  * Gold; a key, once held, is never revoked by any local event (rollback
  * is a #48 server-authoritative concern).
  *
- * DELIBERATE DIVERGENCE from today's server (documented per D8): the
- * server's /api/gate/evaluate promotes to GOLD_KEY on any SECOND pass
- * with no 14-hour window or verification session. The registry and this
- * issue's acceptance criteria are authoritative for the client: Gold
- * always goes through the window + verification. #48 reconciliation
- * must port this exact machine server-side before sync confirms keys.
+ * DIVERGENCE RESOLVED (#48): the server's /api/gate/evaluate and the
+ * sync reconciler now run this exact machine (ported to
+ * services/api/derivations.mjs) — a Silver holder who passes the gate
+ * again stays Silver on BOTH sides; Gold always goes through the
+ * window + verification. Local and server agree on synced streams.
  */
 import type { KeyState, UnitProgressRecord } from "./types";
 

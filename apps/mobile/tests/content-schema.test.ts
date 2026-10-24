@@ -197,9 +197,10 @@ describe("lifecycle DB migrations on real SQLite", () => {
       "INSERT INTO unit_progress (student_id, unit_id, status, key_state, updated_at) VALUES (?, ?, ?, ?, ?)",
     ).run("s1", "K-M1", "in_progress", null, 1234);
 
-    runMigrations(db); // the #47 app version opens the same device
+    runMigrations(db); // the #47/#48 app version opens the same device
+    const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
     expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      2,
+      latest,
     );
     // v1 rows survived the ALTERs.
     expect((db.prepare("SELECT COUNT(*) n FROM attempt_log").get() as { n: number }).n).toBe(1);
@@ -211,6 +212,9 @@ describe("lifecycle DB migrations on real SQLite", () => {
     expect(attempt.fluency_grade).toBe(0);
     expect(attempt.misconception_tags_json).toBe("[]");
     expect(attempt.chosen_answer).toBe("");
+    // v3 (#48): pre-existing rows backfill to the mobile default motor
+    // baseline so server replay reproduces the engine math.
+    expect(attempt.motor_baseline_sec).toBe(0.42);
     const topic = db.prepare("SELECT * FROM topic_progress").get() as Record<string, unknown>;
     expect(topic.stability_days).toBe(1.0);
     expect(topic.provisional).toBe(0);

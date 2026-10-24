@@ -9,6 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AudioServiceProvider } from "../src/audio/AudioServiceProvider";
 import { ContentPackProvider } from "../src/content/ContentPackProvider";
 import { PracticeWarmup } from "../src/practice/PracticeWarmup";
+import { SyncBootstrap } from "../src/sync/SyncBootstrap";
 import { ThemeProvider, useTheme } from "../src/design/theme";
 import { MotionProvider } from "../src/design/useMotion";
 
@@ -42,6 +43,7 @@ export default function RootLayout() {
           <AudioServiceProvider>
             <ContentPackProvider>
               <PracticeWarmup />
+              <SyncBootstrap />
               <RootStack />
             </ContentPackProvider>
           </AudioServiceProvider>
