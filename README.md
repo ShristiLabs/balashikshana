@@ -63,11 +63,13 @@ docker compose -f docker/docker-compose.yml up -d postgres
 docker compose -f docker/docker-compose.yml up --build -d
 ```
 
-### 3. API Authentication (Student Sessions)
+### 3. API Authentication & Parental Consent
 - Every student-scoped route requires a session token: send `Authorization: Bearer <token>` (401 without/invalid/expired token, 403 when the token belongs to a different student)
-- Obtain a token: `POST /api/auth/login` (username or studentId + 4-digit PIN, always required) or account creation via `POST /api/students` (PIN required, no default exists; demo-seed PINs are randomly generated and printed once in the API log)
+- Obtain a token: `POST /api/auth/login` (username or studentId + 4-digit PIN, always required) or account creation via `POST /api/students` (PIN required, no default exists; demo-seed PINs are randomly generated and printed once in the API log) — creation is consent-gated: it requires a verified parent session whose latest consent matches the current policy version (see below)
 - Revoke a token: `POST /api/auth/logout` (also your own token); sessions expire after 30 days
 - PINs are stored as salted scrypt hashes (N=16384, r=8, p=1, keylen=64; see `services/api/db.mjs`); legacy unsalted-SHA-256 rows are rehashed transparently on next login
+- **Verifiable parental consent (COPPA gate):** `POST /api/students`, `POST /api/practice/topic/complete`, and `POST /api/gate/evaluate` write no child data without a matching consent record — the response is `403 consent-required` (RFC 9457 problem+json carrying the current `currentPolicyVersion`) and nothing is written. Consent rows are append-only and server-timestamped; the capture method (`signup-form` or `re-consent`) is derived server-side, never asserted by the client
+- Consent routes (full contract in [`docs/openapi/baseline.yaml`](./docs/openapi/baseline.yaml), `consent` tag): `GET /api/consent/policy/latest` (public — the active policy text to render before onboarding), `POST /api/consent/records` (parent bearer + verified email; records acceptance of `policyVersion`, any version other than the active one is `409 policy-version-mismatch`), `GET /api/consent/status` (parent bearer; `consentCurrent: false` after a policy bump means the parent must re-consent before further child-data creation)
 - Run the auth/session security tests: `npm run test:api`
 
 ### 4. API Configuration (Edge Hardening)
@@ -76,6 +78,7 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 | Variable | Default (dev) | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://balashikshana:balashikshana_dev@localhost:5432/balashikshana_db` | PostgreSQL connection string (matches the compose service); the server exits with a clear message if the database is unreachable |
+| `SEED_DEMO_STUDENTS` | `1` | Set to `0` to skip seeding the demo student accounts on an empty database (dev-harness data with no consent records by design; the consent test suites boot with `0` so a pristine database proves the no-child-data-without-consent invariant) |
 | `ALLOWED_ORIGINS` | `http://localhost:4200,http://127.0.0.1:4200` | CORS allowlist (comma-separated). Wildcards are always rejected; in `NODE_ENV=production` the server refuses to start without an explicit list |
 | `RATE_LIMIT_PER_IP_MIN` | `120` | Requests per minute per client IP (429 + `Retry-After` beyond) |
 | `RATE_LIMIT_PER_TOKEN_MIN` | `60` | Requests per minute per session token |
@@ -90,7 +93,7 @@ The API runs on Fastify v5 with per-route JSON-schema validation. Every error re
 ### 5. Run the Test Suites (vitest)
 ```bash
 npm run test:engine   # core-engine unit specs (mastery gate, FSRS, curriculum DAG & questions) — no services required
-npm run test:api      # API integration suites (auth, edge hardening, Postgres migrations) — requires PostgreSQL
+npm run test:api      # API integration suites (auth, parent auth, consent, edge hardening, Postgres migrations) — requires PostgreSQL
 npm test              # both workspaces in sequence
 ```
 - The API suites (`services/api/test/`) boot the real server as a child process against a throwaway PostgreSQL database created per suite (dev data is never touched). The cold start applies all migrations and reseeds the 6,140 practice questions, so `services/api/vitest.config.mjs` raises the test/hook timeouts (120s/180s) accordingly.
@@ -157,4 +160,4 @@ balashikshana/
 8. **[Technical Architecture (`docs/architecture.md`)](./docs/architecture.md)** — Cross-platform iOS/Android mobile stack, procedural question/distractor generation, offline SQLite schema, and COPPA compliance.
 9. **[Enterprise Launch Roadmap (`docs/roadmap.md`)](./docs/roadmap.md)** — Approved M1–M6 roadmap: binding decisions D1–D11, the full issue tree (#27–#65), workstream details, risks, and per-milestone verification gates.
 10. **[Database Migration Ledger (`docs/database-migrations.md`)](./docs/database-migrations.md)** — PostgreSQL migration history, runner usage, and the rules every schema change follows.
-11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 12 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.
+11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 23 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.

@@ -16,7 +16,7 @@ export const STATUS_TITLES = {
   500: "Internal Server Error"
 };
 
-export function sendProblem(reply, status, { type, title, detail, errors, retryAfterSec } = {}) {
+export function sendProblem(reply, status, { type, title, detail, errors, retryAfterSec, extensions } = {}) {
   const body = {
     type: type || "about:blank",
     title: title || STATUS_TITLES[status] || "Error",
@@ -25,6 +25,9 @@ export function sendProblem(reply, status, { type, title, detail, errors, retryA
     instance: reply.request.url
   };
   if (errors) body.errors = errors;
+  // RFC 9457 extension members (e.g. currentPolicyVersion on consent
+  // problems) — merged verbatim after the standard fields.
+  if (extensions) Object.assign(body, extensions);
   if (retryAfterSec !== undefined) {
     reply.header("Retry-After", String(Math.max(1, Math.ceil(retryAfterSec))));
   }

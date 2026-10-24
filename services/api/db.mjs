@@ -165,7 +165,12 @@ async function ensureSeeded(db, logger) {
   }
 
   const stuRow = await db.get("SELECT COUNT(*)::int AS cnt FROM students");
-  if (!stuRow || stuRow.cnt === 0) {
+  // SEED_DEMO_STUDENTS=0 skips the demo students (issue #41): they are dev
+  // data with no consent records by design, and the consent-invariant suite
+  // boots on a pristine DB so it can prove no route creates unconsented
+  // child data. Default stays on for the local dev harness.
+  const seedDemoStudents = String(process.env.SEED_DEMO_STUDENTS ?? "1") !== "0";
+  if (seedDemoStudents && (!stuRow || stuRow.cnt === 0)) {
     await seedDefaultStudents(db, logger);
   }
 

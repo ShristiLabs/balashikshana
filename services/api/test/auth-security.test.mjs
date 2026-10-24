@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { Client } from "pg";
 import { fileURLToPath } from "node:url";
-import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth } from "./helpers.mjs";
+import { createTestDatabase, dropTestDatabase, startTestServer, waitForHealth, createVerifiedParentWithConsent } from "./helpers.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API = "http://127.0.0.1:4799";
@@ -43,9 +43,17 @@ async function waitForHealthLocal(timeoutMs = 60000) {
   return waitForHealth(API, timeoutMs);
 }
 
+// #41: POST /api/students is consent-gated (verified parent + current
+// consent). One shared consented parent covers this suite's many
+// registrations; the consent behaviors themselves are covered in
+// consent.test.mjs.
+let suiteParent;
+
 async function registerStudent(name, pin = "5533") {
+  suiteParent ||= await createVerifiedParentWithConsent(API);
   const res = await api("/api/students", {
     method: "POST",
+    token: suiteParent.token,
     body: { nickname: name, username: name, currentGrade: "kindergarten", pin }
   });
   assert.equal(res.status, 201, `registration failed: ${JSON.stringify(res.json)}`);
@@ -189,6 +197,7 @@ describe("login", () => {
     const first = await registerStudent("dupuser", "1212");
     const second = await api("/api/students", {
       method: "POST",
+      token: suiteParent.token,
       body: { nickname: "dupuser", username: "dupuser", currentGrade: "kindergarten", pin: "1212" }
     });
     assert.equal(second.status, 201);
@@ -202,6 +211,7 @@ describe("login", () => {
     for (let i = 0; i < 3; i += 1) {
       const res = await api("/api/students", {
         method: "POST",
+        token: suiteParent.token,
         body: { nickname: "duploop", username: "duploop", currentGrade: "kindergarten", pin: "1313" }
       });
       assert.equal(res.status, 201, `registration ${i + 1} failed: ${JSON.stringify(res.json)}`);

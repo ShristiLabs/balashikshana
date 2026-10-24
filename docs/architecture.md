@@ -82,4 +82,5 @@ Accessible behind a COPPA-compliant Parental Gate:
 
 - **Zero Third-Party Behavioral Advertising:** No ad networks or external tracking SDKs in the child-facing app.
 - **Parental Gate:** Pin/math verification required before accessing external links, account settings, or subscription management.
+- **Verifiable Parental Consent:** every child-data-creating route (student creation, practice completion, mastery-gate evaluation) is gated server-side on a timestamped consent record naming the current policy version; consent evidence is append-only, and a policy version bump requires re-consent before further child-data creation (see `services/api/consent.mjs` and `docs/database-migrations.md`).
 - **Data Minimization:** Child profiles store only a first-name nickname, grade level, and learning telemetry tied to the parent's authenticated account.
