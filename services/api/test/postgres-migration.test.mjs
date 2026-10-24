@@ -71,11 +71,11 @@ afterAll(async () => {
 });
 
 describe("migration tracking", () => {
-  test("pgmigrations records exactly the 001 migration after boot", async () => {
+  test("pgmigrations records exactly the applied migrations after boot", async () => {
     const rows = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows;
     assert.deepEqual(
       rows.map((r) => r.name),
-      ["001_initial_schema"]
+      ["001_initial_schema", "002_parent_accounts_consent"]
     );
   });
 });
