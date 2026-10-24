@@ -2,7 +2,8 @@
 // verification, login, session refresh/rotation, logout(+all), and password
 // reset — plus the token-kind-aware bearer resolution that the M1 student
 // middleware shares (dual-token doctrine: parent session tokens vs student
-// session tokens today; #42 adds child-device tokens to the same seam).
+// session tokens, plus the child device tokens added by issue #42 on the
+// same seam).
 //
 // Security doctrine (mirrors the M1 patterns in server.mjs):
 // - Passwords: scrypt via the SHARED db.mjs helpers (hashPinScrypt /
@@ -62,7 +63,9 @@ const EMAIL_PATTERN =
 
 const TOKEN_PATTERN = "^[A-Za-z0-9_-]+$";
 
-function sha256Hex(value) {
+// Exported since #42: the children module (children.mjs) hashes child
+// device-session tokens with the same at-rest transform as parent tokens.
+export function sha256Hex(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
 }
 
@@ -92,9 +95,10 @@ function trimAuthFieldsPreValidation(req, _reply, done) {
 
 // --- Token-kind-aware bearer resolution --------------------------------------
 // Resolves the Authorization header to a token kind: 'parent' (hashed
-// lookup in parent_sessions) or 'student' (raw lookup in student_sessions,
-// the M1 scheme). Error strings match the M1 middleware verbatim so 401
-// bodies are unchanged. #42 extends the union with 'child-device'.
+// lookup in parent_sessions), 'child-device' (hashed lookup in
+// child_device_sessions, issue #42), or 'student' (raw lookup in
+// student_sessions, the M1 scheme). Error strings match the M1 middleware
+// verbatim so 401 bodies are unchanged across all three kinds.
 
 export async function resolveBearerAuth(db, authorizationHeader) {
   const [scheme, token] = String(authorizationHeader || "").split(" ");
@@ -111,6 +115,21 @@ export async function resolveBearerAuth(db, authorizationHeader) {
       return { error: "Session token has expired" };
     }
     return { kind: "parent", token, parentSession: parentRow };
+  }
+  // Child device tokens (#42): hashed lookup, soft revoke (revoked rows
+  // are kept as lifecycle evidence and fail 401 immediately), lazy delete
+  // of expired rows — the parent_sessions semantics, scoped to exactly one
+  // student + one device by the row itself.
+  const childRow = await db.get("SELECT * FROM child_device_sessions WHERE token_hash = $1", [sha256Hex(token)]);
+  if (childRow) {
+    if (childRow.revoked_at) {
+      return { error: "Session token is invalid or has been revoked" };
+    }
+    if (new Date(childRow.expires_at).getTime() <= Date.now()) {
+      await db.run("DELETE FROM child_device_sessions WHERE session_id = $1", [childRow.session_id]);
+      return { error: "Session token has expired" };
+    }
+    return { kind: "child-device", token, childSession: childRow };
   }
   const studentRow = await db.get("SELECT * FROM student_sessions WHERE token = $1", [token]);
   if (studentRow) {
@@ -134,7 +153,7 @@ export async function requireParentAuth(db, req, reply) {
   if (auth.kind !== "parent") {
     sendProblem(reply, 403, {
       type: `${PROBLEM_BASE}/wrong-token-type`,
-      detail: "Student session tokens cannot access parent routes."
+      detail: "Student and child device tokens cannot access parent routes."
     });
     return null;
   }

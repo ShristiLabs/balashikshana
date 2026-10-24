@@ -82,7 +82,13 @@ describe("migration tracking", () => {
     const rows = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows;
     assert.deepEqual(
       rows.map((r) => r.name),
-      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens", "004_consent_policy_versions"]
+      [
+        "001_initial_schema",
+        "002_parent_accounts_consent",
+        "003_parent_auth_tokens",
+        "004_consent_policy_versions",
+        "005_child_profiles_device_sessions"
+      ]
     );
   });
 });

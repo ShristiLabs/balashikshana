@@ -64,11 +64,14 @@ docker compose -f docker/docker-compose.yml up --build -d
 ```
 
 ### 3. API Authentication & Parental Consent
-- Every student-scoped route requires a session token: send `Authorization: Bearer <token>` (401 without/invalid/expired token, 403 when the token belongs to a different student)
-- Obtain a token: `POST /api/auth/login` (username or studentId + 4-digit PIN, always required) or account creation via `POST /api/students` (PIN required, no default exists; demo-seed PINs are randomly generated and printed once in the API log) — creation is consent-gated: it requires a verified parent session whose latest consent matches the current policy version (see below)
-- Revoke a token: `POST /api/auth/logout` (also your own token); sessions expire after 30 days
-- PINs are stored as salted scrypt hashes (N=16384, r=8, p=1, keylen=64; see `services/api/db.mjs`); legacy unsalted-SHA-256 rows are rehashed transparently on next login
-- **Verifiable parental consent (COPPA gate):** `POST /api/students`, `POST /api/practice/topic/complete`, and `POST /api/gate/evaluate` write no child data without a matching consent record — the response is `403 consent-required` (RFC 9457 problem+json carrying the current `currentPolicyVersion`) and nothing is written. Consent rows are append-only and server-timestamped; the capture method (`signup-form` or `re-consent`) is derived server-side, never asserted by the client
+- Every student-scoped route requires a session token: send `Authorization: Bearer <token>` (401 without/invalid/expired token, 403 when the token belongs to a different student). Bearer tokens come in three kinds — **student sessions** (M1), **child device tokens** (issue #42), and **parent sessions** (issue #40) — resolved per request and checked per route (403 `wrong-token-type` on a kind mismatch)
+- Obtain a student or child-device token: `POST /api/auth/login` (username or studentId + 4-digit PIN, always required), account creation via `POST /api/students` (PIN required, no default exists; demo-seed PINs are randomly generated and printed once in the API log — creation is consent-gated and, since #42, also binds the new student to the creating parent via `parent_children`), or a parent minting a child device token (see below)
+- Revoke a token: `POST /api/auth/logout` (student sessions; also your own token) or the parent-side device-session revoke; student and child-device sessions expire after 30 days
+- PINs are stored as salted scrypt hashes (N=16384, r=8, p=1, keylen=64; see `services/api/db.mjs`) — child PINs use the identical shared parameters; legacy unsalted-SHA-256 rows are rehashed transparently on next login
+- **Parent accounts** (full contract in [`docs/openapi/baseline.yaml`](./docs/openapi/baseline.yaml), `parents` tag): `POST /api/parents/signup`, `verify-email`, `login`, `refresh`, `logout`, `logout-all`, `password-reset/request`, `password-reset/confirm` — scrypt passwords, hashed-at-rest session tokens (7-day TTL, 30-day refresh window, soft revoke)
+- **Child profiles under parents** (`children` tag): `GET`/`POST /api/parent/children` (creation is consent-gated and writes the student row, the `parent_children` binding, a student-scoped consent row, and the `devices` row in one transaction), `POST /api/parent/children/claim` (legacy standalone students only — username + PIN proof-of-knowledge, exactly-once, second claimant `409 already-claimed`), `POST /api/parent/children/:studentId/archive` (excludes the child from the login-screen listing, freezes every student-scoped route, revokes all sessions), `POST /api/parent/children/:studentId/device-sessions` + `DELETE .../device-sessions/:sessionId` (mint/revoke child device tokens — scoped to exactly one student + one device, stored hashed at rest, 30-day expiry, revocation kills access immediately)
+- **Dev dataset note:** the seeded demo students and every pre-#42 standalone dev student carry `status='legacy'` (migration 005) — claim-eligible via the claim route (username + PIN) or deliberately left unclaimed; nothing is auto-adopted. Archived students disappear from `GET /api/students` and cannot log in or mint sessions
+- **Verifiable parental consent (COPPA gate):** `POST /api/students`, `POST /api/parent/children`, `POST /api/parent/children/claim`, `POST /api/practice/topic/complete`, and `POST /api/gate/evaluate` write no child data without a matching consent record — the response is `403 consent-required` (RFC 9457 problem+json carrying the current `currentPolicyVersion`) and nothing is written. Consent rows are append-only and server-timestamped; the capture method (`signup-form` or `re-consent`) is derived server-side, never asserted by the client
 - Consent routes (full contract in [`docs/openapi/baseline.yaml`](./docs/openapi/baseline.yaml), `consent` tag): `GET /api/consent/policy/latest` (public — the active policy text to render before onboarding), `POST /api/consent/records` (parent bearer + verified email; records acceptance of `policyVersion`, any version other than the active one is `409 policy-version-mismatch`), `GET /api/consent/status` (parent bearer; `consentCurrent: false` after a policy bump means the parent must re-consent before further child-data creation)
 - Run the auth/session security tests: `npm run test:api`
 
@@ -83,6 +86,11 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 | `RATE_LIMIT_PER_IP_MIN` | `120` | Requests per minute per client IP (429 + `Retry-After` beyond) |
 | `RATE_LIMIT_PER_TOKEN_MIN` | `60` | Requests per minute per session token |
 | `RATE_LIMIT_LOGIN_PER_IP_MIN` | `10` | Login attempts per minute per IP (PIN brute-force guard) |
+| `RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN` | `5` | Parent signups per minute per IP |
+| `RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN` | `10` | Parent logins per minute per IP |
+| `RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN` | `10` | Parent token-presenting routes per minute per IP (verify-email, reset confirm) |
+| `RATE_LIMIT_PARENT_RESET_PER_IP_MIN` | `5` | Parent password-reset requests per minute per IP |
+| `RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN` | `10` | Child-claim attempts per minute per IP (the claim route verifies student PINs, so it follows the login-bucket doctrine) |
 | `BODY_LIMIT_BYTES` | `65536` | Request body cap (413 beyond) |
 | `PORT` | `4000` | Listen port |
 
@@ -93,7 +101,7 @@ The API runs on Fastify v5 with per-route JSON-schema validation. Every error re
 ### 5. Run the Test Suites (vitest)
 ```bash
 npm run test:engine   # core-engine unit specs (mastery gate, FSRS, curriculum DAG & questions) — no services required
-npm run test:api      # API integration suites (auth, parent auth, consent, edge hardening, Postgres migrations) — requires PostgreSQL
+npm run test:api      # API integration suites (auth, parent auth, consent, child profiles, edge hardening, Postgres migrations) — requires PostgreSQL
 npm test              # both workspaces in sequence
 ```
 - The API suites (`services/api/test/`) boot the real server as a child process against a throwaway PostgreSQL database created per suite (dev data is never touched). The cold start applies all migrations and reseeds the 6,140 practice questions, so `services/api/vitest.config.mjs` raises the test/hook timeouts (120s/180s) accordingly.
@@ -160,4 +168,4 @@ balashikshana/
 8. **[Technical Architecture (`docs/architecture.md`)](./docs/architecture.md)** — Cross-platform iOS/Android mobile stack, procedural question/distractor generation, offline SQLite schema, and COPPA compliance.
 9. **[Enterprise Launch Roadmap (`docs/roadmap.md`)](./docs/roadmap.md)** — Approved M1–M6 roadmap: binding decisions D1–D11, the full issue tree (#27–#65), workstream details, risks, and per-milestone verification gates.
 10. **[Database Migration Ledger (`docs/database-migrations.md`)](./docs/database-migrations.md)** — PostgreSQL migration history, runner usage, and the rules every schema change follows.
-11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 23 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.
+11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 29 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.

@@ -320,11 +320,16 @@ async function seedDefaultStudents(db, logger) {
   }
 
   await db.withTransaction(async (client) => {
+    // Demo students are standalone dev data: they carry status 'legacy' so
+    // they sit in the claim-eligible population on fresh databases too
+    // (migration 005's back-fill only flags rows that exist at migrate
+    // time; a fresh boot seeds after migrating and would otherwise default
+    // them to 'active', making them unclaimable).
     const insertStudent = `INSERT INTO students (
       student_id, username, pin_hash, nickname, avatar, age_years,
       current_grade, motor_baseline_sec, streak_days, star_coins, hearts,
-      last_active_at, created_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (student_id) DO NOTHING`;
+      last_active_at, created_at, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'legacy') ON CONFLICT (student_id) DO NOTHING`;
 
     await client.query(insertStudent, ["stu-aarav-k", "aarav", hashPinScrypt(seedPins.aarav), "Aarav", "\u{1F981}", 5, "kindergarten", 0.42, 7, 340, 5, now, now]);
     await client.query(insertStudent, ["stu-maya-pk", "maya", hashPinScrypt(seedPins.maya), "Maya", "\u{1F98A}", 4, "pre-k", 0.55, 4, 140, 5, now, now]);
