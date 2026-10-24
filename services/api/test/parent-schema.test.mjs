@@ -323,8 +323,11 @@ describe("audit_students_without_consent view", () => {
 describe("migration 002 reversibility", () => {
   // Runs last in this file on purpose: `down` drops every 002 object and
   // the rows earlier tests created in them. No later test depends on them.
-  test("down removes exactly 002 objects, up restores them", async () => {
-    await migrate({ direction: "down", count: 1 });
+  // 003 (issue #40) layers parent_sessions/parent_tokens on top of 002, so
+  // the rollback now removes both M2-parent migrations (in order) and the
+  // up restores them; the reversibility contract is unchanged.
+  test("down removes exactly the 002+003 objects, up restores them", async () => {
+    await migrate({ direction: "down", count: 2 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -336,7 +339,9 @@ describe("migration 002 reversibility", () => {
            to_regclass('parent_children') AS parent_children,
            to_regclass('consent_records') AS consent_records,
            to_regclass('devices') AS devices,
-           to_regclass('audit_students_without_consent') AS audit_view`
+           to_regclass('audit_students_without_consent') AS audit_view,
+           to_regclass('parent_sessions') AS parent_sessions,
+           to_regclass('parent_tokens') AS parent_tokens`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -344,13 +349,19 @@ describe("migration 002 reversibility", () => {
       parent_children: null,
       consent_records: null,
       devices: null,
-      audit_view: null
+      audit_view: null,
+      parent_sessions: null,
+      parent_tokens: null
     });
 
     await migrate({ direction: "up" });
 
     names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
-    assert.deepEqual(names, ["001_initial_schema", "002_parent_accounts_consent"], "up must re-apply 002");
+    assert.deepEqual(
+      names,
+      ["001_initial_schema", "002_parent_accounts_consent", "003_parent_auth_tokens"],
+      "up must re-apply 002 and 003"
+    );
 
     const back = (
       await db.query(
@@ -359,7 +370,9 @@ describe("migration 002 reversibility", () => {
            to_regclass('parent_children') AS parent_children,
            to_regclass('consent_records') AS consent_records,
            to_regclass('devices') AS devices,
-           to_regclass('audit_students_without_consent') AS audit_view`
+           to_regclass('audit_students_without_consent') AS audit_view,
+           to_regclass('parent_sessions') AS parent_sessions,
+           to_regclass('parent_tokens') AS parent_tokens`
       )
     ).rows[0];
     for (const [object, regclass] of Object.entries(back)) {
