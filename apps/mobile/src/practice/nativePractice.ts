@@ -33,6 +33,7 @@ import type {
   TopicProgressRecord,
   UnitProgressRecord,
 } from "./types";
+import { DEFAULT_MOTOR_BASELINE_SEC } from "./practiceEngine";
 
 // ----------------------------------------------------------------------
 // Lifecycle database (attempt log + progress projection)
@@ -495,7 +496,7 @@ export function createNativePracticeDeps(): PracticeDeps {
     now: () => Date.now(),
     newSessionId: (studentId: string) =>
       `${studentId}-s${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    motorBaselineSec: 0.42,
+    motorBaselineSec: DEFAULT_MOTOR_BASELINE_SEC,
   };
 }
 

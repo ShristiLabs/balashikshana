@@ -12,11 +12,44 @@
 // Pure (vitest/node, no React Native).
 export { ARCHETYPE_IDS, resolveGameRoute, type ArchetypeId } from "./archetypes";
 export {
+  buildBankFor,
+  buildPlanFor,
+  buildTargetFor,
+  bundleViewFor,
+  draftForBuild,
+  guidedHintFor,
+  sumOfPlaced,
+  validateBuild,
+  type BlockBuilderPlan,
+  type BlockBuilderPlanKind,
+  type BuildTile,
+  type BuildValidation,
+  type BundleView,
+} from "./blockBuilder";
+export {
   availableStages,
   gameConfigForStage,
   gameSessionLength,
   parseGamesAssetBlock,
 } from "./gamesAssets";
+export {
+  cashierPlanFor,
+  changeDueCents,
+  choiceLabelForCents,
+  COIN_DENOMINATIONS,
+  denominationsFor,
+  DOLLAR_BILL,
+  formatCents,
+  guidedHintForCheckout,
+  moneyStyleFor,
+  parseCentsValue,
+  priceCentsFromQuestion,
+  sumCents,
+  type CashDenomination,
+  type MarketCashierPlan,
+  type MarketCashierPlanKind,
+  type MoneyDisplayStyle,
+} from "./marketCashier";
 export {
   composeGameItemPlan,
   mixPercentagesFromFractions,
@@ -51,7 +84,7 @@ export type {
 } from "./types";
 export type { GameAttemptTelemetry } from "../practice/types";
 
-// Renderer registry (component references; #53/#54 registration point).
+// Renderer registry (component references; #54 registration point).
 export {
   ARCHETYPE_RENDERERS,
   SUPPORTED_ARCHETYPES,
@@ -61,4 +94,9 @@ export {
 // Screens (thin RN layers).
 export { GameHostScreen } from "./GameHostScreen";
 export { GameSessionScreen } from "./GameSessionScreen";
+// #53 pack A renderers (registered in archetypeRegistry).
+export { BlockBuilderGame } from "./BlockBuilderGame";
+export { MarketCashierGame } from "./MarketCashierGame";
+// #52 proof-of-pipeline renderer - unregistered since #53; kept as the
+// authoring template for the #54 pack.
 export { StubArchetypeGame } from "./StubArchetypeGame";

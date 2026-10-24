@@ -43,6 +43,10 @@ export interface GameState {
   unitTitle: string | null;
   topicCode: string | null;
   topicName: string | null;
+  /** The session topic's engine id (`${unitId}-${topicCode}`), used
+   * to select THIS topic's row out of a spiral-heavy summary (the
+   * stream can order a foreign topic first - #53 carry-over fix 2). */
+  topicId: string | null;
   /** Stages the topic's registry games block offers (stage-pick phase). */
   offeredStages: ("guided" | "fluency")[];
   route: GameRouteInfo | null;
@@ -71,6 +75,7 @@ export function initialGameState(): GameState {
     unitTitle: null,
     topicCode: null,
     topicName: null,
+    topicId: null,
     offeredStages: [],
     route: null,
     sessionId: null,
@@ -132,9 +137,13 @@ function isLiveSession(state: GameState, sessionId: string | undefined): boolean
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "resolved":
+      // #53 carry-over fix 3: a single offered stage no longer
+      // auto-advances to warmup - EVERY resolution routes through the
+      // explicit stage affordance (the child sees and taps the stage
+      // card, exactly like the two-stage case).
       return {
         ...state,
-        phase: action.offeredStages.length > 1 ? "stage-pick" : "warmup",
+        phase: "stage-pick",
         error: null,
         unitId: action.unitId,
         unitTitle: action.unitTitle,
@@ -147,12 +156,28 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "load-failed":
       return { ...state, phase: "error", error: action.error };
     case "stage-selected":
-      return { ...state, phase: "warmup" };
+      // #53 carry-over fix 1: a restart must not carry the finished
+      // session's id or leftovers (a stale id would make exit abandon
+      // an already-completed session and leave a stray draft).
+      return {
+        ...state,
+        phase: "warmup",
+        sessionId: null,
+        schedule: { items: [] },
+        index: 0,
+        draft: null,
+        checked: null,
+        streak: 0,
+        answeredCount: 0,
+        requeuedSeen: 0,
+        summary: null,
+      };
     case "session-started":
       return {
         ...state,
         phase: "question",
         sessionId: action.sessionId,
+        topicId: action.start.topicId,
         schedule: initialSchedule(action.start.questions),
         index: 0,
         questionById: Object.fromEntries(action.start.questions.map((q) => [q.questionId, q])),
