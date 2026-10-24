@@ -45,3 +45,8 @@ services/api/data/
 
 # SDLC runtime state (delivery-flow status files; not product code)
 .sdlc/
+
+# Content-pack compiler output (issue #46): rebuilt from the registry via
+# tools/content-pipeline; the manifest index and pack artifacts are served
+# by the API from this directory but never committed.
+services/api/content-packs/

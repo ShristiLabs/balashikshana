@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/*",
     "services/*",
-    "apps/*"
+    "apps/*",
+    "tools/*"
   ],
   "scripts": {
     "validate:curriculum": "python3 scripts/validate-curriculum.py",
@@ -17,6 +18,9 @@
     "start:app": "npm --workspace=apps/mobile run web",
     "start:ios": "npm --workspace=apps/mobile run ios",
     "start:android": "npm --workspace=apps/mobile run android",
-    "build": "npm --workspace=packages/core-engine run build"
+    "build": "npm --workspace=packages/core-engine run build",
+    "packs:build": "npm run build --workspace @balashikshana/content-pipeline",
+    "packs:keys": "npm run keys --workspace @balashikshana/content-pipeline",
+    "test:packs": "npm run test --workspace @balashikshana/content-pipeline"
   }
 }

@@ -78,6 +78,13 @@ Instead of static multiple-choice questions that children memorize after two att
   - `assessment_telemetry`: Granular log of every gate attempt (`question_id`, `skill_topic_code`, `is_correct`, `raw_time_ms`, `cognitive_time_ms`, `fluency_grade_1_to_4`).
   - `spaced_repetition_queue`: `unit_id`, `skill_topic_code`, `retrievability_pct` ($R_m(t)$), `next_review_at`, `sleep_consolidation_key_state` (`SILVER_KEY` / `GOLD_KEY`).
 
+### 2.4 Signed Content Pack Subsystem (M3, issue #46)
+- **Compile-time (`tools/content-pipeline`):** the registry is compiled into one deterministic SQLite pack per grade — canonical JSON, fixed pragmas, single sorted transaction, `VACUUM`, no timestamps — then sealed with a detached Ed25519 signature and SHA-256 checksum in a manifest index. The same registry + key always rebuilds byte-identical artifacts, and the build refuses to publish any artifact that fails its own self-verification.
+- **Serving:** the API serves the manifest index (`GET /api/content/packs`) and the signed artifacts (`GET /api/content/packs/:gradeId`, octet-stream, ETag = sha256) from the gitignored compiler output; it never verifies signatures (that is the device's job) but 503s on any index/artifact inconsistency.
+- **On-device (`apps/mobile/src/content/`):** packs are verified before install — pinned public keys, size + checksum + signature, and a `pack_info` cross-check that the artifact describes exactly the grade/version the manifest promised — then published with one atomic rename and pruned under a 64 MB storage budget. Downgrades are refused; failed installs leave the previous pack active. Pack artifacts are opened read-only (`PRAGMA query_only`); content rows are never inserted on-device.
+- **Trust model:** dev builds pin the committed dev key; production pins nothing until the release key is provisioned at M6 — an empty trust list fails closed (no pack installs) rather than trusting the dev key.
+- **Forward schemas:** the pack lifecycle database (`balashikshana_content.db`) already carries the append-only `attempt_log` and `topic_progress` / `unit_progress` tables that the offline practice core (#47) and sync protocol (#48) populate.
+
 ---
 
 ## 3. Parent & Educator Analytics Portal

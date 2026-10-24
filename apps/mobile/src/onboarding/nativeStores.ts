@@ -16,6 +16,8 @@
 
 import * as SecureStore from "expo-secure-store";
 import * as SQLite from "expo-sqlite";
+import { getContentPackService } from "../content/nativeContent";
+import type { EnsureResult } from "../content/types";
 import type { OnboardingStore, SecureKeyValue } from "./storage";
 import { parseSnapshot } from "./storage";
 
@@ -43,7 +45,14 @@ export const secureKeyValue: SecureKeyValue = {
 export interface NativeDependencies {
   onboardingStore: OnboardingStore;
   secure: SecureKeyValue;
+  /**
+   * Content-pack trigger (#46). Lazy singleton; init failures degrade to
+   * undefined (the flow treats the seam as optional and never blocks).
+   */
+  contentPacks?: { ensurePack(gradeId: string): Promise<EnsureResult> };
 }
+
+const CONTENT_API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000";
 
 export async function createNativeDependencies(): Promise<NativeDependencies> {
   const db = await SQLite.openDatabaseAsync(SNAPSHOT_DB);
@@ -70,5 +79,9 @@ export async function createNativeDependencies(): Promise<NativeDependencies> {
     },
   };
 
-  return { onboardingStore, secure: secureKeyValue };
+  return {
+    onboardingStore,
+    secure: secureKeyValue,
+    contentPacks: getContentPackService(CONTENT_API_BASE),
+  };
 }

@@ -47,17 +47,19 @@ jobs:
             services/api/package-lock.json
             packages/core-engine/package-lock.json
             apps/mobile/package-lock.json
+            tools/content-pipeline/package-lock.json
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install workspace dependencies (api, core-engine, mobile)
+      - name: Install workspace dependencies (api, core-engine, mobile, content-pipeline)
         run: |
           npm ci --workspaces=false --prefix services/api
           npm ci --workspaces=false --prefix packages/core-engine
           npm ci --workspaces=false --prefix apps/mobile
+          npm ci --workspaces=false --prefix tools/content-pipeline
 
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
         run: python3 scripts/validate-curriculum.py
@@ -70,6 +72,9 @@ jobs:
 
       - name: Security & Edge Integration Tests (vitest — scrypt PINs, IDOR denial, CORS, rate limits, Postgres)
         run: npm test --workspaces=false --prefix services/api
+
+      - name: Content Pack Compiler Gate (determinism, completeness vs registry, signed + tamper rejection)
+        run: npm test --workspaces=false --prefix tools/content-pipeline
 
       - name: Mobile App Shell Quality Gate (lint, format, typecheck, design-token tests)
         run: |

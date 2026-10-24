@@ -19,6 +19,8 @@ export interface CompleteStepProps {
   /** Set when a resumed device-session re-mint failed (retryable). */
   mintError?: ApiError | null;
   onRetryMint?: () => void;
+  /** Grade content-pack status note (#46); appears once the pack settles. */
+  contentNote?: string | null;
 }
 
 export function CompleteStep({
@@ -27,6 +29,7 @@ export function CompleteStep({
   gradeId,
   mintError,
   onRetryMint,
+  contentNote,
 }: CompleteStepProps) {
   const { colors } = useTheme();
   return (
@@ -38,6 +41,14 @@ export function CompleteStep({
       <View style={{ gap: spacing.md, marginTop: spacing.md }}>
         {gradeId ? (
           <Badge label={`Starting grade: ${GRADE_LABELS[gradeId]}`} tone="success" />
+        ) : null}
+        {contentNote ? (
+          <Text
+            style={{ ...typeRamp.bodyMuted, color: colors.textMuted }}
+            testID="onboarding.complete.contentNote"
+          >
+            {contentNote}
+          </Text>
         ) : null}
         <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted }}>
           The learner can now sign in on this device with their avatar and PIN. You can review
