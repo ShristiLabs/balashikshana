@@ -51,7 +51,7 @@ describe("pack reader SQL parity: production adapter == test adapter", () => {
 });
 
 describe("storage SQL parity", () => {
-  it("attempt_log INSERT uses the identical 16-column list in both adapters", () => {
+  it("attempt_log INSERT uses the identical column list in both adapters", () => {
     const extractColumns = (source: string): string => {
       const match = source.match(/INSERT INTO attempt_log \( ([^)]+) \) VALUES/);
       expect(match).not.toBeNull();

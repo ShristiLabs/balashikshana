@@ -134,6 +134,24 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
       `ALTER TABLE attempt_log ADD COLUMN motor_baseline_sec REAL NOT NULL DEFAULT 0.42`,
     ],
   },
+  {
+    // Migration 4 (issue #52 — game framework) adds FOUR local-only
+    // telemetry columns to attempt_log: the spiral bucket an item came
+    // from, the stage's registry speed target, the resolved archetype,
+    // and the fallback marker for sessions the framework routed to the
+    // #50 practice runner. Same additive convention as v2/v3 (ALTER
+    // ADD COLUMN with defaults keeps prior rows valid, zero data
+    // movement). The #48 sync wire is UNCHANGED — these columns never
+    // travel; the server derives progress from the same facts as topic
+    // practice (GAME session rows ride the existing pipeline).
+    version: 4,
+    statements: [
+      `ALTER TABLE attempt_log ADD COLUMN game_spiral_provenance TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE attempt_log ADD COLUMN game_target_speed_sec REAL NOT NULL DEFAULT 0`,
+      `ALTER TABLE attempt_log ADD COLUMN game_archetype TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE attempt_log ADD COLUMN game_fallback INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";

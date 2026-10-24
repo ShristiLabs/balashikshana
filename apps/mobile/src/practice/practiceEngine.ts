@@ -34,8 +34,15 @@ import {
   packUnitToEngineUnit,
 } from "./packShapes";
 import { buildReviewQueue, capNextReviewAt } from "./reviewQueue";
+import {
+  composeGameItemPlan,
+  mixPercentagesFromFractions,
+  summarizeGameTelemetry,
+} from "../games/sessionModel";
+import { gameSessionLength, parseGamesAssetBlock } from "../games/gamesAssets";
 import type {
   AttemptInput,
+  GameAttemptTelemetry,
   GradeSrPolicy,
   PackContentReader,
   PracticeDeps,
@@ -71,6 +78,13 @@ interface SessionState {
   motorBaselineSec: number;
   targetSpeedSec: number;
   startedAtMs: number;
+  /** #52 stamp: every attempt row of the session carries it (game or fallback). */
+  gameTelemetry?: GameAttemptTelemetry;
+  /** #52 game sessions: spiral bucket per question id (re-queues inherit). */
+  provenanceByQuestionId?: Record<string, "current" | "contrastive" | "spaced-review">;
+  /** #52 game session stage + registry mastery goal (summary roll-up). */
+  gameStage?: "guided" | "fluency";
+  gameTargetMasteryScore?: number;
 }
 
 export interface TopicSessionStart {
@@ -97,6 +111,60 @@ export interface TopicSessionSummary {
   cpaStage: string;
   nextReviewAt: number;
   topicProgress: TopicProgressRecord;
+}
+
+/** Game-session start payload (issue #52) — everything the host + renderer need. */
+export interface GameSessionStart {
+  sessionId: string;
+  unitId: string;
+  unitTitle: string;
+  topicId: string;
+  topicCode: string;
+  topicName: string;
+  /** Registry stage the session runs. */
+  stage: "guided" | "fluency";
+  archetype: string;
+  gameId: string;
+  gameTitle: string;
+  /** Registry speed target (fluency); 0 for the untimed guided stage. */
+  targetResponseSpeedSec: number;
+  /** Registry mastery goal (game-facing win boundary; 80 in today's data). */
+  targetMasteryScore: number;
+  /** Derivation-parity target (unit gate speed) — see startGameSession. */
+  targetSpeedSec: number;
+  /** The spiral-mixed stream (guided: current-only). */
+  questions: PracticeQuestion[];
+  /** Spiral bucket per question id (telemetry provenance). */
+  provenanceByQuestionId: Record<string, "current" | "contrastive" | "spaced-review">;
+}
+
+/** Game-session completion summary: per-topic progress + game telemetry. */
+export interface GameSessionSummary {
+  sessionId: string;
+  stage: "guided" | "fluency";
+  archetype: string;
+  /** Game-facing goal evaluation (celebration), NOT the mastery pass rule. */
+  metGoal: boolean;
+  accuracyPct: number;
+  medianCogSpeedSec: number;
+  targetSpeedSec: number;
+  /** Speed-vs-target telemetry (target 0 = untimed guided stage). */
+  speed: {
+    targetSec: number;
+    medianRawSec: number;
+    medianCognitiveSec: number;
+    beatTargetPct: number;
+  };
+  provenanceCounts: { current: number; contrastive: number; "spaced-review": number };
+  /** Per-topic projections written (current topic first). */
+  perTopic: {
+    topicId: string;
+    topicCode: string;
+    accuracyPct: number;
+    medianCogSpeedSec: number;
+    passedTopic: boolean;
+    crowns: number;
+  }[];
 }
 
 export interface GateSessionStart {
@@ -200,6 +268,13 @@ export class PracticeSessionEngine {
     topicCode: string;
     count?: number;
     motorBaselineSec?: number;
+    /**
+     * #52 fallback telemetry stamp: when the game framework routes a
+     * topic to the practice runner (no installed archetype renderer),
+     * the session's attempt rows record the intended archetype and the
+     * fallback marker. Absent for plain practice sessions.
+     */
+    gameTelemetry?: GameAttemptTelemetry;
   }): Promise<TopicSessionStart> {
     const reader = await this.requireReader(params.gradeId);
     const unit = await this.requireUnit(reader, params.unitId);
@@ -243,6 +318,7 @@ export class PracticeSessionEngine {
       motorBaselineSec: this.motorBaseline(params.motorBaselineSec),
       targetSpeedSec: unit.gate_max_speed_sec,
       startedAtMs: this.deps.now(),
+      gameTelemetry: params.gameTelemetry,
     });
 
     return {
@@ -296,6 +372,15 @@ export class PracticeSessionEngine {
       // The session's motor baseline rides every attempt row so #48's
       // server replay reproduces the engine math exactly.
       motorBaselineSec: session.motorBaselineSec,
+      // #52: game sessions stamp per-row telemetry with the item's own
+      // spiral bucket (a fallback session's constant stamp passes through
+      // as-is - its stream is not spiral-composed).
+      gameTelemetry: (() => {
+        const stamp = session.gameTelemetry;
+        if (!stamp) return undefined;
+        const provenance = session.provenanceByQuestionId?.[question.questionId];
+        return provenance ? { ...stamp, spiralProvenance: provenance } : stamp;
+      })(),
     };
     const recorded = await this.recorder.record(input);
     session.responses.push(response);
@@ -353,6 +438,287 @@ export class PracticeSessionEngine {
       cpaStage: derivation.cpaStage,
       nextReviewAt: merged.nextReviewAt,
       topicProgress: merged,
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Game sessions (issue #52)
+  // ------------------------------------------------------------------
+
+  /**
+   * Opens a game session for a topic's registry game config.
+   *
+   * Item-stream composition (issue #52 AC): the fluency stage composes
+   * the topic's own assets.games spiralMix as a 70/20/10 blend —
+   * current topic / contrastive prerequisite units / due spaced review
+   * (most-forgotten first; the same claim order as the #51 gate:
+   * review claims before prerequisites so a shared topic cannot starve
+   * the 10% slice). The guided stage composes current-only (untimed
+   * explorer; the registry carries spiralMix on the fluency config
+   * alone). Missing pools degrade deterministically — their share flows
+   * back to the current topic.
+   *
+   * DERIVATION PARITY: targetSpeedSec is the UNIT gate speed exactly
+   * like a topic-practice session, on BOTH sides (mobile projector and
+   * the server's GAME replay) — per-attempt fluency grades and session
+   * medians can never fork between game and practice. The registry's
+   * targetResponseSpeedSec is PACING + TELEMETRY only.
+   */
+  async startGameSession(params: {
+    studentId: string;
+    gradeId: string;
+    unitId: string;
+    topicCode: string;
+    stage: "guided" | "fluency";
+    motorBaselineSec?: number;
+  }): Promise<GameSessionStart> {
+    const reader = await this.requireReader(params.gradeId);
+    const unit = await this.requireUnit(reader, params.unitId);
+    const topicId = `${params.unitId}-${params.topicCode}`;
+    const topicRow = await reader.topic(topicId);
+    if (!topicRow) throw new Error(`Topic ${topicId} not found in installed pack`);
+
+    const block = parseGamesAssetBlock(packTopicToEngineTopic(topicRow).assets);
+    const config = params.stage === "guided" ? block.guidedPracticeGame : block.fluencySprintGame;
+    if (!config) {
+      throw new Error(`Topic ${topicId} has no ${params.stage} game config in its pack assets`);
+    }
+    const count = gameSessionLength(block);
+
+    // Current pool: stored pack rows first, engine-generated padding on
+    // shortfall — exactly the startTopicSession sourcing.
+    const storedRows = await reader.questionsForTopic(topicId, count);
+    const currentPool = storedRows.map(packQuestionToPracticeQuestion);
+    if (currentPool.length < count) {
+      const shortfall = count - currentPool.length;
+      const unitObj = packUnitToEngineUnit(unit, await reader.topicsForUnit(params.unitId));
+      const topicObj = packTopicToEngineTopic(topicRow);
+      generateTopicPracticeSet(unitObj, topicObj, shortfall).forEach((item, index) => {
+        currentPool.push(
+          generatedToPracticeQuestion(
+            params.unitId,
+            topicId,
+            params.topicCode,
+            topicRow.topic_name,
+            index,
+            item,
+          ),
+        );
+      });
+    }
+
+    // Fluency-only contrastive slices (gate claim order: review first).
+    const prereqPool: PracticeQuestion[] = [];
+    const reviewPool: PracticeQuestion[] = [];
+    if (params.stage === "fluency") {
+      const selected = new Set(currentPool.map((q) => q.questionId));
+      const policy = await this.requirePolicy(reader, unit.grade_id);
+      const progressRows = await this.deps.storage.allTopicProgress(params.studentId);
+      const queue = buildReviewQueue({ nowMs: this.deps.now(), policy, rows: progressRows });
+      for (const item of queue) {
+        if (reviewPool.length >= count) break;
+        if (item.unitId === params.unitId) continue;
+        const rows = await reader.questionsForTopic(item.topicId, 1);
+        const row = rows[0];
+        if (!row) continue;
+        const q = packQuestionToPracticeQuestion(row);
+        if (selected.has(q.questionId)) continue;
+        reviewPool.push(q);
+        selected.add(q.questionId);
+      }
+      for (const prereqId of parsePrerequisiteUnitIds(unit.prerequisite_unit_ids_json)) {
+        const prereqTopics = await reader.topicsForUnit(prereqId);
+        for (const q of this.stratifiedQuestions(
+          (await reader.questionsForUnit(prereqId)).map(packQuestionToPracticeQuestion),
+          prereqTopics.map((t) => t.topic_code),
+          count,
+        )) {
+          if (!selected.has(q.questionId)) {
+            prereqPool.push(q);
+            selected.add(q.questionId);
+          }
+        }
+      }
+    }
+
+    const mix =
+      params.stage === "fluency" && block.fluencySprintGame
+        ? mixPercentagesFromFractions(block.fluencySprintGame.spiralMix)
+        : null;
+    const plan = composeGameItemPlan(
+      count,
+      { current: currentPool.length, prerequisite: prereqPool.length, review: reviewPool.length },
+      mix,
+    );
+    // The combined pool is assembled in bucket order (current, then
+    // prerequisite, then review) — the plan's question indices are
+    // stable against exactly this concatenation.
+    const combined = [...currentPool, ...prereqPool, ...reviewPool];
+    const questions = plan.items
+      .map((item) => combined[item.questionIndex])
+      .filter((q): q is PracticeQuestion => q !== undefined);
+    const provenanceByQuestionId: Record<string, "current" | "contrastive" | "spaced-review"> = {};
+    for (const item of plan.items) {
+      const question = combined[item.questionIndex];
+      if (question) provenanceByQuestionId[question.questionId] = item.provenance;
+    }
+
+    const sessionId = this.deps.newSessionId(params.studentId);
+    this.sessions.set(sessionId, {
+      kind: "GAME",
+      sessionId,
+      studentId: params.studentId,
+      gradeId: params.gradeId,
+      unitId: params.unitId,
+      topicId,
+      topicCode: params.topicCode,
+      questions,
+      responses: [],
+      motorBaselineSec: this.motorBaseline(params.motorBaselineSec),
+      targetSpeedSec: unit.gate_max_speed_sec,
+      startedAtMs: this.deps.now(),
+      gameTelemetry: {
+        spiralProvenance: "",
+        targetResponseSpeedSec:
+          params.stage === "fluency" && block.fluencySprintGame
+            ? block.fluencySprintGame.targetResponseSpeedSec
+            : 0,
+        archetype: config.archetype,
+        fallback: false,
+      },
+      provenanceByQuestionId,
+      gameStage: params.stage,
+      gameTargetMasteryScore: block.guidedPracticeGame?.targetMasteryScore ?? 80,
+    });
+
+    return {
+      sessionId,
+      unitId: params.unitId,
+      unitTitle: unit.title,
+      topicId,
+      topicCode: params.topicCode,
+      topicName: topicRow.topic_name,
+      stage: params.stage,
+      archetype: config.archetype,
+      gameId: config.gameId,
+      gameTitle: config.title,
+      targetResponseSpeedSec:
+        params.stage === "fluency" && block.fluencySprintGame
+          ? block.fluencySprintGame.targetResponseSpeedSec
+          : 0,
+      targetMasteryScore: block.guidedPracticeGame?.targetMasteryScore ?? 80,
+      targetSpeedSec: unit.gate_max_speed_sec,
+      questions,
+      provenanceByQuestionId,
+    };
+  }
+
+  /**
+   * Closes a game session: groups the spiral-mixed responses BY THEIR
+   * OWN TOPIC and projects each topic with the SAME deriveTopicSession
+   * call the server's GAME replay runs per topic group (parity by
+   * construction — a game's prerequisite/review items credit their own
+   * topics, never the session's current topic). The roll-up carries the
+   * #52 telemetry: accuracy, raw + cognitive speed, speed-vs-target,
+   * and spiral-mix provenance counts.
+   */
+  async completeGameSession(sessionId: string): Promise<GameSessionSummary> {
+    const session = this.requireSession(sessionId);
+    if (session.kind !== "GAME" || !session.topicId) {
+      throw new Error(`Session ${sessionId} is not a game session`);
+    }
+    const nowMs = this.deps.now();
+    const reader = await this.requireReader(session.gradeId);
+    const unit = await this.requireUnit(reader, session.unitId);
+    const policy = await this.requirePolicy(reader, unit.grade_id);
+
+    // Group responses by their question's own topic (first-appearance
+    // order); attribution comes from the session's pack rows — the same
+    // trusted-source rule as completeGateSession.
+    const byTopic = new Map<string, { responses: SessionResponse[]; unitId: string }>();
+    for (const response of session.responses) {
+      const question = session.questions.find((q) => q.questionId === response.questionId);
+      const topicId = question ? question.topicId : session.topicId;
+      const responseUnitId = question ? question.unitId : session.unitId;
+      const group = byTopic.get(topicId) ?? { responses: [], unitId: responseUnitId };
+      group.responses.push(response);
+      byTopic.set(topicId, group);
+    }
+
+    const perTopic: GameSessionSummary["perTopic"] = [];
+    for (const [topicId, group] of byTopic) {
+      const topicCode = topicId.startsWith(`${session.unitId}-`)
+        ? topicId.slice(session.unitId.length + 1)
+        : topicId;
+      const prev = await this.deps.storage.getTopicProgress(session.studentId, topicId);
+      const derivation = deriveTopicSession({
+        studentId: session.studentId,
+        unitId: group.unitId,
+        topicId,
+        topicCode,
+        responses: group.responses,
+        motorBaselineSec: session.motorBaselineSec,
+        targetSpeedSec: session.targetSpeedSec,
+        srPolicy: {
+          gradeGrowthFactor: policy.srGrowthFactor,
+          maxIntervalCapDays: policy.srMaxIntervalDays,
+        },
+        prev,
+        nowMs,
+      });
+      const merged = mergeTopicProgress(prev, derivation.fresh);
+      merged.nextReviewAt = capNextReviewAt(merged.nextReviewAt, merged.lastReviewedAt, policy);
+      await this.deps.storage.upsertTopicProgress(merged);
+      perTopic.push({
+        topicId,
+        topicCode,
+        accuracyPct: derivation.accuracyPct,
+        medianCogSpeedSec: derivation.medianCogSpeedSec,
+        passedTopic: derivation.passedTopic,
+        crowns: derivation.crowns,
+      });
+    }
+
+    // Telemetry roll-up: per-item facts with the engine's GAME audio
+    // rule recomputed (identical to the rows submitResponse recorded).
+    const stage = session.gameStage ?? "guided";
+    const targetMasteryScore = session.gameTargetMasteryScore ?? 80;
+    const targetResponseSpeedSec = session.gameTelemetry?.targetResponseSpeedSec ?? 0;
+    const itemTelemetry = session.responses.map((response) => {
+      const question = session.questions.find((q) => q.questionId === response.questionId);
+      const attempt = deriveAttempt({
+        response,
+        sessionType: session.kind,
+        motorBaselineSec: session.motorBaselineSec,
+        targetSpeedSec: session.targetSpeedSec,
+      });
+      return {
+        isCorrect: response.isCorrect,
+        rawTimeSec: response.rawTimeSec || 3.0,
+        cognitiveTimeSec: attempt.cognitiveTimeSec,
+        provenance:
+          (question && session.provenanceByQuestionId?.[question.questionId]) || "current",
+      };
+    });
+    const rollup = summarizeGameTelemetry(
+      itemTelemetry,
+      stage,
+      targetMasteryScore,
+      targetResponseSpeedSec,
+    );
+
+    this.sessions.delete(sessionId);
+    return {
+      sessionId,
+      stage,
+      archetype: session.gameTelemetry?.archetype ?? "",
+      metGoal: rollup.metGoal,
+      accuracyPct: rollup.accuracyPct,
+      medianCogSpeedSec: rollup.speed.medianCognitiveSec,
+      targetSpeedSec: session.targetSpeedSec,
+      speed: rollup.speed,
+      provenanceCounts: rollup.provenanceCounts,
+      perTopic,
     };
   }
 

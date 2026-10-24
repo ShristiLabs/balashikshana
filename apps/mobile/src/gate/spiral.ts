@@ -8,6 +8,12 @@
  * the engine (PracticeSessionEngine.startGateSession) feeds them pool
  * sizes and consumes the source plan; tests pin every allocation and
  * ordering decision.
+ *
+ * Issue #52 parameterized the allocation: the game framework passes the
+ * per-topic spiralMix from assets.games as DATA (same 70/20/10 across
+ * today's registry, but carried per topic). The boss gate keeps the
+ * default (registry globalMasteryRules), so #51 behavior is unchanged —
+ * ONE allocation algorithm, never a forked copy.
  */
 import { SPIRAL_MIX } from "./rules";
 
@@ -26,13 +32,20 @@ export interface SpiralAvailability {
   review: number;
 }
 
+/** Percent weights for the three spiral buckets (sum should be 100). */
+export interface SpiralMixPercentages {
+  currentUnitPercent: number;
+  prerequisitePercent: number;
+  spacedReviewPercent: number;
+}
+
 const BUCKET_ORDER: readonly SpiralSource[] = ["current", "prerequisite", "review"];
 
-function rawTargets(count: number): SpiralCounts {
+function rawTargets(count: number, mix: SpiralMixPercentages): SpiralCounts {
   return {
-    current: (count * SPIRAL_MIX.currentUnitPercent) / 100,
-    prerequisite: (count * SPIRAL_MIX.prerequisitePercent) / 100,
-    review: (count * SPIRAL_MIX.spacedReviewPercent) / 100,
+    current: (count * mix.currentUnitPercent) / 100,
+    prerequisite: (count * mix.prerequisitePercent) / 100,
+    review: (count * mix.spacedReviewPercent) / 100,
   };
 }
 
@@ -41,7 +54,8 @@ function rawTargets(count: number): SpiralCounts {
  * three sources, clamped to availability (a missing source's share flows
  * back to the current unit), summing EXACTLY to count:
  *
- * 1. floor each 70/20/10 target;
+ * 1. floor each mix target (70/20/10 by default; #52 games pass the
+ *    topic's own assets.games spiralMix as data);
  * 2. hand the remainder to the largest fractional parts, ties broken in
  *    the fixed order current > prerequisite > review;
  * 3. clamp prerequisite/review to what actually exists and give the
@@ -49,9 +63,13 @@ function rawTargets(count: number): SpiralCounts {
  *    pool — the unit's own questions, round-robinned like the server's
  *    stratified builder).
  */
-export function allocateSpiral(count: number, available: SpiralAvailability): SpiralCounts {
+export function allocateSpiral(
+  count: number,
+  available: SpiralAvailability,
+  mix: SpiralMixPercentages = SPIRAL_MIX,
+): SpiralCounts {
   const total = Math.max(0, Math.floor(count));
-  const targets = rawTargets(total);
+  const targets = rawTargets(total, mix);
   const floors: SpiralCounts = {
     current: Math.floor(targets.current),
     prerequisite: Math.floor(targets.prerequisite),

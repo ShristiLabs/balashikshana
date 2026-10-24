@@ -863,3 +863,236 @@ describe("batch caps and schema edges", () => {
     assert.equal(await attemptsInDb(kid.studentId), 0);
   });
 });
+
+// --- GAME sessions (issue #52: the game framework's telemetry rides -----------
+// --- the existing pipeline; the replay derives per-topic progress) ------------
+
+function gameAttemptWire(n, sessionId, topicId, unitId, correct) {
+  clock += 60_000;
+  return {
+    seq: n,
+    unitId,
+    topicId,
+    questionId: `${topicId}-Q${n}`,
+    sessionType: "GAME",
+    sessionId,
+    chosenAnswer: "1",
+    isCorrect: correct,
+    rawTimeSec: 2,
+    audioDurationSec: 0,
+    misconceptionTags: [],
+    answeredAtMs: clock,
+    motorBaselineSec: 0.42
+  };
+}
+
+describe("GAME sessions (#52): accepted, per-topic derivation, idempotent", () => {
+  test("a spiral-mixed GAME session credits EVERY topic it served, exactly once", async () => {
+    const kid = await consentedChild();
+    // 70/20/10-shaped session: 6 items on the current topic, 2 on a
+    // prerequisite-unit topic (the contrastive slice) — one sessionId.
+    const session = "sess-game-1";
+    const batch = [
+      ...Array.from({ length: 6 }, (_, i) => gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", true)),
+      ...Array.from({ length: 2 }, (_, i) => gameAttemptWire(7 + i, session, "K-M1-D", "K-M1", true))
+    ];
+    const res = await upload(kid.deviceToken, batch);
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.equal(res.json.stats.inserted, 8);
+    assert.equal(res.json.stats.sessionsReplayed, 1);
+
+    const topics = res.json.progress.topics;
+    const current = topics.find((t) => t.topicId === "K-M2-G");
+    const prereq = topics.find((t) => t.topicId === "K-M1-D");
+    assert.ok(current, "current topic projected from its own 6 items");
+    assert.ok(prereq, "prerequisite topic projected from its own 2 items");
+    // Each topic derived from ITS OWN items: 6/6 and 2/2, 100% both.
+    assert.equal(current.attemptsCount, 1);
+    assert.equal(prereq.attemptsCount, 1);
+    assert.equal(current.bestAccuracyPct, 100);
+    assert.equal(prereq.bestAccuracyPct, 100);
+    // Unit attribution follows each topic's owning unit.
+    assert.equal(current.unitId, "K-M2");
+    assert.equal(prereq.unitId, "K-M1");
+    // 2/2 correct on the prereq topic passes the 80% bar (not a
+    // sample-size error: deriveTopicSession treats the group as the
+    // session for that topic, same as any small topic session).
+    assert.equal(prereq.completed, 1);
+    // Both rows persist with session_type GAME.
+    const rows = await queryDb(
+      "SELECT session_type, COUNT(*)::int AS n FROM student_question_attempts WHERE student_id = $1 AND session_id = $2 GROUP BY session_type",
+      [kid.studentId, session]
+    );
+    assert.deepEqual(rows, [{ session_type: "GAME", n: 8 }]);
+  });
+
+  test("idempotent GAME replay: same batch twice = one count per topic, no drift", async () => {
+    const kid = await consentedChild();
+    const session = "sess-game-2";
+    const batch = [
+      ...Array.from({ length: 5 }, (_, i) => gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", true)),
+      gameAttemptWire(6, session, "K-M2-G", "K-M2", false),
+      gameAttemptWire(7, session, "K-M1-D", "K-M1", true)
+    ];
+    const first = await upload(kid.deviceToken, batch);
+    assert.equal(first.status, 200, JSON.stringify(first.json));
+    const second = await upload(kid.deviceToken, batch);
+    assert.equal(second.status, 200);
+    assert.equal(second.json.stats.inserted, 0);
+    assert.equal(second.json.stats.duplicates, 7);
+    assert.deepEqual(second.json.progress, first.json.progress);
+    for (const topicId of ["K-M2-G", "K-M1-D"]) {
+      const topic = second.json.progress.topics.find((t) => t.topicId === topicId);
+      assert.ok(topic, `${topicId} projected`);
+      assert.equal(topic.attemptsCount, 1, `${topicId} counted exactly once`);
+    }
+  });
+
+  test("GAME pass transition rewards coins once per topic; replay never re-rewards", async () => {
+    const kid = await consentedChild();
+    const coinsBefore = async () => {
+      const rows = await queryDb("SELECT star_coins FROM students WHERE student_id = $1", [
+        kid.studentId
+      ]);
+      return rows[0].star_coins;
+    };
+    const before = await coinsBefore();
+    const session = "sess-game-3";
+    const batch = Array.from({ length: 6 }, (_, i) =>
+      gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", true)
+    );
+    const res = await upload(kid.deviceToken, batch);
+    assert.equal(res.status, 200);
+    // 6/6 correct -> crowns by speed vs the unit target; coins = 15 + crowns*5.
+    const topic = res.json.progress.topics.find((t) => t.topicId === "K-M2-G");
+    assert.ok(topic);
+    const after = await coinsBefore();
+    assert.equal(after - before, 15 + topic.crowns * 5);
+    // Replay: zero new coins.
+    await upload(kid.deviceToken, batch);
+    assert.equal(await coinsBefore(), after);
+  });
+
+  test("a GAME session with a failing topic group does not complete that topic", async () => {
+    const kid = await consentedChild();
+    const session = "sess-game-4";
+    const batch = [
+      ...Array.from({ length: 2 }, (_, i) => gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", true)),
+      ...Array.from({ length: 4 }, (_, i) => gameAttemptWire(3 + i, session, "K-M2-G", "K-M2", false)),
+      gameAttemptWire(7, session, "K-M1-D", "K-M1", true)
+    ];
+    const res = await upload(kid.deviceToken, batch);
+    assert.equal(res.status, 200);
+    const current = res.json.progress.topics.find((t) => t.topicId === "K-M2-G");
+    const prereq = res.json.progress.topics.find((t) => t.topicId === "K-M1-D");
+    // 2/6 = 33.3% on the current topic: below 80, not completed; the
+    // prereq group's 1/1 must be unaffected by the current topic's miss.
+    assert.equal(current.completed, 0);
+    assert.equal(current.bestAccuracyPct, 33.3);
+    assert.equal(prereq.completed, 1);
+    assert.equal(prereq.bestAccuracyPct, 100);
+  });
+
+  test("per-topic engine math: GAME group values equal deriveTopicSession on that group", async () => {
+    const kid = await consentedChild();
+    const session = "sess-game-5";
+    const rawTimes = [2, 3, 4, 2, 2];
+    const batch = rawTimes.map((rawTimeSec, i) =>
+      gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", i !== 2)
+    );
+    const res = await upload(kid.deviceToken, batch);
+    assert.equal(res.status, 200);
+    const topic = res.json.progress.topics.find((t) => t.topicId === "K-M2-G");
+    assert.ok(topic);
+    const cog = rawTimes.map((t) => computeCognitiveTimeSec(t, 0.42, 0));
+    const med = Number(median(cog).toFixed(2));
+    assert.equal(topic.bestAccuracyPct, 80);
+    assert.equal(topic.bestMedianSpeedSec, med);
+    assert.equal(topic.completed, 1); // exactly at the 80% boundary
+  });
+
+  // --- tester additions (#52 brief): 3-topic stream + key-path guard ------
+  test("a THREE-topic spiral stream credits every owning topic with audio-aware math", async () => {
+    const kid = await consentedChild();
+    // 70/20/10-shaped session over three topics: current + a
+    // prerequisite-unit item (contrastive slice) + a second foreign
+    // topic (the spaced-review slice) — one sessionId.
+    const session = "sess-game-6";
+    const batch = [
+      ...Array.from({ length: 6 }, (_, i) => {
+        const wire = gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", true);
+        // GAME attempts are audio-aware server-side too (isTopic ===
+        // TOPIC_PRACTICE only): a narration must bend the median away
+        // from the no-audio value (raw 4.2: 2.28 vs 3.78, clear of the
+        // engine's 0.5s floor).
+        wire.rawTimeSec = 4.2;
+        wire.audioDurationSec = 1.5;
+        return wire;
+      }),
+      gameAttemptWire(7, session, "K-M1-D", "K-M1", true),
+      gameAttemptWire(8, session, "K-M1-E", "K-M1", true)
+    ];
+    const res = await upload(kid.deviceToken, batch);
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    const topics = res.json.progress.topics;
+    for (const topicId of ["K-M2-G", "K-M1-D", "K-M1-E"]) {
+      const topic = topics.find((t) => t.topicId === topicId);
+      assert.ok(topic, `${topicId} projected from its own items`);
+      assert.equal(topic.unitId, topicId.slice(0, 4), `${topicId} attributed to its owning unit`);
+      assert.equal(topic.attemptsCount, 1, `${topicId} counted exactly once`);
+    }
+    // The topic-projection median is the audio-0 TOPIC math (the same
+    // deriveTopicSession both sides run — parity by construction):
+    // raw 4.2 - motor .42 = 3.78 even though the rows carry audio.
+    const current = topics.find((t) => t.topicId === "K-M2-G");
+    assert.equal(current.bestAccuracyPct, 100);
+    assert.equal(current.bestMedianSpeedSec, 3.78);
+    // The audio-aware GAME rule lives at the ROW level (the server's
+    // isTopic === TOPIC_PRACTICE branch): stored cognitive_time_sec =
+    // raw 4.2 - motor .42 - audio 1.5 = 2.28 for the narrated items.
+    const narrated = await queryDb(
+      "SELECT cognitive_time_sec FROM student_question_attempts WHERE student_id = $1 AND session_id = $2 AND topic_id = 'K-M2-G'",
+      [kid.studentId, session]
+    );
+    assert.equal(narrated.length, 6);
+    for (const row of narrated) assert.equal(row.cognitive_time_sec, 2.28);
+    // The foreign groups (audio 0) derive independently at both levels.
+    const prereq = topics.find((t) => t.topicId === "K-M1-D");
+    assert.equal(prereq.bestMedianSpeedSec, computeCognitiveTimeSec(2, 0.42, 0));
+  });
+
+  test("a GAME session never touches the key/gold path (pre-#52 else-branch tripwire)", async () => {
+    const kid = await consentedChild();
+    const session = "sess-game-7";
+    // 5/5 correct: under the OLD replay branching a GAME session fell
+    // into the gold-verification else-branch and would have upgraded
+    // the unit to GOLD_KEY (>= 4-of-5). The explicit GAME branch must
+    // derive topic progress ONLY — the session's unit gets NO key row.
+    // (The student's pre-seeded prerequisite-grade unlock rows — PK-M7,
+    // PK-E7, GOLD by creation — must be the ONLY keyed units.)
+    const batch = Array.from({ length: 5 }, (_, i) =>
+      gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", true)
+    );
+    const res = await upload(kid.deviceToken, batch);
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    const unitRows = await queryDb(
+      "SELECT unit_id, key_state FROM student_unit_progress WHERE student_id = $1 ORDER BY unit_id ASC",
+      [kid.studentId]
+    );
+    const keyed = unitRows.filter((r) => r.key_state !== null);
+    assert.deepEqual(
+      keyed.map((r) => r.unit_id),
+      ["PK-E7", "PK-M7"],
+      `only the creation-time prerequisite unlocks may hold keys; got ${JSON.stringify(unitRows)}`
+    );
+    assert.ok(
+      !unitRows.some((r) => r.unit_id === "K-M2"),
+      "a GAME session must not create or upgrade the session unit's key row"
+    );
+    // And the topic projection DID happen (the session was replayed as
+    // per-topic, not silently dropped).
+    const topic = res.json.progress.topics.find((t) => t.topicId === "K-M2-G");
+    assert.ok(topic, "topic progress projected");
+    assert.equal(topic.completed, 1);
+  });
+});
