@@ -15,6 +15,7 @@
  * In-memory session state lives only between start and complete.
  */
 import { evaluateMasteryGateAttempt, generateTopicPracticeSet } from "@balashikshana/core-engine";
+import { allocateSpiral, interleaveSpiral, type SpiralSource } from "../gate/spiral";
 import { AttemptRecorder } from "./attemptRecorder";
 import { TWO_KEY_RULES, goldEligibleAtMs } from "./goldKey";
 import {
@@ -46,6 +47,16 @@ import type {
 
 const DEFAULT_MOTOR_BASELINE_SEC = 0.42;
 const DEFAULT_TOPIC_QUESTION_COUNT = 8;
+
+/** Prerequisite unit ids off the pack row's JSON column ([] on parse failure). */
+function parsePrerequisiteUnitIds(json: string): string[] {
+  try {
+    const parsed = JSON.parse(json || "[]") as unknown;
+    return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 interface SessionState {
   kind: SessionType;
@@ -90,6 +101,10 @@ export interface TopicSessionSummary {
 
 export interface GateSessionStart {
   sessionId: string;
+  /** GATE (boss gate) or GOLD_VERIFICATION (5-item check). */
+  sessionType: SessionType;
+  /** Engine clock at session open — the Gold check's 60 s budget anchor. */
+  startedAtMs: number;
   unit: {
     unitId: string;
     title: string;
@@ -114,6 +129,25 @@ export interface GateSessionSummary {
   requiredAccuracyPct: number;
   medianCogSpeedSec: number;
   targetSpeedSec: number;
+  /** P80 cognitive speed vs the 1.3x-tail ceiling (condition 4 metrics). */
+  p80CogSpeedSec: number;
+  maxTailAllowedSec: number;
+  /** Rapid-guess violations the engine counted (condition 5 metrics). */
+  rapidGuessViolations: number;
+  /** Final challenge-zone streak passed (condition 5 metrics). */
+  finalStreakPassed: boolean;
+  challengeStreakRequired: number;
+  /** Topics below the 75% floor (engine topic codes / namespaced ids). */
+  failedTopics: string[];
+  /** Per-topic breakdown for the results screen (engine shape). */
+  topicBreakdown: {
+    code: string;
+    name: string;
+    total: number;
+    correct: number;
+    accuracyPct: number;
+    medianSpeedSec: number;
+  }[];
   remediationMode: string;
   remediationPrescription: string;
   conditions: Record<string, boolean>;
@@ -327,9 +361,22 @@ export class PracticeSessionEngine {
   // ------------------------------------------------------------------
 
   /**
-   * Opens a boss-gate session. Question selection mirrors the server's
-   * /api/curriculum/unit stratified builder: unit questions grouped by
-   * topic (topic sequence order), round-robin across topics.
+   * Opens a boss-gate session (issue #51 spiral composition).
+   *
+   * The session blends three sources per the registry's
+   * interleavedSpiralMix (AGENTS.md binding on Stage 4 gates):
+   * 70% current unit (the server's stratified round-robin builder,
+   * unchanged — /api/curriculum/unit parity for this share), 20%
+   * contrastive prerequisite units (each prerequisite unit's questions,
+   * same stratified builder, prerequisite order), 10% due spaced review
+   * (#47 review queue, most-forgotten first, one question per due
+   * topic). Missing sources degrade deterministically: their share
+   * flows back to the current unit, so a pack with no prerequisites and
+   * nothing due composes EXACTLY the pre-#51 round-robin selection.
+   *
+   * spiral: false (the Gold verification path) keeps the pure
+   * current-unit retention probe — the 5-item check tests THIS unit's
+   * consolidation, not interference.
    */
   async startGateSession(params: {
     studentId: string;
@@ -337,32 +384,78 @@ export class PracticeSessionEngine {
     unitId: string;
     count?: number;
     motorBaselineSec?: number;
+    /** Blend 70/20/10 (default) or pure current-unit selection. */
+    spiral?: boolean;
   }): Promise<GateSessionStart> {
     const reader = await this.requireReader(params.gradeId);
     const unit = await this.requireUnit(reader, params.unitId);
     const topicRows = await reader.topicsForUnit(params.unitId);
     const count = params.count ?? unit.gate_question_count ?? 12;
 
-    const allQuestions = (await reader.questionsForUnit(params.unitId)).map(
-      packQuestionToPracticeQuestion,
+    const currentPool = this.stratifiedQuestions(
+      (await reader.questionsForUnit(params.unitId)).map(packQuestionToPracticeQuestion),
+      topicRows.map((t) => t.topic_code),
+      count,
     );
-    const byTopic = new Map<string, PracticeQuestion[]>();
-    for (const q of allQuestions) {
-      const bucket = byTopic.get(q.topicCode) ?? [];
-      bucket.push(q);
-      byTopic.set(q.topicCode, bucket);
+
+    const prereqPool: PracticeQuestion[] = [];
+    const reviewPool: PracticeQuestion[] = [];
+    if (params.spiral !== false) {
+      const selected = new Set(currentPool.map((q) => q.questionId));
+      // Due spaced review claims its questions FIRST (most-forgotten
+      // order): a topic that is both a prerequisite and due would
+      // otherwise have its only picked question consumed by the
+      // prerequisite share, starving the 10% review slice.
+      const policy = await this.requirePolicy(reader, unit.grade_id);
+      const progressRows = await this.deps.storage.allTopicProgress(params.studentId);
+      const queue = buildReviewQueue({ nowMs: this.deps.now(), policy, rows: progressRows });
+      for (const item of queue) {
+        if (reviewPool.length >= count) break;
+        if (item.unitId === params.unitId) continue;
+        const rows = await reader.questionsForTopic(item.topicId, 1);
+        const row = rows[0];
+        if (!row) continue;
+        const q = packQuestionToPracticeQuestion(row);
+        if (selected.has(q.questionId)) continue;
+        reviewPool.push(q);
+        selected.add(q.questionId);
+      }
+      for (const prereqId of parsePrerequisiteUnitIds(unit.prerequisite_unit_ids_json)) {
+        const prereqTopics = await reader.topicsForUnit(prereqId);
+        for (const q of this.stratifiedQuestions(
+          (await reader.questionsForUnit(prereqId)).map(packQuestionToPracticeQuestion),
+          prereqTopics.map((t) => t.topic_code),
+          count,
+        )) {
+          if (!selected.has(q.questionId)) {
+            prereqPool.push(q);
+            selected.add(q.questionId);
+          }
+        }
+      }
     }
-    const topicCodes = topicRows.map((t) => t.topic_code);
-    const selected: PracticeQuestion[] = [];
-    for (let i = 0; i < count; i += 1) {
-      const tCode = topicCodes[i % topicCodes.length];
-      if (tCode === undefined) break;
-      const pool = byTopic.get(tCode) ?? allQuestions;
-      const picked = pool[Math.floor(i / topicCodes.length) % pool.length];
-      if (picked) selected.push(picked);
+
+    const allocation = allocateSpiral(count, {
+      prerequisite: prereqPool.length,
+      review: reviewPool.length,
+    });
+    const buckets: Record<SpiralSource, PracticeQuestion[]> = {
+      current: currentPool.slice(0, allocation.current),
+      prerequisite: prereqPool.slice(0, allocation.prerequisite),
+      review: reviewPool.slice(0, allocation.review),
+    };
+    const questions: PracticeQuestion[] = [];
+    const cursors: Record<SpiralSource, number> = { current: 0, prerequisite: 0, review: 0 };
+    for (const source of interleaveSpiral(allocation)) {
+      const question = buckets[source][cursors[source]];
+      if (question) {
+        questions.push(question);
+        cursors[source] += 1;
+      }
     }
 
     const sessionId = this.deps.newSessionId(params.studentId);
+    const startedAtMs = this.deps.now();
     this.sessions.set(sessionId, {
       kind: "GATE",
       sessionId,
@@ -371,15 +464,17 @@ export class PracticeSessionEngine {
       unitId: params.unitId,
       topicId: null,
       topicCode: null,
-      questions: selected,
+      questions,
       responses: [],
       motorBaselineSec: this.motorBaseline(params.motorBaselineSec),
       targetSpeedSec: unit.gate_max_speed_sec,
-      startedAtMs: this.deps.now(),
+      startedAtMs,
     });
 
     return {
       sessionId,
+      sessionType: "GATE",
+      startedAtMs,
       unit: {
         unitId: unit.unit_id,
         title: unit.title,
@@ -395,7 +490,7 @@ export class PracticeSessionEngine {
           name: t.topic_name,
         })),
       },
-      questions: selected,
+      questions,
       targetSpeedSec: unit.gate_max_speed_sec,
     };
   }
@@ -421,14 +516,26 @@ export class PracticeSessionEngine {
       // Topic attribution comes from the PACK rows the session's
       // questions were built from — the trusted source — with the
       // caller-supplied code only as a fallback for responses whose
-      // question left the session set.
-      responses: session.responses.map((r) => ({
-        topicCode:
-          session.questions.find((q) => q.questionId === r.questionId)?.topicCode ?? r.topicCode,
-        isCorrect: r.isCorrect,
-        rawTimeSec: r.rawTimeSec,
-        audioDurationSec: r.audioDurationSec || 0,
-      })),
+      // question left the session set. #51 spiral sessions mix in
+      // prerequisite/review questions from OTHER units; their short
+      // topic codes would collide with the gate unit's own codes, so
+      // foreign attribution is namespaced to the FULL topic id — the
+      // exact rule the #48 server replay applies
+      // (services/api/sync.mjs: same-unit -> short code, foreign ->
+      // full topicId). The gate-parity test pins both sides.
+      responses: session.responses.map((r) => {
+        const question = session.questions.find((q) => q.questionId === r.questionId);
+        return {
+          topicCode: question
+            ? question.topicId.startsWith(`${session.unitId}-`)
+              ? question.topicCode
+              : question.topicId
+            : r.topicCode,
+          isCorrect: r.isCorrect,
+          rawTimeSec: r.rawTimeSec,
+          audioDurationSec: r.audioDurationSec || 0,
+        };
+      }),
       motorBaselineSec: session.motorBaselineSec,
     });
 
@@ -458,6 +565,13 @@ export class PracticeSessionEngine {
       requiredAccuracyPct: verdict.requiredAccuracyPct ?? 0,
       medianCogSpeedSec: verdict.medianCogSpeedSec ?? 0,
       targetSpeedSec: unit.gate_max_speed_sec,
+      p80CogSpeedSec: verdict.p80CogSpeedSec ?? 0,
+      maxTailAllowedSec: verdict.maxTailAllowedSec ?? 0,
+      rapidGuessViolations: verdict.rapidGuessViolations ?? 0,
+      finalStreakPassed: verdict.finalStreakPassed ?? false,
+      challengeStreakRequired: unit.gate_streak_req,
+      failedTopics: verdict.failedTopics ?? [],
+      topicBreakdown: verdict.topicBreakdown ?? [],
       // The engine's empty-responses early return omits these; coerce at
       // the boundary (typed-seam advisory, #47 review finding 2).
       remediationMode: verdict.remediationMode ?? "",
@@ -488,7 +602,10 @@ export class PracticeSessionEngine {
 
   /**
    * Opens the 5-item Gold verification session (only meaningful once
-   * goldStatus().eligible; completion re-checks the window).
+   * goldStatus().eligible; completion re-checks the window). The check
+   * is a pure current-unit retention probe — spiral composition stays
+   * OFF (issue #51: the 5-item/60-second/>=4-of-5 check tests THIS
+   * unit's sleep consolidation, not interference).
    */
   async startGoldVerification(params: {
     studentId: string;
@@ -499,10 +616,11 @@ export class PracticeSessionEngine {
     const start = await this.startGateSession({
       ...params,
       count: TWO_KEY_RULES.day2GoldKeyVerificationItems,
+      spiral: false,
     });
     const session = this.requireSession(start.sessionId);
     session.kind = "GOLD_VERIFICATION";
-    return start;
+    return { ...start, sessionType: "GOLD_VERIFICATION" };
   }
 
   async completeGoldVerification(sessionId: string): Promise<GoldVerificationSummary> {
@@ -593,6 +711,35 @@ export class PracticeSessionEngine {
   // ------------------------------------------------------------------
   // Internals
   // ------------------------------------------------------------------
+
+  /**
+   * The server's stratified builder (/api/curriculum/unit and the #47
+   * pre-spiral gate composition): questions grouped by topic, one per
+   * topic round-robin in topic-sequence order, wrapping within a
+   * topic's pool. Prefix-stable, so slicing the result composes
+   * identically to running the builder for the smaller count.
+   */
+  private stratifiedQuestions(
+    allQuestions: PracticeQuestion[],
+    topicCodes: string[],
+    count: number,
+  ): PracticeQuestion[] {
+    const byTopic = new Map<string, PracticeQuestion[]>();
+    for (const q of allQuestions) {
+      const bucket = byTopic.get(q.topicCode) ?? [];
+      bucket.push(q);
+      byTopic.set(q.topicCode, bucket);
+    }
+    const selected: PracticeQuestion[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const tCode = topicCodes[i % topicCodes.length];
+      if (tCode === undefined) break;
+      const pool = byTopic.get(tCode) ?? allQuestions;
+      const picked = pool[Math.floor(i / topicCodes.length) % pool.length];
+      if (picked) selected.push(picked);
+    }
+    return selected;
+  }
 
   private motorBaseline(provided?: number): number {
     return provided || this.deps.motorBaselineSec || DEFAULT_MOTOR_BASELINE_SEC;

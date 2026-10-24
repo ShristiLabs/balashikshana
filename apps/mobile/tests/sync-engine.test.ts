@@ -882,6 +882,94 @@ describe("D8 confirm/rollback via snapshot adoption", () => {
   });
 });
 
+describe("airplane-mode E2E (issue #51 M3 verification gate)", () => {
+  it("full gate offline: Silver -> 14 h -> Gold check offline -> online sync uploads both sessions and confirms the Gold key", async () => {
+    const env = createPracticeEnv();
+    const transport = new FakeTransport();
+    const onlineRef = { value: false };
+    try {
+      const deps = makeDeps(env, transport, { connectivity: offlineConnectivity(onlineRef) });
+      const engine = new SyncEngine(deps);
+
+      // OFFLINE: a sync attempt while airplane-mode does nothing.
+      const offlineIdle = await engine.syncOnce("s1");
+      expect(offlineIdle.outcome).toBe("offline");
+      expect(transport.uploads).toHaveLength(0);
+
+      // OFFLINE: day-1 boss gate, all-correct -> provisional Silver.
+      await runGateSession(env);
+      const afterGate = await env.storage.getUnitProgress("s1", "K-M2");
+      expect(afterGate?.keyState).toBe("SILVER_KEY");
+      expect(afterGate?.provisional).toBe(true);
+      const silverAt = afterGate!.silverAwardedAt;
+
+      // OFFLINE: past the 14-hour window, 4-of-5 verification ->
+      // provisional local Gold.
+      env.clock.advance(14 * MS_HOUR + 60_000);
+      const practice = new PracticeSessionEngine(env.deps);
+      const verify = await practice.startGoldVerification({
+        studentId: "s1",
+        gradeId: "kindergarten",
+        unitId: "K-M2",
+      });
+      for (const [i, q] of verify.questions.entries()) {
+        await practice.submitResponse(verify.sessionId, {
+          questionId: q.questionId,
+          topicCode: q.topicCode,
+          isCorrect: i < 4,
+          rawTimeSec: 2.0,
+          chosenAnswer: q.correctAnswer,
+        });
+      }
+      const verdict = await practice.completeGoldVerification(verify.sessionId);
+      expect(verdict.upgraded).toBe(true);
+      expect((await env.storage.getUnitProgress("s1", "K-M2"))?.provisional).toBe(true);
+
+      // ONLINE: the server recomputed the same stream and CONFIRMS the
+      // Gold key (D8: server-authoritative, adopting its timestamps).
+      const goldAt = env.clock.nowMs;
+      transport.snapshot = {
+        units: [
+          {
+            unitId: "K-M2",
+            status: "MASTERED",
+            keyState: "GOLD_KEY",
+            bestAccuracyPct: 100,
+            bestMedianSpeedSec: 1.58,
+            attemptsCount: 2,
+            stabilityDays: 6.4,
+            lastReviewedAt: new Date(goldAt).toISOString(),
+            cpaStage: "PURE_ABSTRACT_SYMBOLIC",
+            silverAwardedAt: new Date(silverAt).toISOString(),
+            goldVerifiedAt: new Date(goldAt).toISOString(),
+          },
+        ],
+        topics: [],
+      };
+      onlineRef.value = true;
+      const result = await engine.syncOnce("s1");
+      expect(result.outcome).toBe("synced");
+
+      // Both whole sessions traveled the wire under their own types.
+      const wire = transport.wireLog.flat();
+      expect(wire).toHaveLength(11);
+      expect(wire.filter((w) => w.sessionType === "GATE")).toHaveLength(6);
+      expect(wire.filter((w) => w.sessionType === "GOLD_VERIFICATION")).toHaveLength(5);
+      expect(new Set(wire.map((w) => w.sessionId)).size).toBe(2);
+
+      // Convergence: nothing unsynced, key confirmed, provisional clear.
+      expect(await env.storage.unsyncedAttemptCount("s1")).toBe(0);
+      const unit = await env.storage.getUnitProgress("s1", "K-M2");
+      expect(unit?.keyState).toBe("GOLD_KEY");
+      expect(unit?.provisional).toBe(false);
+      expect(unit?.silverAwardedAt).toBe(silverAt);
+      expect(unit?.goldVerifiedAt).toBe(goldAt);
+    } finally {
+      env.dispose();
+    }
+  });
+});
+
 describe("content-version handshake", () => {
   it("signals outdated packs through the callback and the result", async () => {
     const env = createPracticeEnv();

@@ -24,6 +24,23 @@ implementation (mobile src/journey) against the harness's
 | Guidebook modal | Per-unit guidebook modal | Not ported (study materials ride the pack; #50/#51 surfaces consume them) |
 | A11y | Web-only basics | Spoken labels per node, >=48pt targets, reduced-motion, highContrast theme |
 
+## Boss gate flow (#51 update)
+
+| Behavior | Dev harness (D1) | Native app (#51) |
+|---|---|---|
+| Session composition | `/api/curriculum/unit` stratified round-robin, current unit only | 70/20/10 interleaved spiral mix (AGENTS.md Stage-4 rule): current unit + prerequisite contrast + due spaced review, deterministic |
+| Evaluation | `POST /api/gate/evaluate` (network-required) | Same `evaluateMasteryGateAttempt` engine call on-device; identical verdicts for identical attempts (D3, test-pinned incl. foreign-topic attribution) |
+| Results | Simple pass/fail + remediation text | All five conditions with metrics and thresholds, per-topic 75% floor table, remediation routing into focused practice |
+| Two-key flow | Day-1 Silver via the server's #48 machine; no Gold verification UI (the check exists only in the native runner and the sync replay) | Silver on pass (provisional); 14 h countdown; 60 s / 5-item / >= 4 Gold check; forward-only keys, #48-server-reconciled |
+| Ceremony | None | Silver/Gold key ceremony (fanfare + narration + haptics), reduced-motion instant reveal |
+
+The composition difference is INTENTIONAL, not debt: AGENTS.md binds
+Stage 4 gates to the 70/20/10 spiral mix, and the native runner
+implements it; the harness's round-robin builder remains the reference
+for the server's ONLINE question-serving path
+(`/api/curriculum/unit`), which the native app does not use (it
+evaluates locally and syncs attempts per #48).
+
 ## What this means for D1 retirement
 
 The native screen now covers the harness's core journey behaviors
@@ -31,11 +48,12 @@ The native screen now covers the harness's core journey behaviors
 with STRICTLY better data guarantees (signed packs, offline-first,
 server-reconciled keys). Since #50 the practice runner covers
 topic-level flow natively (unit node -> topic picker with per-topic
-crowns -> full session), so the harness retains two capabilities the
-native app does not yet have: the per-unit guidebook modal, and the
-gamification crowns ledger (#55). D1 can be retired after #51 lands
-the gate surface; until then the harness remains the only place to
-demo the boss-gate flow end to end.
+crowns -> full session), and #51 lands the boss gate end to end
+(spiral session, five-condition results, key ceremony, Gold
+verification check — all offline with sync convergence). The harness
+retains two capabilities the native app does not yet have: the
+per-unit guidebook modal, and the gamification crowns ledger (#55).
 
-Recommendation: revisit D1 retirement when #51 merges. No harness
-code changed in #49 or #50.
+Recommendation: the D1 retirement preconditions named in #49/#50 are
+now met; the decision itself belongs to the user (it gates the web
+fallback story for D1). No harness code changed in #49, #50, or #51.
