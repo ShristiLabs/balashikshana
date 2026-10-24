@@ -106,7 +106,29 @@ npm test              # both workspaces in sequence
 ```
 - The API suites (`services/api/test/`) boot the real server as a child process against a throwaway PostgreSQL database created per suite (dev data is never touched). The cold start applies all migrations and reseeds the 6,140 practice questions, so `services/api/vitest.config.mjs` raises the test/hook timeouts (120s/180s) accordingly.
 - PostgreSQL must be reachable at `DATABASE_URL` (the compose service from section 1 is sufficient). The core-engine specs (`packages/core-engine/test/`) run fully standalone.
-- CI (`.github/workflows/ci.yml`) runs the same pipeline on every push and pull request: curriculum validator -> core-engine verifier (`verify-engine.mjs`) -> engine vitest suite -> API vitest suite against a `postgres:16` service container -> live smoke test -> OpenAPI breaking-change gate (`tufin/oasdiff` pinned to `v1.34.1`). Superseded runs on the same ref are cancelled automatically.
+- The mobile design-system specs (`apps/mobile/tests/`) are pure-module vitest suites (design tokens, contrast/touch-target invariants, reduced-motion contract, route-tree structure) — no simulator required: `npm test --workspaces=false --prefix apps/mobile`
+- CI (`.github/workflows/ci.yml`) runs the same pipeline on every push and pull request: curriculum validator -> core-engine verifier (`verify-engine.mjs`) -> engine vitest suite -> API vitest suite against a `postgres:16` service container -> mobile app-shell quality gate (lint + format-check + typecheck + design-system tests) -> live smoke test -> OpenAPI breaking-change gate (`tufin/oasdiff` pinned to `v1.34.1`). Superseded runs on the same ref are cancelled automatically.
+
+### 6. Native App Shell (Expo, `apps/mobile`)
+The product client is the Expo React Native app (roadmap D1, issue #43) on **Expo SDK 58 / React Native 0.88 / React 19** — verified by a clean `expo-doctor` run and per-platform bundle exports.
+
+```bash
+cd apps/mobile
+npm ci --workspaces=false          # per-workspace install (the repo convention; uses apps/mobile/package-lock.json)
+npm run ios                        # Expo dev server for an iOS simulator/device
+npm run android                    # Expo dev server for an Android emulator/device
+npm run web                        # DEV HARNESS ONLY: serves the static web client on :4200 (server.mjs)
+npm run lint && npm run format:check && npm run typecheck && npm test
+npx expo-doctor                    # SDK health check (18 checks)
+npx expo export --platform ios --platform android   # prove the bundles build
+```
+
+- **Design system:** `src/design/tokens.ts` is the single source for color, spacing, radius, and the kid-scale type ramp (body >= 18pt). Screens consume semantic theme tokens only — never hardcoded colors. Three themes ship: `light`, `dark` (follows the OS setting), and `highContrast` (the WCAG escape hatch; every interactive label >= 4.5:1). Text-grade `statusInk` tokens keep small status text readable in all themes; the vitest suite enforces the contrast and >= 48pt touch-target invariants (`tests/tokens.test.ts`).
+- **Primitives:** `Button`, `PressableCard`, `ProgressBar`, `Badge`, `Sheet` (`src/design/primitives/`) — tactile 3D treatment carried over from the validated web harness, all touch controls >= 48pt.
+- **Reduced motion:** a global `MotionProvider` reads the OS accessibility setting; every animated primitive degrades to zero-duration/zero-offset when reduce-motion is on. No animation in the shell is load-bearing.
+- **Navigation:** an `expo-router` skeleton — launcher plus placeholder routes for `onboarding`, `journey`, `practice`, `gate`, and `parent` (the parental-gate seam for issue #44 is marked in `app/parent/index.tsx`). Every screen offers a Home action; no dead ends.
+- **Tooling:** ESLint (flat config, `eslint-config-expo`) + Prettier + `tsc --noEmit` (strict) + vitest, all wired into the CI gate above.
+- **Repo-level notes:** the root `package-lock.json` is advisory only — it exists so workspace-aware tooling (`expo-doctor`) finds a lockfile at the monorepo root; regenerate it with `npm install --package-lock-only` after changing any workspace manifest. CI installs per-workspace and is unaffected. `apps/mobile/.npmrc` sets `legacy-peer-deps` because the Expo SDK 58 peer tree conflicts with npm's strict resolution under per-workspace installs; the committed lockfile records the resolved set. The static web client (`apps/mobile/public/index.html`) remains untouched and served as the dev harness + web fallback until native parity (D1).
 
 ---
 
@@ -119,7 +141,7 @@ balashikshana/
 ├── startup.sh / stop.sh                      # One-command startup and shutdown scripts
 ├── package.json                              # Monorepo workspaces configuration
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Mathematics Curriculum Guide
-├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG validation, engine verifier + vitest suites (postgres:16 service), live smoke & OpenAPI breaking-change gate
+├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG validation, engine verifier + vitest suites (postgres:16 service), mobile app-shell quality gate, live smoke & OpenAPI breaking-change gate
 ├── docker/
 │   ├── docker-compose.yml                    # Postgres, Redis, API & Web container orchestration
 │   ├── Dockerfile.api                        # Backend Sync & Mastery API container
@@ -131,7 +153,7 @@ balashikshana/
 │       ├── migrations/                       # node-pg-migrate migrations (served datastore, PostgreSQL)
 │       └── sqlite/                           # On-device SQLite schema reference (offline store, roadmap D2)
 ├── apps/
-│   └── mobile/                               # Cross-Platform Expo/React Native + Web Interactive Learning App
+│   └── mobile/                               # Expo SDK 58 app shell (design system, theming, expo-router skeleton) + static web dev harness (public/)
 ├── docs/
 │   ├── us-curriculum-registry.json           # Canonical JSON DAG of all 130 units, 614 topics & 9-asset bundles
 │   ├── us-curriculum-mapping.md              # Complete Pre-K to Grade 3 unit progression & skill-topic mapping

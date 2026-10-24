@@ -46,16 +46,18 @@ jobs:
           cache-dependency-path: |
             services/api/package-lock.json
             packages/core-engine/package-lock.json
+            apps/mobile/package-lock.json
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install workspace dependencies (api, core-engine)
+      - name: Install workspace dependencies (api, core-engine, mobile)
         run: |
           npm ci --workspaces=false --prefix services/api
           npm ci --workspaces=false --prefix packages/core-engine
+          npm ci --workspaces=false --prefix apps/mobile
 
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
         run: python3 scripts/validate-curriculum.py
@@ -68,6 +70,13 @@ jobs:
 
       - name: Security & Edge Integration Tests (vitest — scrypt PINs, IDOR denial, CORS, rate limits, Postgres)
         run: npm test --workspaces=false --prefix services/api
+
+      - name: Mobile App Shell Quality Gate (lint, format, typecheck, design-token tests)
+        run: |
+          npm run lint --workspaces=false --prefix apps/mobile
+          npm run format:check --workspaces=false --prefix apps/mobile
+          npm run typecheck --workspaces=false --prefix apps/mobile
+          npm test --workspaces=false --prefix apps/mobile
 
       - name: Smoke-Test Migrations, Seed & Full Route Inventory on PostgreSQL
         run: |

@@ -1,122 +1,99 @@
-import React, { useState } from "react";
-import { ScrollView, View, Text, Pressable } from "react-native";
+/**
+ * Launcher screen: entry point of the M3 shell. Offers the two live
+ * destinations (onboarding and journey) and demonstrates token-driven
+ * theming by cycling light / dark / high-contrast. No dead ends.
+ */
+import React from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { router } from "expo-router";
+import { Button } from "../src/design/primitives";
+import { useTheme } from "../src/design/theme";
+import { controlHeights, radius, spacing, typeRamp, type ThemeMode } from "../src/design/tokens";
 
-const WINDING_OFFSETS = [0, -42, -68, -36, 18, 56, 32, -14];
+const THEME_CYCLE: ThemeMode[] = ["light", "dark", "highContrast"];
 
-export default function DuolingoJourneyScreen() {
-  const [loggedIn, setLoggedIn] = useState(true);
-  const [selectedSubject, setSelectedSubject] = useState("math");
-
-  const sampleUnits = [
-    {
-      unitId: "K-M1",
-      title: "Numbers, Counting & Comparing to 5",
-      color: "#58CC02",
-      topics: [
-        { code: "A", name: "Numbers to 3", status: "completed", crowns: 3 },
-        { code: "B", name: "Counting to 3", status: "completed", crowns: 3 },
-        { code: "C", name: "Numbers to 5", status: "completed", crowns: 3 },
-        { code: "D", name: "Counting to 5", status: "completed", crowns: 3 }
-      ]
-    },
-    {
-      unitId: "K-M2",
-      title: "Numbers, Cardinality & Comparing to 10",
-      color: "#1CB0F6",
-      topics: [
-        { code: "G", name: "Numbers & counting to 7", status: "completed", crowns: 3 },
-        { code: "H", name: "Numbers & counting to 9", status: "completed", crowns: 2 },
-        { code: "I", name: "Numbers to 10", status: "current", crowns: 0 },
-        { code: "J", name: "Counting to 10", status: "locked", crowns: 0 }
-      ]
-    }
-  ];
-
-  if (!loggedIn) {
-    return (
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 16 }}>
-        <Text style={{ fontSize: 28, fontWeight: "900", textAlign: "center" }}>Balashikshana</Text>
-        <Pressable
-          onPress={() => setLoggedIn(true)}
-          style={{ backgroundColor: "#58CC02", padding: 16, borderRadius: 16, borderCurve: "continuous" }}
-        >
-          <Text style={{ color: "#FFF", fontWeight: "800", textAlign: "center" }}>LOG IN AS AARAV (KINDERGARTEN)</Text>
-        </Pressable>
-      </ScrollView>
-    );
-  }
+export default function LauncherScreen() {
+  const { mode, setMode, colors } = useTheme();
 
   return (
     <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 20, gap: 24, alignItems: "center" }}
+      contentContainerStyle={{
+        padding: spacing.xxl,
+        gap: spacing.xl,
+        minHeight: "100%",
+        justifyContent: "center",
+        backgroundColor: colors.background,
+      }}
     >
-      <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
-        {["math", "ela", "science", "socialStudies"].map((subj) => (
-          <Pressable
-            key={subj}
-            onPress={() => setSelectedSubject(subj)}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              borderRadius: 14,
-              borderCurve: "continuous",
-              backgroundColor: selectedSubject === subj ? "#1CB0F6" : "#E5E5E5"
-            }}
-          >
-            <Text style={{ fontWeight: "800", color: selectedSubject === subj ? "#FFF" : "#3C3C3C" }}>
-              {subj.toUpperCase()}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={{ gap: spacing.sm, alignItems: "center" }}>
+        <View
+          accessibilityLabel="Balashikshana mascot tile"
+          style={{
+            width: 84,
+            height: 84,
+            borderRadius: 24,
+            borderCurve: "continuous",
+            backgroundColor: colors.primary.fill,
+            borderBottomWidth: 6,
+            borderBottomColor: colors.primary.fillBottom,
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: spacing.sm,
+          }}
+        >
+          <Text style={{ ...typeRamp.display, color: colors.primary.label, fontSize: 44 }}>B</Text>
+        </View>
+        <Text style={{ ...typeRamp.h1, color: colors.text, textAlign: "center" }}>
+          Balashikshana
+        </Text>
+        <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted, textAlign: "center" }}>
+          Fun learning journey - Pre-K to Grade 3
+        </Text>
       </View>
 
-      {sampleUnits.map((unit) => (
-        <View key={unit.unitId} style={{ width: "100%", maxWidth: 540, gap: 20, alignItems: "center" }}>
-          <View
-            style={{
-              width: "100%",
-              padding: 18,
-              borderRadius: 20,
-              borderCurve: "continuous",
-              backgroundColor: unit.color
-            }}
-          >
-            <Text selectable style={{ color: "#FFF", fontWeight: "900", fontSize: 18 }}>
-              {unit.unitId}: {unit.title}
-            </Text>
-          </View>
-
-          {unit.topics.map((t, idx) => (
-            <View
-              key={t.code}
-              style={{
-                alignItems: "center",
-                transform: [{ translateX: WINDING_OFFSETS[idx % WINDING_OFFSETS.length] }]
-              }}
-            >
-              <Pressable
-                style={{
-                  width: 72,
-                  height: 66,
-                  borderRadius: 36,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor:
-                    t.status === "completed" ? "#FFC800" : t.status === "current" ? "#58CC02" : "#E5E5E5"
-                }}
-              >
-                <Text style={{ fontSize: 24, fontWeight: "900", color: t.status === "locked" ? "#999" : "#FFF" }}>
-                  {t.status === "completed" ? "✓" : t.status === "current" ? "★" : "🔒"}
-                </Text>
-              </Pressable>
-              <Text style={{ marginTop: 6, fontWeight: "800", fontSize: 13 }}>
-                {t.code}. {t.name}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ))}
+      <View style={{ gap: spacing.md }}>
+        <Button
+          label="Start onboarding"
+          onPress={() => router.push("/onboarding")}
+          accessibilityHint="Open the parent-guided onboarding flow"
+        />
+        <Button
+          label="Go to journey"
+          variant="secondary"
+          onPress={() => router.push("/journey")}
+          accessibilityHint="Open the learning journey map"
+        />
+        <Button
+          label="Grown-ups"
+          variant="outline"
+          onPress={() => router.push("/parent")}
+          accessibilityHint="Open the parent area placeholder"
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Theme: ${mode}. Switch theme.`}
+          onPress={() => {
+            const next = THEME_CYCLE[(THEME_CYCLE.indexOf(mode) + 1) % THEME_CYCLE.length];
+            if (next !== undefined) {
+              setMode(next);
+            }
+          }}
+          style={({ pressed }) => ({
+            minHeight: controlHeights.sm,
+            justifyContent: "center",
+            alignItems: "center",
+            borderRadius: radius.sm,
+            borderWidth: 2,
+            borderCurve: "continuous",
+            borderColor: colors.border,
+            backgroundColor: pressed ? colors.surfaceAlt : colors.surface,
+          })}
+        >
+          <Text style={{ ...typeRamp.label, color: colors.textMuted }}>
+            {`Theme: ${mode} (tap to switch)`}
+          </Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }

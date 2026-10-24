@@ -42,9 +42,14 @@
 ## 2. Mobile Client Architecture (iOS & Android)
 
 ### 2.1 Cross-Platform Layer
-- **Runtime:** React Native (Expo) with **React Native Skia**, **Reanimated 3**, and **Rive** (or Flutter + Flame 2D).
+- **Runtime:** React Native (Expo SDK 58, RN 0.88, React 19 — roadmap D1) with **React Native Skia**, **Reanimated 4**, and **Rive**.
   - **60/120 FPS Rendering:** Skia provides hardware-accelerated 2D canvas drawing for Bezier letter tracing (`trace-draw-studio`), particle effects, ten-frame physics blocks (`block-builder`), and fast-moving sprites (`bubble-pop-blitz`).
   - **Vector Animations:** Rive state machines power interactive characters and study manipulatives at `< 50 KB` per asset.
+- **App Shell & Design System (M3, issue #43):** the shipped foundation every M3 screen builds on.
+  - `apps/mobile/src/design/tokens.ts` — pure-data single source for color (semantic `light`/`dark`/`highContrast` themes + text-grade `statusInk`), spacing, radius, and the kid-scale type ramp; vitest-enforced invariants (>= 48pt touch targets, WCAG contrast floors per theme).
+  - Primitives (`Button`, `PressableCard`, `ProgressBar`, `Badge`, `Sheet`) with the tactile 3D treatment and a global reduced-motion provider (`MotionProvider` honors the OS accessibility setting; zero-duration degradation, nothing load-bearing).
+  - `expo-router` skeleton: launcher + placeholder routes for `onboarding` / `journey` / `practice` / `gate` / `parent` (parental-gate seam marked for #44); no dead ends.
+  - Quality gates: ESLint (flat, `eslint-config-expo`) + Prettier + strict `tsc` + vitest, wired into the single CI job.
 - **Audio & Phonetics Subsystem:**
   - Pre-packaged pure phoneme audio bank (`/m/`, `/s/`, `/a/`, `/sh/`, `/ch/`) for zero-latency phonics blending.
   - On-device Text-to-Speech (US English voice profile) for dynamic math word problem narration so pre-readers are tested on math reasoning rather than reading ability.
