@@ -31,6 +31,7 @@ function RootStack() {
       <Stack.Screen name="journey/index" options={{ title: "Journey" }} />
       <Stack.Screen name="practice/index" options={{ title: "Practice" }} />
       <Stack.Screen name="game/index" options={{ title: "Game" }} />
+      <Stack.Screen name="placement/index" options={{ title: "Quick Exploration" }} />
       <Stack.Screen name="gate/index" options={{ title: "Boss Gate" }} />
       <Stack.Screen name="parent/index" options={{ title: "Parent Area" }} />
     </Stack>

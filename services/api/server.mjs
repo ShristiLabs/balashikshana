@@ -23,6 +23,7 @@ import {
 import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift } from "./children.mjs";
 import { contentPacksPlugin } from "./content-packs.mjs";
 import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
+import { placementPlugin } from "./placement.mjs";
 import { gamificationPlugin } from "./gamification.mjs";
 import {
   awardAttemptXp,
@@ -636,6 +637,11 @@ await app.register(syncPlugin, {
 // Student-scoped read auth (like GET /api/students/:id); everything
 // displayed is engine-derived.
 await app.register(gamificationPlugin, { db });
+
+// Placement record read (issue #60, E10): the authoritative placement
+// outcome per (student, grade), derived by the sync reconciler from the
+// PLACEMENT attempt stream. Child-device tokens only (sync doctrine).
+await app.register(placementPlugin, { db });
 
 // --- Routes --------------------------------------------------------------------
 

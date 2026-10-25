@@ -513,8 +513,8 @@ describe("migration 002 reversibility", () => {
   // (issue #56) layers the hearts session outcomes, so the rollback
   // removes all seven post-001 migrations (in order) and the up
   // restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..008 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 7 });
+  test("down removes exactly the 002..009 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 8 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -534,7 +534,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('student_xp_events') AS student_xp_events,
            to_regclass('student_badge_awards') AS student_badge_awards,
            to_regclass('student_gamification_state') AS student_gamification_state,
-           to_regclass('student_session_outcomes') AS student_session_outcomes`
+           to_regclass('student_session_outcomes') AS student_session_outcomes,
+           to_regclass('student_placement_records') AS student_placement_records`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -550,7 +551,8 @@ describe("migration 002 reversibility", () => {
       student_xp_events: null,
       student_badge_awards: null,
       student_gamification_state: null,
-      student_session_outcomes: null
+      student_session_outcomes: null,
+      student_placement_records: null
     });
 
     // 005's students.status column is gone with the rollback.
@@ -572,9 +574,10 @@ describe("migration 002 reversibility", () => {
         "005_child_profiles_device_sessions",
         "006_sync_attempt_ledger",
         "007_gamification_ledger",
-        "008_hearts_session_outcomes"
+        "008_hearts_session_outcomes",
+        "009_placement_records"
       ],
-      "up must re-apply 002 through 008"
+      "up must re-apply 002 through 009"
     );
 
     const back = (

@@ -609,8 +609,17 @@ describe("server parity tripwires (source scans)", () => {
     expect(syncSource).toContain("groupOf(item.a.topicId).items.push(item)");
   });
 
-  it("the OpenAPI baseline carries the additive GAME enum value", () => {
+  it("the OpenAPI baseline carries the additive GAME + PLACEMENT enum values", () => {
     const baseline = readFileSync(`${repoRoot}/docs/openapi/baseline.yaml`, "utf-8");
-    expect(baseline).toContain("enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]");
+    // #52 grew the closed AttemptInput enum by GAME; #60 grew it again
+    // by PLACEMENT (the same additive precedent, pinned here).
+    expect(baseline).toContain("enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT]");
+    // #60 also added the placement record read + the open ledger enum
+    // (x-extensible-enum declares the growth non-breaking for old
+    // clients — the unknown-value policy is ignore-and-skip).
+    expect(baseline).toContain("/api/placement/record:");
+    expect(baseline).toContain(
+      "x-extensible-enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT]",
+    );
   });
 });

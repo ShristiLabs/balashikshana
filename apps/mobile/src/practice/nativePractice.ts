@@ -25,6 +25,7 @@ import type { AttemptLogRow, SyncStorage } from "../sync/types";
 import type { GamificationState } from "../gamification/types";
 import type { GamificationStorage } from "../gamification/storage";
 import type { ReminderSettingsStorage } from "../notifications/reminderSettings";
+import type { PlacementDecisionRecord, PlacementRecordStore } from "../placement/record";
 import type {
   AttemptInput,
   GradeSrPolicy,
@@ -601,6 +602,97 @@ function createReminderSettingsStorage(): ReminderSettingsStorage {
 /** #57 seam: the device-local reminder settings storage (parent surface + bootstrap). */
 export function getNativeReminderSettingsStorage(): ReminderSettingsStorage {
   return createReminderSettingsStorage();
+}
+
+// ----------------------------------------------------------------------
+// Placement decision record storage (#60 — device-local family decision,
+// schema v8). The SERVER owns the placement outcome (re-derived from the
+// PLACEMENT attempt stream); this row owns only the decision: declined
+// offers are never re-asked per grade, and the accepted start point is
+// what the recommendation screen chose. Nothing here leaves the device.
+// ----------------------------------------------------------------------
+
+type PlacementSqlRow = {
+  student_id: string;
+  grade_id: string;
+  status: string;
+  start_unit_id: string;
+  recommended_start_unit_id: string | null;
+  credited_unit_ids_json: string;
+  items_asked: number;
+  session_id: string | null;
+  updated_at: number;
+};
+
+function placementRowToRecord(row: PlacementSqlRow): PlacementDecisionRecord {
+  let creditedUnitIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.credited_unit_ids_json || "[]") as unknown;
+    if (Array.isArray(parsed))
+      creditedUnitIds = parsed.filter((id): id is string => typeof id === "string");
+  } catch {
+    creditedUnitIds = [];
+  }
+  return {
+    studentId: row.student_id,
+    gradeId: row.grade_id,
+    status: row.status === "completed" ? "completed" : "declined",
+    startUnitId: row.start_unit_id,
+    recommendedStartUnitId: row.recommended_start_unit_id,
+    creditedUnitIds,
+    itemsAsked: row.items_asked,
+    sessionId: row.session_id,
+    updatedAt: row.updated_at,
+  };
+}
+
+function createPlacementRecordStore(): PlacementRecordStore {
+  return {
+    async get(studentId, gradeId) {
+      const db = await lifecycleDb();
+      const rows = await db.getAllAsync<PlacementSqlRow>(
+        `SELECT student_id, grade_id, status, start_unit_id, recommended_start_unit_id,
+                credited_unit_ids_json, items_asked, session_id, updated_at
+         FROM placement_records WHERE student_id = ? AND grade_id = ?`,
+        [studentId, gradeId],
+      );
+      return rows[0] ? placementRowToRecord(rows[0]) : null;
+    },
+
+    async upsert(record) {
+      const db = await lifecycleDb();
+      await db.runAsync(
+        `INSERT INTO placement_records (
+           student_id, grade_id, status, start_unit_id, recommended_start_unit_id,
+           credited_unit_ids_json, items_asked, session_id, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(student_id, grade_id) DO UPDATE SET
+           status = excluded.status,
+           start_unit_id = excluded.start_unit_id,
+           recommended_start_unit_id = excluded.recommended_start_unit_id,
+           credited_unit_ids_json = excluded.credited_unit_ids_json,
+           items_asked = excluded.items_asked,
+           session_id = excluded.session_id,
+           updated_at = excluded.updated_at`,
+        [
+          record.studentId,
+          record.gradeId,
+          record.status,
+          record.startUnitId,
+          record.recommendedStartUnitId,
+          JSON.stringify(record.creditedUnitIds),
+          record.itemsAsked,
+          record.sessionId,
+          record.updatedAt,
+        ],
+      );
+    },
+  };
+}
+
+/** #60 seam: the device-local placement decision store (journey offer + placement screen). */
+export function getNativePlacementRecordStore(): PlacementRecordStore {
+  return createPlacementRecordStore();
 }
 
 // ----------------------------------------------------------------------

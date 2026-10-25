@@ -22,10 +22,14 @@ export type KeyState = "SILVER_KEY" | "GOLD_KEY";
  * carry the same facts as topic practice and the server derives topic
  * progress from them exactly like a topic session (per-topic grouping —
  * a game's spiral stream mixes prerequisite/review items), so game play
- * always counts toward mastery. The union mirrors the server's sync
- * SESSION_TYPES enum and the OpenAPI baseline one-for-one.
+ * always counts toward mastery. PLACEMENT (issue #60) is the placement
+ * diagnostic's adaptive probe: ordinary append-only attempts whose
+ * server replay re-derives the start-point recommendation through the
+ * same core-engine placement module (provisional stability credit only
+ * — never completion, crowns, or keys). The union mirrors the server's
+ * sync SESSION_TYPES enum and the OpenAPI baseline one-for-one.
  */
-export type SessionType = "TOPIC_PRACTICE" | "GATE" | "GOLD_VERIFICATION" | "GAME";
+export type SessionType = "TOPIC_PRACTICE" | "GATE" | "GOLD_VERIFICATION" | "GAME" | "PLACEMENT";
 
 /**
  * Per-attempt game telemetry (issue #52, attempt_log migration 4).

@@ -84,7 +84,13 @@ function applyStreak(state: GamificationState, sessionMs: number): void {
 export function applyTopicLikeSession(
   state: GamificationState,
   params: {
-    sessionType: Extract<SessionType, "TOPIC_PRACTICE" | "GAME">;
+    /**
+     * PLACEMENT (#60) rides the attempt-XP path with passed=false — the
+     * outcome branch below (the only sessionType-sensitive line) never
+     * runs for it, so the type widened instead of forking a second
+     * near-identical projector.
+     */
+    sessionType: Extract<SessionType, "TOPIC_PRACTICE" | "GAME" | "PLACEMENT">;
     attempts: RewardAttempt[];
     passed: boolean;
     crowns: number;

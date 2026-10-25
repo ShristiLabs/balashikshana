@@ -70,8 +70,10 @@ import {
   computeGoldVerificationTransition,
   TOPIC_PROGRESS_UPSERT_SQL,
   UNIT_PROGRESS_UPSERT_SQL,
-  ATTEMPT_INSERT_SQL
+  ATTEMPT_INSERT_SQL,
+  PLACEMENT_TOPIC_CREDIT_SQL
 } from "./derivations.mjs";
+import { deriveAndStorePlacementRecord } from "./placement.mjs";
 import {
   awardAttemptXp,
   awardTopicOutcomeRewards,
@@ -117,7 +119,15 @@ export const SYNC_FUTURE_CLOCK_TOLERANCE_MS = Number(process.env.SYNC_FUTURE_CLO
 // mastery), so game play always counts toward the owning topics.
 // Additive: older clients never send it; the OpenAPI baseline enum
 // carries the same value (docs/openapi/baseline.yaml).
-const SESSION_TYPES = ["TOPIC_PRACTICE", "GATE", "GOLD_VERIFICATION", "GAME"];
+//
+// PLACEMENT (issue #60): the placement diagnostic's adaptive probe.
+// Attempts are ordinary facts; the replay re-derives the start-point
+// recommendation over the session's union through the SAME core-engine
+// placement module the client ran (D8 agreement), stores the placement
+// record, and applies PROVISIONAL topic credit only (no completion, no
+// crowns, no keys — the #60 guardrails; keys come solely from #51 Boss
+// Gates). Items span many units of one grade, exactly like GAME rows.
+const SESSION_TYPES = ["TOPIC_PRACTICE", "GATE", "GOLD_VERIFICATION", "GAME", "PLACEMENT"];
 
 // --- Schemas -------------------------------------------------------------------
 
@@ -489,7 +499,39 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, ou
       // authoritative for the session.
       const motorSec = group.items[0].a.motorBaselineSec || 0.42;
       const first = items[0].a;
-      const unit = unitById.get(first.unitId);
+      // Split-batch union replay (#60 finding): the session's earliest
+      // row may be a PRIOR batch's row whose unit was not part of THIS
+      // batch's referential fetch — placement sessions span many units,
+      // so the union's first unit can sit outside the batch's unit set.
+      // Resolve it (and its grade policy) directly instead of crashing;
+      // prior rows were validated at their own arrival, so a miss here
+      // means the unit vanished (impossible for immutable content).
+      let unit = unitById.get(first.unitId);
+      if (!unit) {
+        const priorUnit = await clientGet(
+          client,
+          "SELECT unit_id, grade_id, gate_max_speed_sec FROM units WHERE unit_id = $1",
+          [first.unitId]
+        );
+        if (priorUnit) {
+          unit = priorUnit;
+          unitById.set(priorUnit.unit_id, priorUnit);
+          if (!gradeById.has(priorUnit.grade_id)) {
+            const priorGrade = await clientGet(
+              client,
+              "SELECT grade_id, sr_growth_factor, sr_max_interval_days FROM grades WHERE grade_id = $1",
+              [priorUnit.grade_id]
+            );
+            if (priorGrade) gradeById.set(priorGrade.grade_id, priorGrade);
+          }
+        }
+      }
+      if (!unit) {
+        // Unresolvable content: skip this session's replay (the rows are
+        // still durable facts; nothing derived can exist without content).
+        sessionsReplayed += 1;
+        continue;
+      }
       const gradeRow = gradeById.get(unit.grade_id) ?? null;
       const targetSpeed = unit.gate_max_speed_sec;
       const sessionMs = Date.parse(items[items.length - 1].iso);
@@ -501,6 +543,8 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, ou
         rewardXp = await replayGateSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else if (sessionType === "GAME") {
         rewardXp = await replayGameSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
+      } else if (sessionType === "PLACEMENT") {
+        rewardXp = await replayPlacementSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else {
         rewardXp = await replayGoldVerificationSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, sessionMs, items });
       }
@@ -984,6 +1028,102 @@ async function replayGateSession({ client, studentId, deviceId, sessionId, unitI
       dedupeKey: `out:GATE:${sessionId}:${unitId}`
     });
     creditedXp += outcome.xp;
+  }
+  return creditedXp;
+}
+
+/**
+ * PLACEMENT session replay (issue #60). The union of the session's
+ * attempt rows (prior + new — the #48 convergence seam) feeds the SAME
+ * core-engine derivePlacementOutcome the RN client ran at session
+ * close: identical stream => identical recommendation (the D3/D8
+ * agreement test pins both directions). The replay then:
+ *
+ * 1. stores/overwrites the (student, grade) placement record —
+ *    server-authoritative, re-derivable, never client-asserted;
+ * 2. applies PROVISIONAL topic credit per credited topic (stability
+ *    only — no completion, no crowns, no unit status, no keys);
+ * 3. credits per-attempt XP over the NEW rows only (audio-aware, the
+ *    narrated-probe rule), keyed idempotently like every session type —
+ *    a correct placement answer is still a correct answer (D9), but
+ *    placement awards NO outcome XP and NO coins (nothing was passed;
+ *    there is nothing to celebrate numerically).
+ */
+async function replayPlacementSession({ client, studentId, deviceId, sessionId, unitId, targetSpeed, motorSec, sessionMs, items, priorItems }) {
+  const unitRow = await clientGet(client, "SELECT grade_id FROM units WHERE unit_id = $1", [unitId]);
+  const gradeId = unitRow ? unitRow.grade_id : null;
+  if (!gradeId) return 0;
+
+  const toResponses = (list) =>
+    list.map(({ a }) => ({
+      unitId: a.unitId,
+      topicId: a.topicId,
+      isCorrect: a.isCorrect,
+      rawTimeSec: a.rawTimeSec,
+      motorBaselineSec: motorSec
+    }));
+
+  // Outcome over the FULL union (split batches converge; the derivation
+  // is order-independent per-unit tallies inside the engine).
+  const outcome = await deriveAndStorePlacementRecord(client, {
+    studentId,
+    gradeId,
+    sessionId,
+    sessionMs,
+    responses: toResponses(items)
+  });
+
+  const now = new Date(sessionMs).toISOString();
+  // Provisional credit: stability + review re-arm per credited topic
+  // with at least one correct item. Exactly-once counting via the $8/$11
+  // first-arrival seam (same convention as the other upserts).
+  const reReplay = priorItems.length > 0;
+  for (const creditedUnit of outcome.creditedUnits) {
+    const unit = creditedUnit.unitId;
+    for (const topic of creditedUnit.topics) {
+      if (topic.correctItems <= 0 || topic.provisionalStabilityDays <= 0) continue;
+      const topicId = topic.topicId || `${unit}-${topic.topicCode}`;
+      const topicCode = topic.topicCode;
+      const nextReview = new Date(sessionMs + topic.provisionalStabilityDays * 86400000).toISOString();
+      const accuracyPct = topic.askedItems > 0
+        ? Math.min(100, Math.round((topic.correctItems / topic.askedItems) * 100))
+        : 100;
+      await client.query(PLACEMENT_TOPIC_CREDIT_SQL, [
+        studentId,
+        topicId,
+        unit,
+        topicCode,
+        accuracyPct,
+        1,
+        3,
+        topic.provisionalStabilityDays,
+        nextReview,
+        now,
+        reReplay ? 0 : 1
+      ]);
+    }
+  }
+
+  // Per-attempt XP over the NEW rows (audio-aware; no outcome rewards).
+  let creditedXp = 0;
+  for (const { a, iso } of groupNewItems(items, priorItems)) {
+    const audio = a.audioDurationSec || 0;
+    const fluency = computeFluencyGrade(
+      a.isCorrect,
+      computeCognitiveTimeSec(a.rawTimeSec || 3.0, motorSec, audio),
+      targetSpeed
+    );
+    creditedXp += await awardAttemptXp(client, {
+      studentId,
+      sessionType: "PLACEMENT",
+      sessionId,
+      unitId: a.unitId,
+      topicId: a.topicId,
+      isCorrect: Boolean(a.isCorrect),
+      fluencyGrade: fluency,
+      awardedAtIso: iso,
+      dedupeKey: `att:${deviceId}:${a.seq}`
+    });
   }
   return creditedXp;
 }

@@ -1380,6 +1380,54 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/placement/record:
+    get:
+      tags: [placement]
+      operationId: getPlacementRecord
+      summary: Authoritative placement outcome for the token's child and grade (issue #60)
+      description: |
+        CHILD-DEVICE session tokens only (the #48/#60 sync doctrine);
+        consent-gated like every child-data read. Returns the placement
+        diagnostic's server-derived outcome for the given grade: the
+        recommended start unit, the credited-unit prefix per strand
+        (skip-ahead guardrails already applied by the core-engine
+        placement module), and the item count. The record is RECOMPUTED
+        by the sync reconciler from the append-only PLACEMENT attempt
+        stream (POST /api/sync/attempts with sessionType PLACEMENT) -
+        there is no client-asserted submit; 404 means no placement has
+        been synced for the grade.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - name: gradeId
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 32
+          description: "Grade the placement ran for (e.g. grade-1)"
+      responses:
+        "200":
+          description: The authoritative placement record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlacementRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No placement record exists for the grade (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
 components:
   parameters:
     StudentId:
@@ -1533,7 +1581,12 @@ components:
       properties:
         sessionType:
           type: string
-          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]
+          # The ledger's session vocabulary is open by design (grew GAME in
+          # #52, PLACEMENT in #60); x-extensible-enum declares that growth
+          # non-breaking for old clients (the unknown-value policy is
+          # ignore-and-skip — the mobile projector already tolerates
+          # unrecognized session types on adoption).
+          x-extensible-enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT]
         sessionId:
           type: string
         unitId:
@@ -2264,7 +2317,7 @@ components:
           maxLength: 160
         sessionType:
           type: string
-          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]
+          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT]
         sessionId:
           type: string
           minLength: 1
@@ -2510,6 +2563,51 @@ components:
         progress:
           $ref: "#/components/schemas/SyncProgressSnapshot"
 
+    PlacementRecord:
+      type: object
+      required: [gradeId, recommendedStartUnitId, creditedUnits, perStrand, itemsAsked, sessionId, placedAt]
+      properties:
+        gradeId:
+          type: string
+        recommendedStartUnitId:
+          type: string
+          description: Engine-recommended start unit (guardrails applied; never gate-locked)
+        creditedUnits:
+          type: array
+          description: Credited prefix per strand (stability-only provisional credit)
+          items:
+            type: object
+            required: [strand, unitIds, topics]
+            properties:
+              strand:
+                type: string
+              unitIds:
+                type: array
+                items:
+                  type: string
+              topics:
+                type: array
+                items:
+                  type: object
+                  required: [topicId, provisionalStabilityDays]
+                  properties:
+                    topicId:
+                      type: string
+                    provisionalStabilityDays:
+                      type: number
+                      minimum: 0
+        perStrand:
+          type: array
+          description: Per-strand frontier report (index, credited count, cap flag)
+          items:
+            type: object
+        itemsAsked:
+          type: integer
+          minimum: 0
+        sessionId:
+          type: string
+        placedAt:
+          type: string
     SyncProgressResponse:
       type: object
       required: [serverTime, packsOutdated, progress]

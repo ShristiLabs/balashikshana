@@ -233,6 +233,38 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
        )`,
     ],
   },
+  {
+    // Migration 8 (issue #60 — placement diagnostic, roadmap E10) adds
+    // the device-local placement DECISION record: ONE row per
+    // (student, grade). The server owns the placement OUTCOME (it
+    // re-derives it from the PLACEMENT attempt stream — the D8
+    // doctrine; student_placement_records, migration 009); this row
+    // owns what only the family can decide: whether the offer was
+    // declined (never re-asked for the grade) and which start point
+    // was ACCEPTED (the recommended skip-ahead, or the gentler unit-1
+    // start — both always available per the #60 body). Statuses:
+    // 'declined' (offer dismissed; journey starts at unit 1),
+    // 'completed' (probe ran; start_unit_id records the choice).
+    // COPPA: unit ids + counts only; no PII; CASCADE-free single-row
+    // upsert keyed by the student's device-local id.
+    version: 8,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS placement_records (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         student_id TEXT NOT NULL,
+         grade_id TEXT NOT NULL,
+         status TEXT NOT NULL CHECK (status IN ('declined', 'completed')),
+         start_unit_id TEXT NOT NULL,
+         recommended_start_unit_id TEXT,
+         credited_unit_ids_json TEXT NOT NULL DEFAULT '[]',
+         items_asked INTEGER NOT NULL DEFAULT 0,
+         session_id TEXT,
+         updated_at INTEGER NOT NULL DEFAULT 0
+       )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_placement_student_grade
+         ON placement_records(student_id, grade_id)`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";

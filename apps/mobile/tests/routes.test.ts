@@ -48,6 +48,33 @@ describe("route tree", () => {
     expect(source, "journey params are honored").toContain("useLocalSearchParams");
   });
 
+  it("#60: the placement route renders the placement screen behind the consent guard", () => {
+    const layout = read("_layout.tsx");
+    expect(layout, "layout must register placement/index").toContain("placement/index");
+    const source = read("placement/index.tsx");
+    expect(source, "the #44 consent guard stays").toContain("childAccessReady");
+    expect(source, "the real #60 screen is mounted").toContain("PlacementScreen");
+    expect(source, "the placeholder is gone").not.toContain("PlaceholderScreen");
+    expect(source, "journey params are honored").toContain("useLocalSearchParams");
+  });
+
+  it("#60: the journey offers placement at first grade entry without blocking the map", () => {
+    const journeyScreen = readFileSync(
+      join(appDir, "..", "src", "journey", "JourneyScreen.tsx"),
+      "utf-8",
+    );
+    expect(journeyScreen, "the offer card is mounted on the journey").toContain(
+      "PlacementOfferCard",
+    );
+    expect(journeyScreen, "the decline decision is recorded through the store").toContain(
+      "getNativePlacementRecordStore",
+    );
+    expect(journeyScreen, "accepting routes into the placement screen").toContain('"/placement"');
+    // The offer never blocks: the map's node routing stays live.
+    expect(journeyScreen).toContain('"/practice"');
+    expect(journeyScreen).toContain('"/gate"');
+  });
+
   it("remaining placeholder screens use the shared no-dead-end component", () => {
     for (const route of PLACEHOLDER_ROUTES) {
       const source = read(route);

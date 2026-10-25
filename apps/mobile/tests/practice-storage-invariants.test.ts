@@ -131,6 +131,11 @@ describe("SQL mutation surface of both adapters", () => {
             "gamification_state",
             "session_outcomes",
             "reminder_settings",
+            // #60: placement_records is the device-local family DECISION
+            // (schema v8, one row per student+grade: declined vs the
+            // accepted start point). Upsert-only through the placement
+            // record store — never a progress fact, never synced.
+            "placement_records",
           ];
       for (const table of insertTables) expect(allowed).toContain(table);
       // attempt_log is INSERT ... VALUES with NO conflict clause.

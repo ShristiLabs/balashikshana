@@ -18,9 +18,21 @@ import {
 
 const TICK_MS = 200;
 
+/**
+ * The fireable event shape: every union member minus its clock field.
+ * Written DISTRIBUTIVELY (Omit over a union collapses to the common
+ * keys, which would drop celebrate's moment payload — #60 needs to fire
+ * celebrate for the placement outcome).
+ */
+export type FireableMascotEvent = MascotEvent extends infer T
+  ? T extends { nowMs: number }
+    ? Omit<T, "nowMs">
+    : T
+  : never;
+
 export function useMascot(nowMs: () => number = () => Date.now()): {
   state: MascotState;
-  fire: (event: Omit<MascotEvent, "nowMs">) => void;
+  fire: (event: FireableMascotEvent) => void;
 } {
   const [state, dispatch] = useReducer(
     (prev: MascotState, event: MascotEvent | { type: "init" }) =>
@@ -40,7 +52,7 @@ export function useMascot(nowMs: () => number = () => Date.now()): {
   }, [state.expiresAtMs, nowMs]);
 
   const fire = useCallback(
-    (event: Omit<MascotEvent, "nowMs">) => {
+    (event: FireableMascotEvent) => {
       dispatch({ ...event, nowMs: nowMs() } as MascotEvent);
     },
     [nowMs],

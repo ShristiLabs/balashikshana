@@ -30,7 +30,7 @@ import { useTheme } from "../design/theme";
 import { Button } from "../design/primitives";
 import { spacing, typeRamp } from "../design/tokens";
 import { useReducedMotion } from "../design/useMotion";
-import { getNativePracticeDeps } from "../practice/nativePractice";
+import { getNativePlacementRecordStore, getNativePracticeDeps } from "../practice/nativePractice";
 import { getSyncController, subscribeContentOutdated } from "../sync/SyncBootstrap";
 import { GamificationHeaderStrip } from "../gamification/GamificationHeaderStrip";
 import { useGamificationSummary } from "../gamification/useGamificationSummary";
@@ -48,6 +48,8 @@ import {
   loadJourneyIdentity,
   persistActiveGrade,
 } from "./nativeJourney";
+import { PlacementOfferCard } from "../placement/OfferCard";
+import { declineDecision } from "../placement/offer";
 import type { JourneyUnitNode } from "./model";
 
 /** Vertical distance between node centers: node + caption + breathing room. */
@@ -168,6 +170,62 @@ export function JourneyScreen(): React.ReactElement {
       }
     });
   }, []);
+
+  // #60: FIRST-grade-entry placement offer — shown when the active
+  // (student, grade) pair has NO device-local decision record (fresh
+  // onboarding landing, a first switch into a new grade, or a resumed
+  // onboarding whose offer was interrupted before a decision). The card
+  // NEVER blocks: the map stays interactive while it is visible, and a
+  // decline records the decision so the grade is never re-asked.
+  const [placementOfferGrade, setPlacementOfferGrade] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!studentId || !state.activeGrade) {
+        setPlacementOfferGrade(null);
+        return;
+      }
+      try {
+        const record = await getNativePlacementRecordStore().get(studentId, state.activeGrade);
+        if (!cancelled) setPlacementOfferGrade(record === null ? state.activeGrade : null);
+      } catch {
+        // The offer is best-effort: a store failure must never disturb
+        // the map (no record read => no offer; the next mount retries).
+        if (!cancelled) setPlacementOfferGrade(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId, state.activeGrade]);
+
+  const handlePlacementAccept = useCallback((gradeId: string) => {
+    setPlacementOfferGrade(null);
+    router.push({ pathname: "/placement", params: { gradeId } });
+  }, []);
+
+  const handlePlacementDecline = useCallback(
+    async (gradeId: string) => {
+      setPlacementOfferGrade(null);
+      if (!studentId) return;
+      const model = state.model;
+      const firstUnitId = model?.units[0]?.unitId ?? "";
+      try {
+        await getNativePlacementRecordStore().upsert(
+          declineDecision({
+            studentId,
+            gradeId,
+            firstUnitId,
+            nowMs: Date.now(),
+          }),
+        );
+      } catch {
+        // Best-effort: without the write the offer re-appears next
+        // mount (never blocking either way).
+      }
+    },
+    [state.model, studentId],
+  );
 
   /** The #46 download lifecycle + model load (shared by select + retry). */
   const ensureAndLoad = useCallback(
@@ -298,6 +356,14 @@ export function JourneyScreen(): React.ReactElement {
               <GamificationHeaderStrip summary={gamification} />
             </View>
           </View>
+        ) : null}
+        {placementOfferGrade === state.activeGrade ? (
+          <PlacementOfferCard
+            gradeId={state.activeGrade}
+            onAccept={handlePlacementAccept}
+            onDecline={(gradeId) => void handlePlacementDecline(gradeId)}
+            testID="journey-placement-offer"
+          />
         ) : null}
         <GardenHealthView garden={model.garden} />
       </View>

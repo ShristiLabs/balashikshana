@@ -245,3 +245,27 @@ export const ATTEMPT_INSERT_SQL = `
   ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
   ON CONFLICT (student_id, device_id, client_seq) WHERE client_seq IS NOT NULL DO NOTHING
 `;
+
+// #60 placement PROVISIONAL topic credit — the one upsert placement is
+// allowed to touch, and it deliberately touches nothing else: no
+// completed, no crowns, no mastery_score (a placement item is evidence,
+// not a crowning pass; only a practice session or a Boss Gate completes
+// a topic, and only a Boss Gate awards keys). Stability grows to at
+// most the engine's provisional band (GREATEST never regresses a real
+// practice-earned stability) and next_review_at re-arms so the ordinary
+// FSRS decay path schedules the topic like any other. attempts_count
+// still increments once per first arrival (the $8 exactly-once seam,
+// same convention as the upserts above).
+export const PLACEMENT_TOPIC_CREDIT_SQL = `
+  INSERT INTO student_topic_progress (
+    student_id, topic_id, unit_id, topic_code, completed, crowns,
+    mastery_score, best_accuracy_pct, best_median_speed_sec,
+    attempts_count, fluency_grade, stability_days, next_review_at, last_reviewed_at
+  ) VALUES ($1, $2, $3, $4, 0, 0, 0, $5, 0, $6, $7, $8, $9, $10)
+  ON CONFLICT(student_id, topic_id) DO UPDATE SET
+    best_accuracy_pct = GREATEST(student_topic_progress.best_accuracy_pct, excluded.best_accuracy_pct),
+    attempts_count = student_topic_progress.attempts_count + $11,
+    stability_days = GREATEST(student_topic_progress.stability_days, excluded.stability_days),
+    next_review_at = excluded.next_review_at,
+    last_reviewed_at = excluded.last_reviewed_at
+`;
