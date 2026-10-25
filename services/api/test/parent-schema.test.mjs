@@ -512,11 +512,12 @@ describe("migration 002 reversibility", () => {
   // ledger, 007 (issue #55) layers the gamification ledger, and 008
   // (issue #56) layers the hearts session outcomes, 009 (issue #60) layers
   // the placement records, 010 (issue #61) layers the portal child
-  // settings, and 011 (issue #62) layers the deletion audit ledger, so the
-  // rollback removes all ten post-001 migrations (in order) and the up
-  // restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..011 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 10 });
+  // settings, 011 (issue #62) layers the deletion audit ledger, and 012
+  // (issue #63) layers the weekly digest sent-ledger + parent opt-out
+  // column, so the rollback removes all eleven post-001 migrations (in
+  // order) and the up restores them; the reversibility contract is unchanged.
+  test("down removes exactly the 002..012 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 11 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -538,7 +539,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('student_gamification_state') AS student_gamification_state,
            to_regclass('student_session_outcomes') AS student_session_outcomes,
            to_regclass('student_placement_records') AS student_placement_records,
-           to_regclass('portal_child_settings') AS portal_child_settings`
+           to_regclass('portal_child_settings') AS portal_child_settings,
+           to_regclass('weekly_digest_sent') AS weekly_digest_sent`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -556,8 +558,15 @@ describe("migration 002 reversibility", () => {
       student_gamification_state: null,
       student_session_outcomes: null,
       student_placement_records: null,
-      portal_child_settings: null
+      portal_child_settings: null,
+      weekly_digest_sent: null
     });
+
+    // 012's parents.weekly_email_enabled column is gone with the rollback.
+    const weeklyColGone = await db.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'parents' AND column_name = 'weekly_email_enabled'`
+    );
+    assert.equal(weeklyColGone.rows.length, 0, "parents.weekly_email_enabled must be removed by 012 down");
 
     // 005's students.status column is gone with the rollback.
     const statusGone = await db.query(
@@ -581,9 +590,10 @@ describe("migration 002 reversibility", () => {
         "008_hearts_session_outcomes",
         "009_placement_records",
         "010_portal_child_settings",
-        "011_deletion_audit"
+        "011_deletion_audit",
+        "012_weekly_digest"
       ],
-      "up must re-apply 002 through 010"
+      "up must re-apply 002 through 012"
     );
 
     const back = (

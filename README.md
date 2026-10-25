@@ -94,6 +94,14 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 | `RATE_LIMIT_SYNC_PER_TOKEN_MIN` | `30` | Sync requests per minute per child-device token (issue #48 — sized for batch traffic on top of the global buckets) |
 | `RATE_LIMIT_DELETE_PER_IP_MIN` | `5` | Child-data deletion attempts per minute per IP (issue #62 — the route verifies the parent password, so it follows the login-bucket doctrine) |
 | `RETENTION_SWEEP_INTERVAL_MS` | `21600000` | Retention sweep interval in milliseconds (issue #62 — one boot pass then every interval; purges expired student/parent/device sessions and single-use tokens; `0` disables scheduling, the sweep function stays importable for scripts) |
+| `WEEKLY_DIGEST_ENABLED` | (unset) | Opt-in master switch for the weekly parent email digest scheduler (issue #63 — accepts `1`/`true`/`yes`; default OFF so a bare dev boot never sends mail; enabling it without `SMTP_HOST` refuses to start with a loud error) |
+| `WEEKLY_DIGEST_INTERVAL_MS` | `3600000` | Weekly digest scheduler tick in milliseconds (issue #63 — one boot pass then every interval; the `(parent, ISO week)` sent-ledger makes extra ticks no-ops, so the tick bounds worst-case send latency, never duplication; `0` disables scheduling) |
+| `SMTP_HOST` | (unset) | Mail transport selection (issue #63 seam): set -> SMTP transport (nodemailer, lazily imported only then); unset -> null transport (mail dropped with an honest `ok:false`, never a crash, never a phantom "sent") |
+| `SMTP_PORT` | `587` | SMTP port (587 = STARTTLS; use 465 with `SMTP_SECURE=true`) |
+| `SMTP_SECURE` | (unset) | `true` or `1` selects implicit TLS; any other value keeps STARTTLS |
+| `SMTP_USER` | (unset) | SMTP username (credentials live only in env — never in code or logs) |
+| `SMTP_PASS` | (unset) | SMTP password (credentials live only in env — never in code or logs) |
+| `SMTP_FROM` | `Balashikshana <no-reply@balashikshana.local>` | Envelope From for the weekly digest |
 | `SYNC_MAX_ATTEMPTS_PER_BATCH` | `200` | Hard cap on attempts per sync batch (OpenAPI `maxItems`; the mobile engine clamps its drain window to the same cap) |
 | `SYNC_FUTURE_CLOCK_TOLERANCE_MS` | `300000` | Client-clock future tolerance before an attempt timestamp is clamped to server receive time (issue #48 clock policy; past timestamps are accepted as-is) |
 | `BALASHIKSHANA_CONTENT_PACKS_DIR` | `services/api/content-packs` | Directory the content-pack routes serve the compiled manifest index + signed artifacts from (gitignored compiler output; the routes 503 with problem+json until a build is published) |
@@ -294,6 +302,16 @@ M5 (roadmap D4/D5): a separate lightweight **Vite + React 19 + TypeScript SPA** 
 - Run it: `npm --workspaces=false --prefix apps/parent-portal run dev` (Vite :4300; the API's CORS allowlist includes the dev origin).
 - Architecture detail: `docs/architecture.md` section 3.
 
+### 23. Weekly Parent Email Summaries (issue #63)
+The M5 email surface: one idempotent weekly email per eligible parent summarizing each linked child's completed week (time practiced, topics completed, units mastered, Silver/Gold keys, streak) — parent-facing only, off by default, zero third-party mail services.
+
+- **Mailer seam, no provider lock-in:** `services/api/mailer.mjs` defines one transport interface with three implementations — capture (dev/tests, zero network I/O), null (the honest no-config default: drops mail reporting `ok:false`, so nothing is ever recorded as sent that was not), and SMTP (production; nodemailer is imported ONLY inside `smtp-transport.mjs` and only when `SMTP_HOST` is set). Transports resolve a uniform result and never throw — one parent's failed send never aborts the batch; it is retried on the next run.
+- **Opt-in scheduler, idempotent by ledger:** `WEEKLY_DIGEST_ENABLED` defaults OFF; when on, one boot pass then a tick every `WEEKLY_DIGEST_INTERVAL_MS` (default 1h — the tick bounds send latency, never duplication). The `weekly_digest_sent` ledger (migration 012, PK `(parent_id, iso_week)`) claims a week only AFTER a successful send, so re-runs and restarts send no duplicates while failed sends retry naturally; overlapping runs skip via a Postgres advisory lock. The one documented residual: a crash between send and ledger insert may re-send that parent once, then never (at-least-once).
+- **Same math as the portal, by construction:** the digest reuses the portal's shared weekly aggregation (`weeklySeriesForChild`) and keys queries — digest numbers equal portal numbers equal export numbers, pinned by deep-equality tests. The digested week is the most recently COMPLETE ISO week (Monday-anchored UTC); partial weeks are never summarized.
+- **COPPA/D5 posture:** recipients are verified parent emails only — no child recipients, no CC/BCC, one parent address per send; eligibility requires a verified email, the weekly toggle ON (default on), and at least one claimed child. Content is each child's nickname plus aggregate numbers only; the email contains NO links, NO images, and no tracking pixels or third-party embeds of any kind (test-asserted) — the footer names the portal settings instead of linking (anti-phishing by omission).
+- **Parent control:** the weekly toggle lives in the portal's Email preferences pane (`GET`/`PUT /api/portal/notification-preferences`, parent-token auth); flipping it takes effect on the next run.
+- Architecture detail: `docs/architecture.md` section 3.6.
+
 
 ---
 
@@ -319,7 +337,7 @@ balashikshana/
 │       └── sqlite/                           # On-device SQLite schema reference (offline store, roadmap D2)
 ├── apps/
 │   ├── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router, offline practice core) + static web dev harness (public/)
-│   └── parent-portal/                        # Parent portal SPA (Vite + React 19 + TS): login, children overview, quadrant/weekly analytics, server-enforced parental controls (issue #61), COPPA data export + deletion self-serve (issue #62)
+│   └── parent-portal/                        # Parent portal SPA (Vite + React 19 + TS): login, children overview, quadrant/weekly analytics, server-enforced parental controls (issue #61), COPPA data export + deletion self-serve (issue #62), weekly email toggle (issue #63)
 ├── tools/
 │   └── content-pipeline/                     # Signed per-grade content-pack compiler (node:sqlite + node:crypto, zero runtime deps)
 ├── docs/
@@ -358,5 +376,5 @@ balashikshana/
 8. **[Technical Architecture (`docs/architecture.md`)](./docs/architecture.md)** — Cross-platform iOS/Android mobile stack, procedural question/distractor generation, offline SQLite schema, and COPPA compliance.
 9. **[Enterprise Launch Roadmap (`docs/roadmap.md`)](./docs/roadmap.md)** — Approved M1–M6 roadmap: binding decisions D1–D11, the full issue tree (#27–#65), workstream details, risks, and per-milestone verification gates.
 10. **[Database Migration Ledger (`docs/database-migrations.md`)](./docs/database-migrations.md)** — PostgreSQL migration history, runner usage, and the rules every schema change follows.
-11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 33 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.
+11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 44 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.
 12. **[Game Archetype Coverage Checklist (`docs/games-coverage.md`)](./docs/games-coverage.md)** — Which of the registry's 11 game archetypes have installed renderers vs. practice fallback (pack A — block-builder + market-cashier — issue #53; pack B — bubble-pop-blitz + monster-phoneme-feeder — issue #54), the fallback semantics, the guided/fluency stage model, and the data-derived per-pack coverage footprint (data-enforced by the games-registry catalog test).

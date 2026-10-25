@@ -1787,6 +1787,72 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/portal/notification-preferences:
+    get:
+      tags: [portal]
+      operationId: getNotificationPreferences
+      summary: The parent's email notification preferences (weekly summary toggle, issue #63)
+      description: |
+        PARENT session tokens only (child device tokens and student
+        sessions are 403 wrong-token-type). Returns the parent-level
+        email notification state: today the weekly progress summary
+        toggle (parents.weekly_email_enabled, migration 012, default
+        on). The weekly digest scheduler skips opted-out parents
+        entirely on its next run.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: The parent's notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+    put:
+      tags: [portal]
+      operationId: putNotificationPreferences
+      summary: Set the parent's email notification preferences (full-shape replace)
+      description: |
+        PARENT session tokens only. Full-shape replace: the body IS the
+        new state. Flipping weeklyEmailEnabled to false opts the parent
+        out of the weekly progress summary email; the effect is
+        immediate for the NEXT scheduled run (the job reads the flag at
+        selection time). No email is ever sent to unverified parent
+        addresses regardless of this setting.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationPreferencesPut"
+      responses:
+        "200":
+          description: The stored preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
 components:
   parameters:
     StudentId:
@@ -3503,6 +3569,25 @@ components:
               type: integer
             reminderMinute:
               type: integer
+
+    NotificationPreferences:
+      type: object
+      required: [weeklyEmailEnabled, serverTime]
+      properties:
+        weeklyEmailEnabled:
+          type: boolean
+          description: Whether the weekly progress summary email is enabled (default on; parents.weekly_email_enabled, migration 012)
+        serverTime:
+          type: string
+          format: date-time
+
+    NotificationPreferencesPut:
+      type: object
+      additionalProperties: false
+      required: [weeklyEmailEnabled]
+      properties:
+        weeklyEmailEnabled:
+          type: boolean
 
     DeletionRequest:
       type: object

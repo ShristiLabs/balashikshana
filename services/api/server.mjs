@@ -27,6 +27,7 @@ import { placementPlugin } from "./placement.mjs";
 import { portalPlugin } from "./portal.mjs";
 import { dataRightsPlugin } from "./data-rights.mjs";
 import { startRetentionSweep } from "./retention.mjs";
+import { startWeeklyDigestScheduler } from "./weekly-digest.mjs";
 import {
   resolveOptionalStudentId,
   loadChildSettings,
@@ -86,6 +87,22 @@ import {
 // SEED_DEMO_STUDENTS          seed demo students on an empty DB ("0" disables;
 //                             default 1). The consent-invariant suite boots
 //                             with "0" so a pristine DB proves the #41 gate.
+// WEEKLY_DIGEST_ENABLED       opt-in master switch for the #63 weekly parent
+//                             email digest scheduler ("1"/"true"; default off —
+//                             outbound mail is a side-effecting surface)
+// WEEKLY_DIGEST_INTERVAL_MS   digest scheduler tick (default 3600000 = 1h; the
+//                             (parent, ISO week) sent-ledger makes extra ticks
+//                             no-ops, so the tick bounds send latency, never
+//                             duplication; 0 disables scheduling)
+// SMTP_HOST                   mail transport selection (issue #63 seam): set ->
+//                             SMTP transport (nodemailer, lazy-loaded); unset ->
+//                             null transport (mail dropped, never crashes)
+// SMTP_PORT / SMTP_SECURE / SMTP_USER / SMTP_PASS / SMTP_FROM
+//                             SMTP transport knobs (587 / STARTTLS unless
+//                             SMTP_SECURE=true / credentials if configured /
+//                             envelope From, default
+//                             "Balashikshana <no-reply@balashikshana.local>");
+//                             credentials live ONLY in env (secret-scan rule)
 const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
 
 function parseAllowedOrigins() {
@@ -681,6 +698,14 @@ await app.register(dataRightsPlugin, {
 // single-statement purges of expired session/token rows; never touches
 // evidence tables. The timer is unref'd — it never holds the process.
 startRetentionSweep(db, logger);
+
+// Weekly parent email digest (issue #63, M5): opt-in
+// (WEEKLY_DIGEST_ENABLED), boot pass + WEEKLY_DIGEST_INTERVAL_MS tick
+// (default 1h). Idempotent per (parent, ISO week) via the 012
+// sent-ledger; the mailer seam (mailer.mjs) selects the null transport
+// unless SMTP_HOST is configured, so a bare boot never sends anything.
+// Unref'd like the retention sweep.
+startWeeklyDigestScheduler(db, logger);
 
 // --- Routes --------------------------------------------------------------------
 

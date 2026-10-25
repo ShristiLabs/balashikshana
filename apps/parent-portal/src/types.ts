@@ -110,3 +110,8 @@ export interface DeletionSummary {
   consentRecordsDetached: number;
   deletedCounts: Record<string, number>;
 }
+
+export interface NotificationPreferences {
+  weeklyEmailEnabled: boolean;
+  serverTime: string;
+}

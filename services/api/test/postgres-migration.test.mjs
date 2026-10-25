@@ -93,7 +93,8 @@ describe("migration tracking", () => {
         "008_hearts_session_outcomes",
         "009_placement_records",
         "010_portal_child_settings",
-        "011_deletion_audit"
+        "011_deletion_audit",
+        "012_weekly_digest"
       ]
     );
   });

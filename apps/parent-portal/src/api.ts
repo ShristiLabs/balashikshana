@@ -106,6 +106,16 @@ export const api = {
   settings(token: string, studentId: string): Promise<PortalSettingsResponse> {
     return call<PortalSettingsResponse>(`/api/portal/children/${encodeURIComponent(studentId)}/settings`, { token });
   },
+  notificationPreferences(token: string): Promise<import("./types").NotificationPreferences> {
+    return call<import("./types").NotificationPreferences>("/api/portal/notification-preferences", { token });
+  },
+  putNotificationPreferences(token: string, weeklyEmailEnabled: boolean): Promise<import("./types").NotificationPreferences> {
+    return call<import("./types").NotificationPreferences>("/api/portal/notification-preferences", {
+      method: "PUT",
+      token,
+      body: { weeklyEmailEnabled }
+    });
+  },
   putSettings(token: string, studentId: string, body: import("./types").ChildSettings): Promise<PortalSettingsPutResponse> {
     return call<PortalSettingsPutResponse>(`/api/portal/children/${encodeURIComponent(studentId)}/settings`, {
       method: "PUT",

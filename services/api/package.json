@@ -15,6 +15,7 @@
     "@fastify/rate-limit": "^10.3.0",
     "fastify": "^5.12.7",
     "node-pg-migrate": "^7.9.1",
+    "nodemailer": "^10.2.1",
     "pg": "^8.23.1",
     "pino": "^9.14.0"
   },
