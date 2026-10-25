@@ -124,6 +124,13 @@ describe("gameReducer", () => {
         perTopic: [],
         xpAwarded: 0,
         coinsAwarded: 0,
+        celebration: {
+          badgesAwarded: [],
+          leveledUp: false,
+          level: 1,
+          streakDays: 1,
+          streakIncreased: false,
+        },
       },
     });
     expect(state.phase).toBe("summary");
@@ -268,6 +275,13 @@ describe("gameReducer", () => {
       ],
       xpAwarded: 0,
       coinsAwarded: 0,
+      celebration: {
+        badgesAwarded: [],
+        leveledUp: false,
+        level: 1,
+        streakDays: 1,
+        streakIncreased: false,
+      },
     };
     state = gameReducer(state, { type: "summary-ready", sessionId: "sess-1", summary });
     expect(state.phase).toBe("summary");

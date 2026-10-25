@@ -18,10 +18,18 @@
 import React, { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
+import { badgeById } from "@balashikshana/core-engine";
 import type { AudioCoordinator } from "../audio/coordinator";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
 import { spacing, typeRamp } from "../design/tokens";
+import { useReducedMotion } from "../design/useMotion";
+import { CelebrationStack } from "../mascot/CelebrationStack";
+import type { BadgeBloomBadge } from "../mascot/BadgeBloomView";
+import { MascotView } from "../mascot/MascotView";
+import { useMascot } from "../mascot/useMascot";
+import { planCelebrationMoments } from "../mascot/celebrationEvents";
+import { celebrationLineForTopic } from "../mascot/celebrationLines";
 import type {
   GameAttemptTelemetry,
   PracticeQuestion,
@@ -82,6 +90,9 @@ export function PracticeRunnerScreen({
   gameFallback,
 }: PracticeRunnerScreenProps): React.ReactElement {
   const { colors } = useTheme();
+  const { motion } = useReducedMotion();
+  // #58: the session mascot (reacts to answers; static under reduced motion).
+  const { state: mascot, fire: fireMascot } = useMascot();
   const [state, dispatch] = useReducer(runnerReducer, undefined, initialRunnerState);
   const [structural, setStructural] = useState<StructuralDraft>(EMPTY_DRAFT);
   const [exitSheetOpen, setExitSheetOpen] = useState(false);
@@ -241,6 +252,8 @@ export function PracticeRunnerScreen({
 
   const toggleCell = (slot: number) => {
     playMoment("onInteract", topicId ?? undefined);
+    // #58: the mascot's touch-pickup reaction (registry vocabulary).
+    fireMascot({ type: "touch-pickup" });
     setStructural((prev) => {
       const filled = prev.filledSlots.includes(slot)
         ? prev.filledSlots.filter((entry) => entry !== slot)
@@ -252,6 +265,7 @@ export function PracticeRunnerScreen({
 
   const tapTile = (option: RunnerOption) => {
     playMoment("onInteract", topicId ?? undefined);
+    fireMascot({ type: "touch-pickup" });
     setStructural((prev) => {
       const placed = [...prev.placedTiles, option];
       publishDraft(placed.map((entry) => entry.label).join(" "));
@@ -268,6 +282,7 @@ export function PracticeRunnerScreen({
 
   const selectChoice = (option: RunnerOption) => {
     playMoment("onInteract", topicId ?? undefined);
+    fireMascot({ type: "touch-pickup" });
     setStructural((prev) => {
       publishDraft(option.label);
       return { ...prev, selectedChoiceKey: option.key };
@@ -381,6 +396,9 @@ export function PracticeRunnerScreen({
         questionId: activeQuestion.questionId,
       });
       playMoment(isCorrect ? "onCorrect" : "onGentleRetry", activeQuestion.topicId);
+      // #58: the mascot mirrors the feedback (snap-confirm on correct,
+      // the warm growth-reframe bounce on gentle retry).
+      fireMascot({ type: isCorrect ? "answer-correct" : "answer-gentle-retry" });
       if (isCorrect && result.fluencyGrade === 4) {
         playMoment("onSpeedTargetBeat", activeQuestion.topicId);
       }
@@ -404,7 +422,7 @@ export function PracticeRunnerScreen({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }, [state, playMoment]);
+  }, [state, playMoment, fireMascot]);
 
   const handleContinue = useCallback(async () => {
     if (state.phase !== "feedback" || !state.sessionId) return;
@@ -415,6 +433,20 @@ export function PracticeRunnerScreen({
         const summary = await getRunnerEngine().completeTopicSession(state.sessionId);
         dispatch({ type: "summary-ready", sessionId: state.sessionId, summary });
         if (summary.passedTopic) playMoment("onCorrect", currentQuestion(state)?.topicId);
+        // #58: the mastery bloom moment — star fanfare + the registry's
+        // own celebration line through the #45 TTS coordinator.
+        const firstMastery = summary.passedTopic && summary.topicProgress.completed === 1;
+        if (firstMastery) {
+          audioRef.current?.sfx("sfx_star_fanfare");
+          void audioRef.current
+            ?.speak({
+              text: celebrationLineForTopic(summary.topicProgress.topicId, 0),
+              grade: asGradeId(effectiveGradeRef.current),
+              topicId: summary.topicProgress.topicId,
+              line: "celebration",
+            })
+            .catch(() => undefined);
+        }
       } catch (error) {
         // Same liveness rule as the submit path (review finding 1): a
         // completion that throws leaves the session open in the engine
@@ -601,10 +633,43 @@ export function PracticeRunnerScreen({
   if (state.phase === "summary" && state.summary) {
     const summary = state.summary;
     const crownDelta = summary.crownsAwarded - (state.prevCrowns ?? 0);
+    // #58: the celebration queue (mastery bloom, new badges, level-up,
+    // streak milestone) from the session's reward-report deltas.
+    const firstMastery = summary.passedTopic && summary.topicProgress.completed === 1;
+    const moments = planCelebrationMoments({
+      report: summary.celebration,
+      topicMastered: firstMastery,
+    });
+    const bloomById: Record<string, BadgeBloomBadge> = {};
+    for (const plan of moments) {
+      if (!plan.badgeId || bloomById[plan.badgeId]) continue;
+      const meta = badgeById(plan.badgeId);
+      if (meta) {
+        bloomById[plan.badgeId] = {
+          id: plan.badgeId,
+          title: meta.title,
+          tier: meta.tier,
+          description: meta.description,
+        };
+      }
+    }
+    const topicPick = state.topics.find(
+      (pick) => pick.topicCode === summary.topicProgress.topicCode,
+    );
     return (
       <ScrollView
         contentContainerStyle={{ padding: spacing.xxl, gap: spacing.lg, alignItems: "center" }}
       >
+        {moments.length > 0 ? (
+          <CelebrationStack
+            moments={moments}
+            badgeById={bloomById}
+            animationsEnabled={motion.animationsEnabled}
+            topicName={topicPick?.topicName ?? null}
+            level={summary.celebration.level}
+            testID="practice-celebration"
+          />
+        ) : null}
         <Text style={{ ...typeRamp.h1, color: colors.text, textAlign: "center" }}>
           {summary.passedTopic ? "Topic complete!" : "Nice practice!"}
         </Text>
@@ -664,9 +729,15 @@ export function PracticeRunnerScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Session header: progress, stage badge, exit. */}
+      {/* Session header: mascot, progress, stage badge, exit. */}
       <View style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+          <MascotView
+            state={mascot}
+            animationsEnabled={motion.animationsEnabled}
+            size={40}
+            testID="practice-mascot"
+          />
           <View style={{ flex: 1 }}>
             <ProgressBar
               progress={progressPct / 100}

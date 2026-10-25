@@ -768,3 +768,168 @@ describe("D9 streak agreement: offline projector == #48 sync replay (#57)", () =
     expect(strip).toContain('label="Day streak"');
   });
 });
+
+describe("celebration report wiring (#58 — engine integration)", () => {
+  /** The canonical fast-correct topic session helper (sibling pattern). */
+  async function passTopicSession(engine: PracticeSessionEngine): Promise<void> {
+    const start = await engine.startTopicSession({
+      studentId: STUDENT,
+      gradeId: GRADE,
+      unitId: UNIT,
+      topicCode: "G",
+    });
+    for (const q of start.questions) {
+      await engine.submitResponse(start.sessionId, {
+        topicCode: "G",
+        questionId: q.questionId,
+        chosenAnswer: q.correctAnswer,
+        isCorrect: true,
+        rawTimeSec: 2,
+      });
+    }
+    await engine.completeTopicSession(start.sessionId);
+  }
+
+  it("a first passing session reports the newly earned badges and the level transition", async () => {
+    const engine = new PracticeSessionEngine(env.deps);
+    const start = await engine.startTopicSession({
+      studentId: STUDENT,
+      gradeId: GRADE,
+      unitId: UNIT,
+      topicCode: "G",
+    });
+    for (const q of start.questions) {
+      await engine.submitResponse(start.sessionId, {
+        topicCode: "G",
+        questionId: q.questionId,
+        chosenAnswer: q.correctAnswer,
+        isCorrect: true,
+        rawTimeSec: 2,
+      });
+    }
+    const summary = await engine.completeTopicSession(start.sessionId);
+    // The report surfaces EXACTLY the badges the ledger row merged
+    // (the evaluateAndMergeBadges return, wired through projectRewards).
+    const row = await env.gamification?.getGamificationState(STUDENT);
+    expect([...(row?.earnedBadges ?? [])].sort()).toEqual(
+      [...summary.celebration.badgesAwarded].sort(),
+    );
+    expect(summary.celebration.badgesAwarded).toContain("first-steps");
+    // Level-up is the engine curve's verdict on the before/after totals.
+    expect(summary.celebration.leveledUp).toBe(
+      levelForXp(row?.totalXp ?? 0).level > levelForXp(0).level,
+    );
+    expect(summary.celebration.level).toBe(levelForXp(row?.totalXp ?? 0).level);
+    // Fresh state: streak starts at 1 with no active day key; the first
+    // session CLAIMS the day but does not GROW the streak.
+    expect(summary.celebration.streakIncreased).toBe(false);
+    expect(summary.celebration.streakDays).toBe(row?.streakDays);
+  });
+
+  it("a second same-day session reports nothing new (badges/level/streak all quiet)", async () => {
+    const engine = new PracticeSessionEngine(env.deps);
+    await passTopicSession(engine);
+    const rowAfterFirst = await env.gamification?.getGamificationState(STUDENT);
+    const xpAfterFirst = rowAfterFirst?.totalXp ?? 0;
+
+    const start = await engine.startTopicSession({
+      studentId: STUDENT,
+      gradeId: GRADE,
+      unitId: UNIT,
+      topicCode: "G",
+    });
+    for (const q of start.questions) {
+      await engine.submitResponse(start.sessionId, {
+        topicCode: "G",
+        questionId: q.questionId,
+        chosenAnswer: q.correctAnswer,
+        isCorrect: true,
+        rawTimeSec: 2,
+      });
+    }
+    const second = await engine.completeTopicSession(start.sessionId);
+    // Same fake-clock day (streak idempotent), no new catalog badge
+    // earned at these aggregates, and the level verdict is computed over
+    // the running totals — the report describes THIS session's deltas.
+    expect(second.celebration.streakIncreased).toBe(false);
+    expect(second.celebration.badgesAwarded).toEqual([]);
+    expect(second.celebration.leveledUp).toBe(
+      levelForXp(xpAfterFirst + second.xpAwarded).level > levelForXp(xpAfterFirst).level,
+    );
+  });
+
+  it("without the gamification seam the report is empty but well-formed (scratch path)", async () => {
+    const bare = createPracticeEnv({ prerequisiteUnit: true, gamification: false });
+    try {
+      const engine = new PracticeSessionEngine(bare.deps);
+      const start = await engine.startTopicSession({
+        studentId: STUDENT,
+        gradeId: GRADE,
+        unitId: UNIT,
+        topicCode: "G",
+      });
+      for (const q of start.questions) {
+        await engine.submitResponse(start.sessionId, {
+          topicCode: "G",
+          questionId: q.questionId,
+          chosenAnswer: q.correctAnswer,
+          isCorrect: true,
+          rawTimeSec: 2,
+        });
+      }
+      const summary = await engine.completeTopicSession(start.sessionId);
+      expect(summary.xpAwarded).toBe(49);
+      expect(summary.celebration.badgesAwarded).toEqual([]);
+      expect(summary.celebration.streakDays).toBe(1);
+      // The scratch transition runs on a throwaway state; the level
+      // verdict mirrors the engine curve over that scratch state.
+      expect(summary.celebration.leveledUp).toBe(levelForXp(49).level > levelForXp(0).level);
+    } finally {
+      bare.dispose();
+    }
+  });
+
+  it("a gate pass reports the gate badges; a gold upgrade reports on the upgraded summary only", async () => {
+    const engine = new PracticeSessionEngine(env.deps);
+    const gate = await engine.startGateSession({
+      studentId: STUDENT,
+      gradeId: GRADE,
+      unitId: UNIT,
+    });
+    for (const q of gate.questions) {
+      await engine.submitResponse(gate.sessionId, {
+        topicCode: q.topicCode,
+        questionId: q.questionId,
+        chosenAnswer: q.correctAnswer,
+        isCorrect: true,
+        rawTimeSec: 2,
+      });
+    }
+    const gateSummary = await engine.completeGateSession(gate.sessionId);
+    expect(gateSummary.celebration.badgesAwarded).toContain("gate-conqueror");
+
+    env.clock.advance(15 * 3_600_000);
+    const verification = await engine.startGoldVerification({
+      studentId: STUDENT,
+      gradeId: GRADE,
+      unitId: UNIT,
+    });
+    let answered = 0;
+    for (const q of verification.questions) {
+      await engine.submitResponse(verification.sessionId, {
+        topicCode: q.topicCode,
+        questionId: q.questionId,
+        chosenAnswer: q.correctAnswer,
+        isCorrect: answered < 4,
+        rawTimeSec: 2,
+      });
+      answered += 1;
+    }
+    const result = await engine.completeGoldVerification(verification.sessionId);
+    expect(result.upgraded).toBe(true);
+    expect(result.celebration?.badgesAwarded).toContain("gold-guardian");
+    // The 15h advance crossed a UTC day: the upgrade's report carries
+    // the streak growth (the Gold ceremony's streak-milestone input).
+    expect(result.celebration?.streakIncreased).toBe(true);
+  });
+});

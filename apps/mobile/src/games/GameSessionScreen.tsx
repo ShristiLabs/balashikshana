@@ -15,11 +15,18 @@ import React, { useCallback, useEffect, useReducer, useRef, useState } from "rea
 import type { ComponentType } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
-import { HEART_COUNT, heartsRegrowProgress } from "@balashikshana/core-engine";
+import { badgeById, HEART_COUNT, heartsRegrowProgress } from "@balashikshana/core-engine";
 import type { AudioCoordinator } from "../audio/coordinator";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
 import { spacing, typeRamp } from "../design/tokens";
+import { useReducedMotion } from "../design/useMotion";
+import { CelebrationStack } from "../mascot/CelebrationStack";
+import type { BadgeBloomBadge } from "../mascot/BadgeBloomView";
+import { MascotView } from "../mascot/MascotView";
+import { useMascot } from "../mascot/useMascot";
+import { planCelebrationMoments } from "../mascot/celebrationEvents";
+import { celebrationLineForTopic } from "../mascot/celebrationLines";
 import { stageForTopicProgress, stageLabelFor } from "../runner/cpaStages";
 import { MotorWarmup } from "../runner/MotorWarmup";
 import { answerTextFor } from "../runner/questionShapes";
@@ -93,6 +100,9 @@ export function GameSessionScreen({
   archetype,
 }: GameSessionScreenProps): React.ReactElement {
   const { colors } = useTheme();
+  const { motion } = useReducedMotion();
+  // #58: the session mascot (reacts to answers; static under reduced motion).
+  const { state: mascot, fire: fireMascot } = useMascot();
   const [state, dispatch] = useReducer(gameReducer, undefined, initialGameState);
   const [exitSheetOpen, setExitSheetOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -365,6 +375,9 @@ export function GameSessionScreen({
           ...(result.hearts ? { hearts: result.hearts } : {}),
         });
         playMoment(isCorrect ? "onCorrect" : "onGentleRetry", activeQuestion.topicId);
+        // #58: the mascot mirrors the feedback (snap-confirm / the warm
+        // growth-reframe bounce — positive framing, never a sad pose).
+        fireMascot({ type: isCorrect ? "answer-correct" : "answer-gentle-retry" });
         if (isCorrect && result.fluencyGrade === 4) {
           playMoment("onSpeedTargetBeat", activeQuestion.topicId);
         }
@@ -389,7 +402,7 @@ export function GameSessionScreen({
         checkingRef.current = false;
       }
     },
-    [state, playMoment],
+    [state, playMoment, fireMascot],
   );
 
   const handleContinue = useCallback(async () => {
@@ -419,11 +432,18 @@ export function GameSessionScreen({
         setRestarting(false);
         if (summary.metGoal) {
           playMoment("onCorrect", currentGameQuestion(state)?.topicId);
+          // #58: the registry's own celebrationPrompts line for the
+          // topic (was a hardcoded string; #45 TTS, deterministic pick).
+          const celebrationTopicId =
+            currentGameQuestion(state)?.topicId ?? state.topicId ?? undefined;
           void audioRef.current
             ?.speak({
-              text: "Great game! You met your goal.",
+              text:
+                celebrationTopicId !== undefined
+                  ? celebrationLineForTopic(celebrationTopicId, 0)
+                  : "Great game! You met your goal.",
               grade: asGradeId(effectiveGradeRef.current),
-              topicId: currentGameQuestion(state)?.topicId ?? undefined,
+              topicId: celebrationTopicId,
               line: "celebration",
             })
             .catch(() => undefined);
@@ -571,10 +591,47 @@ export function GameSessionScreen({
     // never a timer — static + reduced-motion safe).
     const heartsEmpty = summary.hearts?.endReason === "hearts-empty";
     const regrow = heartsRegrow;
+    // #58: the celebration queue. Ledger moments (mastery bloom, new
+    // badges, level-up, streak milestone) lead; a goal-met game with no
+    // ledger moment still gets its mascot celebration. Hearts-empty
+    // keeps the growth reframe ONLY (effort copy, no goal fanfare).
+    const ledgerMoments = planCelebrationMoments({
+      report: summary.celebration,
+      topicMastered: current?.passedTopic === true,
+    });
+    const moments =
+      ledgerMoments.length > 0
+        ? ledgerMoments
+        : summary.metGoal && !heartsEmpty
+          ? [{ moment: "game-goal-met" as const, badgeId: null }]
+          : [];
+    const bloomById: Record<string, BadgeBloomBadge> = {};
+    for (const plan of moments) {
+      if (!plan.badgeId || bloomById[plan.badgeId]) continue;
+      const meta = badgeById(plan.badgeId);
+      if (meta) {
+        bloomById[plan.badgeId] = {
+          id: plan.badgeId,
+          title: meta.title,
+          tier: meta.tier,
+          description: meta.description,
+        };
+      }
+    }
     return (
       <ScrollView
         contentContainerStyle={{ padding: spacing.xxl, gap: spacing.lg, alignItems: "center" }}
       >
+        {moments.length > 0 ? (
+          <CelebrationStack
+            moments={moments}
+            badgeById={bloomById}
+            animationsEnabled={motion.animationsEnabled}
+            topicName={state.topicName ?? null}
+            level={summary.celebration.level}
+            testID="game-celebration"
+          />
+        ) : null}
         <Text style={{ ...typeRamp.h1, color: colors.text, textAlign: "center" }}>
           {heartsEmpty ? "Mistakes grow your brain!" : summary.metGoal ? "Goal met!" : "Nice game!"}
         </Text>
@@ -678,9 +735,15 @@ export function GameSessionScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Session header: progress, provenance + stage chips, exit. */}
+      {/* Session header: mascot, progress, provenance + stage chips, exit. */}
       <View style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+          <MascotView
+            state={mascot}
+            animationsEnabled={motion.animationsEnabled}
+            size={40}
+            testID="game-mascot"
+          />
           <View style={{ flex: 1 }}>
             <ProgressBar
               progress={progressPct / 100}

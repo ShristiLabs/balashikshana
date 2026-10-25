@@ -401,7 +401,9 @@ describe("screen wiring pins (review findings 1-4)", () => {
   it("narration resolves the grade once at mount (finding 3)", () => {
     expect(screenSource).not.toContain("asGradeId(gradeParam ?? null)");
     const narration = screenSource.match(/asGradeId\(effectiveGradeRef\.current\)/g) ?? [];
-    expect(narration.length).toBe(2);
+    // Three sites: warm-up narration, question narration, and the #58
+    // mastery-bloom celebration line — all thread the mount-resolved grade.
+    expect(narration.length).toBe(3);
     expect(screenSource).toContain("effectiveGradeRef.current = gradeId ?? null");
   });
 

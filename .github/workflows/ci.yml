@@ -64,6 +64,9 @@ jobs:
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
         run: python3 scripts/validate-curriculum.py
 
+      - name: Animation Asset Budget Gate (Rive <50KB, zero raster media)
+        run: node scripts/check-animation-assets.mjs
+
       - name: Verify Engine Package (aggregate self-check)
         run: node packages/core-engine/src/verify-engine.mjs
 

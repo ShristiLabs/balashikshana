@@ -546,7 +546,11 @@ describe("structural no-fail source pins (roadmap M4 gate)", () => {
     expect(mounts.length).toBeGreaterThanOrEqual(1);
     expect(screen).toContain("state.heartsRemaining !== null ?");
     expect(screen).not.toMatch(/shouldMountHearts/);
-    expect(screen).toMatch(/import \{ HEART_COUNT, heartsRegrowProgress \}/);
+    // The engine symbols stay engine-imported (#58 added badgeById to
+    // the same import line for the ceremony blooms).
+    expect(screen).toMatch(
+      /import \{[^}]*HEART_COUNT[^}]*heartsRegrowProgress[^}]*\} from "@balashikshana\/core-engine"/,
+    );
   });
 
   it("the reframe screen is growth-mindset copy, never punitive", () => {
