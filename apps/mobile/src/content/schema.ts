@@ -152,6 +152,33 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
       `ALTER TABLE attempt_log ADD COLUMN game_fallback INTEGER NOT NULL DEFAULT 0`,
     ],
   },
+  {
+    // Migration 5 (issue #55 — gamification ledger, roadmap D9) adds the
+    // local OPTIMISTIC reward projection: one row per student carrying
+    // the engine-derived XP total, coin + streak counters, the best
+    // beat-the-target share (speed badge input), and the earned badge
+    // ids. Every value is computed by the SAME @balashikshana/core-engine
+    // reward functions the server's ledger materialization runs, so the
+    // local state is provisional-until-sync by construction (D8/D9
+    // doctrine; the #48 snapshot + the ledger endpoint confirm it). No
+    // attempt_log or progress-table change; append-only contracts are
+    // untouched.
+    version: 5,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS gamification_state (
+         student_id TEXT PRIMARY KEY,
+         total_xp INTEGER NOT NULL DEFAULT 0,
+         star_coins INTEGER NOT NULL DEFAULT 50,
+         streak_days INTEGER NOT NULL DEFAULT 1,
+         last_active_day_key TEXT NOT NULL DEFAULT '',
+         best_beat_target_pct REAL NOT NULL DEFAULT 0,
+         sessions_completed INTEGER NOT NULL DEFAULT 0,
+         earned_badges_json TEXT NOT NULL DEFAULT '[]',
+         provisional INTEGER NOT NULL DEFAULT 1,
+         updated_at INTEGER NOT NULL DEFAULT 0
+       )`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";

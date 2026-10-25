@@ -15,7 +15,7 @@
  * go to /gate, everything actionable goes to /practice, LOCKED is
  * disabled.
  */
-import React, { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -32,6 +32,8 @@ import { spacing, typeRamp } from "../design/tokens";
 import { useReducedMotion } from "../design/useMotion";
 import { getNativePracticeDeps } from "../practice/nativePractice";
 import { getSyncController, subscribeContentOutdated } from "../sync/SyncBootstrap";
+import { GamificationHeaderStrip } from "../gamification/GamificationHeaderStrip";
+import { useGamificationSummary } from "../gamification/useGamificationSummary";
 import { GardenHealthView } from "./GardenHealth";
 import { GradeSwitcher } from "./GradeSwitcher";
 import { JourneyPath } from "./JourneyPath";
@@ -72,6 +74,10 @@ export function JourneyScreen(): React.ReactElement {
   );
 
   const identityRef = useRef<{ studentId: string | null }>({ studentId: null });
+  // #55: the signed-in student as STATE so the gamification strip's hook
+  // can key off it (identityRef is render-stable by design).
+  const [studentId, setStudentId] = useState<string | null>(null);
+  const gamification = useGamificationSummary(studentId);
   // The LIVE selected grade (not a render closure): the mount hydration
   // can resolve long after the child switched grades, and its reload
   // must target whatever grade is selected NOW.
@@ -119,6 +125,7 @@ export function JourneyScreen(): React.ReactElement {
       const identity = await loadJourneyIdentity();
       if (cancelled) return;
       identityRef.current.studentId = identity.studentId;
+      setStudentId(identity.studentId);
       const slots = await loadGradeSlots();
       if (cancelled) return;
       const activeGrade = identity.gradeId ?? slots[0]?.gradeId ?? "";
@@ -274,6 +281,7 @@ export function JourneyScreen(): React.ReactElement {
           activeGrade={state.activeGrade}
           onSelect={handleGradeSelect}
         />
+        {gamification ? <GamificationHeaderStrip summary={gamification} /> : null}
         <GardenHealthView garden={model.garden} />
       </View>
       <ScrollView

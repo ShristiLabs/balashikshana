@@ -103,11 +103,15 @@ describe("SQL mutation surface of both adapters", () => {
       expect(insertTables.length).toBeGreaterThan(0);
       // The pack-fixture builder in the helper also inserts pack rows —
       // allowed only in the helper, never in production code.
+      // #55: gamification_state is the optimistic reward projection's
+      // upsert target — the same projector-owned full-row write doctrine
+      // as the two progress tables.
       const allowed = label.startsWith("tests/")
         ? [
             "attempt_log",
             "topic_progress",
             "unit_progress",
+            "gamification_state",
             "pack_meta",
             "pack_info",
             "grades",
@@ -115,7 +119,7 @@ describe("SQL mutation surface of both adapters", () => {
             "skill_topics",
             "practice_questions",
           ]
-        : ["attempt_log", "topic_progress", "unit_progress"];
+        : ["attempt_log", "topic_progress", "unit_progress", "gamification_state"];
       for (const table of insertTables) expect(allowed).toContain(table);
       // attempt_log is INSERT ... VALUES with NO conflict clause.
       const attemptSegment = source.split("INSERT INTO attempt_log")[1] ?? "";
@@ -136,9 +140,13 @@ describe("SQL mutation surface of both adapters", () => {
       expect(source).not.toMatch(/DELETE FROM attempt_log/i);
       expect(source).not.toMatch(/DELETE FROM (topic|unit)_progress/i);
       expect(source).not.toMatch(/UPDATE (topic|unit)_progress SET/i);
-      // Exactly the two progress-table upserts carry conflict clauses.
-      const conflicts = [...source.matchAll(/ON CONFLICT\(student_id, (topic_id|unit_id)\)/g)];
-      expect(conflicts.length).toBeGreaterThanOrEqual(2);
+      // Exactly the progress tables + the gamification projection row
+      // carry conflict clauses (projector-owned upserts).
+      const conflicts = [
+        ...source.matchAll(/ON CONFLICT\(student_id, (topic_id|unit_id)\)/g),
+        ...source.matchAll(/ON CONFLICT\(student_id\) DO UPDATE/g),
+      ];
+      expect(conflicts.length).toBeGreaterThanOrEqual(3);
     });
   }
 

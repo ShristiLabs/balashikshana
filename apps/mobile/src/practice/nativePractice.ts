@@ -21,6 +21,8 @@ import * as SQLite from "expo-sqlite";
 import { CONTENT_DB_NAME, CONTENT_DB_MIGRATIONS } from "../content/schema";
 import { contentPackDirectory } from "../content/nativeContent";
 import type { AttemptLogRow, SyncStorage } from "../sync/types";
+import type { GamificationState } from "../gamification/types";
+import type { GamificationStorage } from "../gamification/storage";
 import type {
   AttemptInput,
   GradeSrPolicy,
@@ -30,6 +32,7 @@ import type {
   PackUnitRow,
   PracticeDeps,
   PracticeStorage,
+  SessionType,
   TopicProgressRecord,
   UnitProgressRecord,
 } from "./types";
@@ -369,6 +372,104 @@ function createStorage(): SyncStorage {
 }
 
 // ----------------------------------------------------------------------
+// Gamification storage (issue #55, schema v5) — same lifecycle database,
+// same single-writer model. The row is the OPTIMISTIC local projection
+// (provisional until the #48 snapshot / ledger endpoint confirms).
+// ----------------------------------------------------------------------
+
+type GamificationSqlRow = {
+  student_id: string;
+  total_xp: number;
+  star_coins: number;
+  streak_days: number;
+  last_active_day_key: string;
+  best_beat_target_pct: number;
+  sessions_completed: number;
+  earned_badges_json: string;
+  provisional: number;
+  updated_at: number;
+};
+
+function gamificationRowToState(row: GamificationSqlRow): GamificationState {
+  let earnedBadges: string[] = [];
+  try {
+    const parsed = JSON.parse(row.earned_badges_json || "[]") as unknown;
+    if (Array.isArray(parsed))
+      earnedBadges = parsed.filter((b): b is string => typeof b === "string");
+  } catch {
+    earnedBadges = [];
+  }
+  return {
+    studentId: row.student_id,
+    totalXp: row.total_xp,
+    starCoins: row.star_coins,
+    streakDays: row.streak_days,
+    lastActiveDayKey: row.last_active_day_key,
+    bestBeatTargetPct: row.best_beat_target_pct,
+    sessionsCompleted: row.sessions_completed,
+    earnedBadges,
+    provisional: row.provisional === 1,
+    updatedAt: row.updated_at,
+  };
+}
+
+function createGamificationStorage(): GamificationStorage {
+  return {
+    async getGamificationState(studentId) {
+      const db = await lifecycleDb();
+      const rows = await db.getAllAsync<GamificationSqlRow>(
+        `SELECT student_id, total_xp, star_coins, streak_days, last_active_day_key,
+                best_beat_target_pct, sessions_completed, earned_badges_json, provisional, updated_at
+         FROM gamification_state WHERE student_id = ?`,
+        [studentId],
+      );
+      return rows[0] ? gamificationRowToState(rows[0]) : null;
+    },
+
+    async upsertGamificationState(state) {
+      const db = await lifecycleDb();
+      await db.runAsync(
+        `INSERT INTO gamification_state (
+           student_id, total_xp, star_coins, streak_days, last_active_day_key,
+           best_beat_target_pct, sessions_completed, earned_badges_json, provisional, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(student_id) DO UPDATE SET
+           total_xp = excluded.total_xp,
+           star_coins = excluded.star_coins,
+           streak_days = excluded.streak_days,
+           last_active_day_key = excluded.last_active_day_key,
+           best_beat_target_pct = excluded.best_beat_target_pct,
+           sessions_completed = excluded.sessions_completed,
+           earned_badges_json = excluded.earned_badges_json,
+           provisional = excluded.provisional,
+           updated_at = excluded.updated_at`,
+        [
+          state.studentId,
+          state.totalXp,
+          state.starCoins,
+          state.streakDays,
+          state.lastActiveDayKey,
+          state.bestBeatTargetPct,
+          state.sessionsCompleted,
+          JSON.stringify(state.earnedBadges),
+          state.provisional ? 1 : 0,
+          state.updatedAt,
+        ],
+      );
+    },
+
+    async playedUnitIds(studentId, sessionType: SessionType) {
+      const db = await lifecycleDb();
+      const rows = await db.getAllAsync<{ unit_id: string }>(
+        "SELECT DISTINCT unit_id FROM attempt_log WHERE student_id = ? AND session_type = ? AND unit_id <> ''",
+        [studentId, sessionType],
+      );
+      return rows.map((row) => row.unit_id);
+    },
+  };
+}
+
+// ----------------------------------------------------------------------
 // Query-only pack reader
 // ----------------------------------------------------------------------
 
@@ -497,7 +598,14 @@ export function createNativePracticeDeps(): PracticeDeps {
     newSessionId: (studentId: string) =>
       `${studentId}-s${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     motorBaselineSec: DEFAULT_MOTOR_BASELINE_SEC,
+    // #55: the optimistic local reward ledger rides the same lifecycle DB.
+    gamificationStorage: createGamificationStorage(),
   };
+}
+
+/** #55 seam: the gamification storage alone (screens + sync adoption). */
+export function getNativeGamificationStorage(): GamificationStorage {
+  return createGamificationStorage();
 }
 
 let engineSingleton: PracticeDeps | null = null;

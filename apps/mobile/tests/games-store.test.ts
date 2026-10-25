@@ -117,6 +117,8 @@ describe("gameReducer", () => {
         speed: { targetSec: 5.5, medianRawSec: 2, medianCognitiveSec: 1, beatTargetPct: 50 },
         provenanceCounts: { current: 1, contrastive: 1, "spaced-review": 0 },
         perTopic: [],
+        xpAwarded: 0,
+        coinsAwarded: 0,
       },
     });
     expect(state.phase).toBe("summary");
@@ -259,6 +261,8 @@ describe("gameReducer", () => {
           crowns: 2,
         },
       ],
+      xpAwarded: 0,
+      coinsAwarded: 0,
     };
     state = gameReducer(state, { type: "summary-ready", sessionId: "sess-1", summary });
     expect(state.phase).toBe("summary");

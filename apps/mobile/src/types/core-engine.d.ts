@@ -158,4 +158,68 @@ declare module "@balashikshana/core-engine" {
     topic: { code: string; name: string; assets?: Record<string, unknown> },
     count?: number,
   ): EngineGeneratedQuestion[];
+
+  // --- Gamification reward rules (issue #55, roadmap D9; mirrors
+  // --- packages/core-engine/src/rewards.mjs exactly) ----------------------
+
+  export const XP_PER_CORRECT_ATTEMPT_BY_GRADE: Readonly<Record<number, number>>;
+  export const TOPIC_PASS_XP_BASE: number;
+  export const XP_PER_CROWN: number;
+  export const GATE_PASS_XP: number;
+  export const GOLD_UPGRADE_XP: number;
+  export const GATE_PASS_COINS: number;
+  export const MAX_LEVEL: number;
+
+  export interface RewardAttemptInput {
+    isCorrect: boolean;
+    fluencyGrade: number;
+  }
+
+  export function xpForAttempt(attempt: RewardAttemptInput): number;
+  export function awardXpForAttempts(attempts?: RewardAttemptInput[]): number;
+  export function awardXpForSessionOutcome(params: {
+    sessionType: string;
+    passed?: boolean;
+    crowns?: number;
+    goldUpgraded?: boolean;
+  }): number;
+  export function coinsForTopicPass(crowns?: number): number;
+  export function deriveSessionRewards(params: {
+    sessionType: string;
+    attempts?: RewardAttemptInput[];
+    passed?: boolean;
+    crowns?: number;
+    goldUpgraded?: boolean;
+  }): { attemptXp: number; sessionBonusXp: number; totalXp: number; coins: number };
+  export function xpThresholdForLevel(level: number): number;
+  export function levelForXp(totalXp: number): {
+    level: number;
+    maxLevel: number;
+    maxed: boolean;
+    levelFloorXp: number;
+    nextLevelXp: number | null;
+    xpIntoLevel: number;
+    xpToNextLevel: number | null;
+  };
+  export function dayKeyForMs(ms: number, utcOffsetMinutes?: number): string;
+  export function dayKeysApart(dayKeyA: string, dayKeyB: string): number;
+  export function nextStreakState(params: {
+    currentStreakDays?: number;
+    lastActiveDayKey?: string;
+    sessionDayKey?: string;
+  }): { streakDays: number; lastActiveDayKey: string; changed: boolean };
+  export function beatTargetSharePct(rawTimeSecs?: number[], targetSec?: number): number;
+
+  export interface EngineBadge {
+    id: string;
+    title: string;
+    description: string;
+    tier: "bronze" | "silver" | "gold";
+    metric: string;
+    gte: number;
+  }
+
+  export const BADGE_CATALOG: readonly EngineBadge[];
+  export function badgeById(id: string): EngineBadge | undefined;
+  export function evaluateBadges(context?: Record<string, number>): string[];
 }

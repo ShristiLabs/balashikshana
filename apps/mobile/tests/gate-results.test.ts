@@ -37,6 +37,8 @@ function summaryFixture(overrides: Partial<GateSessionSummary> = {}): GateSessio
     ],
     remediationMode: "NONE",
     remediationPrescription: "Mastery Achieved!",
+    xpAwarded: 0,
+    coinsAwarded: 0,
     conditions: {
       overallAccuracyPassed: true,
       perTopicFloorPassed: false,

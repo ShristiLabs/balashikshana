@@ -224,6 +224,15 @@ The reflex and phonics pack: `BubblePopBlitzGame` + `MonsterPhonemeFeederGame` r
 - **Single-flight submits:** the session screen's check path carries an in-flight guard — a reflex double-tap inside the submit window can no longer double-record an item.
 - Architecture detail: `docs/architecture.md` section 2.10; coverage checklist: [`docs/games-coverage.md`](./docs/games-coverage.md).
 
+### 16. Gamification Ledger — XP, Levels, Badges, Crowns/Coins, Streaks (issue #55)
+The roadmap D9 reward layer: all reward math lives in `packages/core-engine` (`src/rewards.mjs`, zero-dependency pure functions + the badge catalog as frozen data), so the server's authoritative ledger and the client's optimistic local projection compute IDENTICAL rewards from the same append-only attempt stream — offline and online agree by construction, and no reward is ever lost to a network failure (rewards ride the existing #48 enqueue/replay queue; a replayed batch credits nothing twice, DB-enforced).
+
+- **What a child earns:** per-attempt XP fluency-weighted by the engine's 4-point grade scale (correct answers earn 1-3 XP by grade; incorrect answers earn nothing, never a penalty), a pass bonus for every passed topic/game session (`10 + 5 per crown`), a flat gate-pass bonus (25 XP + 50 coins), and a Gold-key upgrade bonus (20 XP). Coins keep their historical formulas (`15 + 5 per crown` topic pass; 50 gate pass) — now engine-owned. The level curve (`25 x level x (level-1)` cumulative XP, cap 50) makes early levels arrive within a session or two.
+- **Badges:** a 14-badge catalog as engine DATA (threshold specs over nine aggregate metrics — sessions, topics, three-crown topics, perfect topics, earned Silver/Gold keys, best beat-the-target share, coins, streak days). The speed badge ("Lightning Learner") consumes `beatTargetSharePct` — the share of a PASSING topic group's CORRECT answers at-or-below the topic's own registry fluency target (fast-wrong answers carry no speed credit). Key badges count only keys the child's own gate/verification sessions earned — prerequisite placement credit never awards badges.
+- **Server surface (additive):** migration 007 (`student_xp_events` with a per-student dedupe key, `student_badge_awards`, `student_gamification_state`; ledger rows in [`docs/database-migrations.md`](./docs/database-migrations.md)), reward writers wired into BOTH the online completions and the #48 sync replays in one transaction, and the kid-facing read `GET /api/students/{studentId}/gamification/ledger` (XP total, level shape, coins, streak, badges with catalog metadata, crown summary, recent XP events).
+- **Client:** local migration 5 (one `gamification_state` row — the optimistic ledger, provisional until the server confirms), the pure projector wired into all four session completions (summaries now carry `xpAwarded`/`coinsAwarded`), and the journey home's `GamificationHeaderStrip` (level + XP bar + coins + day streak + badge count; "Syncing" while provisional; design tokens, no emoji, reduced-motion safe). Badge displays and celebrations land with #56-#58.
+- Architecture detail: `docs/architecture.md` section 2.11.
+
 
 ---
 

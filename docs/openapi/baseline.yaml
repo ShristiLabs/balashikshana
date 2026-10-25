@@ -163,6 +163,46 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/students/{studentId}/gamification/ledger:
+    get:
+      tags: [gamification]
+      operationId: getGamificationLedger
+      summary: Kid-facing gamification ledger — XP, level, coins, streak, badges, crowns (issue #55, D9)
+      description: |
+        Student-scoped read exactly like GET /api/students/{studentId}:
+        student PIN sessions and child-device tokens may read THEIR bound
+        student's ledger; parent tokens get 403 wrong-token-type
+        (parent-facing reward views are a later milestone); archived
+        children are frozen out (403 child-archived). Read-only — no
+        consent gate (consent gates writes).
+
+        Every value is derived by packages/core-engine reward rules
+        (roadmap D9: the same functions run on-device for the optimistic
+        local ledger, so offline and server agree by construction). The
+        XP ledger, badge awards, and streak state are materialized
+        idempotently from the append-only attempt stream at replay time
+        (online handlers and the /api/sync/attempts reconciler).
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: The student's gamification ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GamificationLedger"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
   /api/students/{studentId}/calibrate:
     post:
       tags: [students]
@@ -1148,6 +1188,12 @@ paths:
                     $ref: "#/components/schemas/StudentProfile"
                   summary:
                     $ref: "#/components/schemas/StudentSummary"
+                  xpAwarded:
+                    type: integer
+                    description: Engine-derived XP credited for this session (issue #55, additive).
+                  coinsAwarded:
+                    type: integer
+                    description: Engine-derived star coins awarded for this session (issue #55, additive; same amounts as pre-#55).
         "400":
           $ref: "#/components/responses/Validation"
         "401":
@@ -1213,6 +1259,12 @@ paths:
                         type: number
                   spacedRepetition:
                     $ref: "#/components/schemas/SpacedRepetitionUpdate"
+                  xpAwarded:
+                    type: integer
+                    description: Engine-derived XP credited for this gate session (issue #55, additive).
+                  coinsAwarded:
+                    type: integer
+                    description: Engine-derived star coins awarded for this gate session (issue #55, additive; 50 on pass, as pre-#55).
         "400":
           $ref: "#/components/responses/Validation"
         "401":
@@ -1426,6 +1478,124 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    GamificationLevelInfo:
+      type: object
+      required: [level, maxLevel, maxed, levelFloorXp, xpIntoLevel]
+      description: Engine level-curve projection of a cumulative XP total (issue #55).
+      properties:
+        level:
+          type: integer
+          minimum: 1
+        maxLevel:
+          type: integer
+        maxed:
+          type: boolean
+        levelFloorXp:
+          type: integer
+        nextLevelXp:
+          type:
+            - integer
+            - "null"
+        xpIntoLevel:
+          type: integer
+        xpToNextLevel:
+          type:
+            - integer
+            - "null"
+
+    GamificationBadgeAward:
+      type: object
+      required: [id, title, scope, awardedAt]
+      description: An earned badge; metadata comes from the engine's badge catalog.
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        tier:
+          type:
+            - string
+            - "null"
+          enum: [bronze, silver, gold, null]
+        scope:
+          type: string
+        awardedAt:
+          type: string
+          format: date-time
+
+    GamificationXpEvent:
+      type: object
+      required: [sessionType, sessionId, xpAmount, reason, awardedAt]
+      properties:
+        sessionType:
+          type: string
+          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]
+        sessionId:
+          type: string
+        unitId:
+          type:
+            - string
+            - "null"
+        topicId:
+          type:
+            - string
+            - "null"
+        xpAmount:
+          type: integer
+        reason:
+          type: string
+          enum: [attempt, topic-pass, gate-pass, gold-upgrade]
+        awardedAt:
+          type: string
+          format: date-time
+
+    GamificationLedger:
+      type: object
+      required: [studentId, totalXp, level, starCoins, streakDays, bestBeatTargetPct, badges, badgesAvailable, recentXpEvents, crowns, generatedAt]
+      properties:
+        studentId:
+          type: string
+        totalXp:
+          type: integer
+        level:
+          $ref: "#/components/schemas/GamificationLevelInfo"
+        starCoins:
+          type: integer
+        streakDays:
+          type: integer
+        bestBeatTargetPct:
+          type: number
+          description: Best beat-the-target share over the student's game topic-groups (speed badge input).
+        badges:
+          type: array
+          items:
+            $ref: "#/components/schemas/GamificationBadgeAward"
+        badgesAvailable:
+          type: integer
+          description: Count of DISTINCT badges already earned (catalog size minus available remains derivable client-side).
+        recentXpEvents:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/GamificationXpEvent"
+        crowns:
+          type: object
+          required: [topicsWithCrowns, threeCrownTopics, totalCrowns]
+          properties:
+            topicsWithCrowns:
+              type: integer
+            threeCrownTopics:
+              type: integer
+            totalCrowns:
+              type: integer
+        generatedAt:
+          type: string
+          format: date-time
+
     ContentPackManifestEntry:
       type: object
       required:
