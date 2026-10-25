@@ -206,15 +206,35 @@ Instead of static multiple-choice questions that children memorize after two att
 
 ## 3. Parent & Educator Analytics Portal
 
-Accessible behind a COPPA-compliant Parental Gate:
-1. **Unit Progression Map:** Visual view of all 130 US curriculum units across Pre-K to Grade 3 (`Math`, `ELA`, `Science`, `Social Studies`).
-2. **Accuracy vs. Speed Quadrant Chart:**
-   - Plots each Skill Topic on a 2D quadrant (`Accuracy %` on Y-axis, `Response Speed` on X-axis) so parents immediately see:
-     - *Top-Right (Green):* Fluent Mastery (Fast & Accurate)
-     - *Top-Left (Yellow):* Understands Concept, Needs Speed Practice (Accurate but Slow)
-     - *Bottom-Right (Orange):* Rushing / Guessing (Fast but Inaccurate)
-     - *Bottom-Left (Red):* Needs Concept Review (Slow & Inaccurate)
-3. **US Standards Crosswalk:** Shows the exact Common Core / NGSS / Preschool standard code (`e.g., Grade 2 Math > 2.NBT.B.5: Fluently add and subtract within 100`) corresponding to every unit and sub-skill.
+Delivered in M5 (issue #61, roadmap D4/D5): a separate lightweight web app at `apps/parent-portal` plus the `/api/portal/*` route family — deliberately NEVER linked from any child surface (no route, URL, or nav path from the Expo app or the :4200 web harness; D5 child-surface isolation). The portal is how the parent reads their children's learning telemetry and sets the controls the SERVER enforces on the child's device surfaces.
+
+### 3.1 Stack decision — Vite SPA, right-sized (documented rationale)
+
+The portal is a **Vite + React 19 + TypeScript (strict) SPA** with its own `package-lock.json` (the `apps/mobile` workspace precedent). Rationale vs the alternatives: a parent portal is a *thin authenticated client* of the existing Fastify API — every screen sits behind login, so there is no SSR, no SEO, and no public content for a framework like Next.js to render server-side; an SPA keeps the deployed surface to static files with zero server runtime of its own. No UI kit — hand-rolled components over `src/tokens.css` design tokens mirroring the repo's token philosophy. Charts are hand-rolled SVG (the quadrant is positioned dots, the weekly view is bars — zero chart dependencies), which also satisfies the issue's no-third-party-SDK acceptance (first-party code only; bundle audited clean). Dev origin is :4300 (`vite --port 4300 --strictPort`), added additively to the API's explicit CORS allowlist (env-driven; no wildcard, production guard intact).
+
+### 3.2 Auth doctrine — parent tokens only, ownership structural
+
+Every `/api/portal/*` route requires a **parent session token** through the #40 `requireParentAuth`: student PIN sessions and child-device tokens fail **403 wrong-token-type** (token-kind confusion tests extend the #40 middleware), anonymous callers are 401. Ownership is resolved SERVER-SIDE through `parent_children` — a child id in the path is only ever read after binding it to the caller's parent id, and another parent's child id returns the same uniform 404 as a nonexistent id (anti-enumeration; the repo's scoped-lookup convention). The SPA's token storage is a documented decision (`src/auth.ts`): **in-memory + a sessionStorage mirror** — survives an in-tab reload, never persists to disk across browser sessions, unreachable from other origins. localStorage was rejected (a disk-persistent 7-day credential; one XSS becomes week-long access) and cookies rejected (the API has no cookie/CSRF surface; no new auth semantics). On 401 the app attempts exactly ONE rotation via the #40 refresh endpoint, then returns to login — no silent retries.
+
+### 3.3 Enforcement architecture — one source of truth, server-side
+
+`services/api/enforcement.mjs` is the single source for reading a child's settings and deciding what they gate; the portal routes, the sync surfaces, and the question-serving routes all import it, so limits can never fork between surfaces.
+
+- **Settings resolution:** through the CLAIMED binding only (`parent_children.status = 'claimed'`) — an unclaimed/archived child has no reachable row and platform defaults apply (no limit, nothing restricted, reminders off). The `LIMIT 1` read is deterministic because migration 005's partial unique index `uq_parent_children_claimed_student` makes exactly-one-claimant a database constraint. Migration 010's `portal_child_settings` carries the values (`daily_limit_minutes` NULL-or-5–480, `restricted_subjects` JSON array, `grade_ceiling` FK, the #57 reminder mirror).
+- **Time limits (UTC day):** "over the limit" means the child's RECORDED active time for today's UTC day is at/over the cap — then `POST /api/sync/attempts` refuses any batch adding today-dated sessions (429 `time-limit-exceeded` + `Retry-After`), while pure backfill of earlier days always lands and the crossing session itself landed in full (attempts are never split; D8 append-only intact).
+- **Content controls gate SERVING, never the ledger:** a restricted subject returns the question routes' same shape with ZERO questions (`contentRestricted`), the pack INDEX filters by grade ceiling for child callers, and above-ceiling pack artifacts are a 403 for child callers (byte-identical for anonymous callers). Controls never rewrite or delete recorded attempts.
+- **Fail-closed grade vocabulary:** `GRADE_ORDER` is a frozen duplicate of the grades registry; if the registry ever grows a grade the list does not know, an unknown ceiling string RESTRICTS and an unknown unit gradeId is treated as ABOVE the ceiling — `indexOf`'s -1 can never widen access.
+- **Honest signed-pack limit:** subject controls cannot be carved out of a SIGNED pack artifact (verification would break); they are enforced at question-serving instead. Pack artifacts are public content under the existing distribution doctrine — devices verify signatures; parental controls gate the child's experience, not curriculum secrecy.
+
+### 3.4 Analytics — server-side aggregation, pure math
+
+`services/api/portal-analytics.mjs` owns MEANING as pure, unit-tested functions (the `derivations.mjs` split: SQL fetches grouped rows from `student_question_attempts`; math never touches the db). Definitions are stable contracts:
+
+- **Quadrant per skill topic** (architecture sec 3's chart, implemented): Y = accuracy %, split at the **80% platform pass line**; X = **median cognitive speed**, split at the topic's unit target speed (`units.gate_max_speed_sec` — the same fluency bar crowns use, so "fast" means at/under target). Top-right green fluent, top-left yellow accurate-but-slow, bottom-right orange rushing, bottom-left red needs-review. A topic with no usable target speed is still plotted but classified null (rendered gray — no invented split).
+- **Weekly view:** Monday-anchored **ISO weeks in UTC** (the ledger stores clock-adjusted UTC ISO strings); "active time" is summed `cognitive_time_sec` — the ability-neutral measure (raw time systematically overstates time-on-task for younger/slower-motor kids). Weeks with no activity are **zero-filled data, never errors**; a topic counts as mastered in the week of its FIRST passing (>=80%) session.
+- **parentSettings mirror:** `GET /api/sync/progress` carries an advisory `parentSettings` block (time limits incl. `exceeded`, content controls, notification defaults) so an offline-first device can gate locally BEFORE burning an upload — advisory only; the server-side refusals in 3.3 are the enforcement. The #57 reminder stays DEVICE-LOCAL per D5: the portal row is the parent-owned default; a device that wants it consumes the advisory block, and the device never uploads reminder state.
+
+The US standards crosswalk (per-topic Common Core/NGSS codes) is carried by the curriculum registry and surfaced through the curriculum API/docs; the portal does not re-render it (M5 scope — see roadmap).
 
 ---
 

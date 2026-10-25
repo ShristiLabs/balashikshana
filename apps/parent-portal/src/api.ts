@@ -1,0 +1,116 @@
+// Thin fetch client for the portal API surface. No SDK, no interceptors
+// framework — the portal talks to exactly one API with one auth shape.
+//
+// - All requests are same-contract JSON; errors are RFC 9457
+//   problem+json bodies (the API's universal envelope) surfaced as
+//   ApiError with the problem's title/detail.
+// - 401s raise UnauthorizedError so App can run its one-shot refresh
+//   rotation and otherwise return to the login screen.
+// - The API never sees credentials beyond the bearer header; no secrets
+//   exist in this bundle (the token lives in auth.ts's store).
+
+import type {
+  PortalChildrenResponse,
+  PortalQuadrantResponse,
+  PortalSettingsPutResponse,
+  PortalSettingsResponse,
+  PortalWeeklyResponse,
+  ParentPublic
+} from "./types";
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly type?: string;
+  constructor(status: number, title: string, detail: string, type?: string) {
+    super(detail || title);
+    this.name = "ApiError";
+    this.status = status;
+    this.type = type;
+  }
+}
+
+export class UnauthorizedError extends ApiError {
+  constructor() {
+    super(401, "Unauthorized", "Your session has expired. Please log in again.");
+    this.name = "UnauthorizedError";
+  }
+}
+
+/** Type-safe check for catch blocks over `unknown`. */
+export function isUnauthorizedError(err: unknown): boolean {
+  return err instanceof UnauthorizedError;
+}
+
+const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:4000";
+
+async function call<T>(path: string, init: { method?: string; token?: string | null; body?: unknown } = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (init.body !== undefined) headers["Content-Type"] = "application/json";
+  if (init.token) headers.Authorization = `Bearer ${init.token}`;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: init.method ?? "GET",
+      headers,
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined
+    });
+  } catch {
+    throw new ApiError(0, "Network error", "Could not reach the server. Check your connection and try again.");
+  }
+  if (res.status === 401) throw new UnauthorizedError();
+  if (!res.ok) {
+    let problem: Record<string, unknown> = {};
+    try {
+      problem = (await res.json()) as Record<string, unknown>;
+    } catch {
+      // Non-JSON error body — fall through with defaults.
+    }
+    throw new ApiError(
+      res.status,
+      typeof problem.title === "string" ? problem.title : `Error ${res.status}`,
+      typeof problem.detail === "string" ? problem.detail : `Request failed (${res.status}).`,
+      typeof problem.type === "string" ? problem.type : undefined
+    );
+  }
+  return (await res.json()) as T;
+}
+
+export interface LoginResult {
+  token: string;
+  parent: ParentPublic;
+}
+
+export const api = {
+  baseUrl: BASE_URL,
+  login(email: string, password: string): Promise<LoginResult> {
+    return call<LoginResult>("/api/parents/login", { method: "POST", body: { email, password } });
+  },
+  refresh(token: string): Promise<{ token: string }> {
+    return call<{ token: string }>("/api/parents/refresh", { method: "POST", token });
+  },
+  logout(token: string): Promise<{ ok: boolean }> {
+    return call<{ ok: boolean }>("/api/parents/logout", { method: "POST", token });
+  },
+  children(token: string): Promise<PortalChildrenResponse> {
+    return call<PortalChildrenResponse>("/api/portal/children", { token });
+  },
+  quadrant(token: string, studentId: string): Promise<PortalQuadrantResponse> {
+    return call<PortalQuadrantResponse>(`/api/portal/children/${encodeURIComponent(studentId)}/analytics/quadrant`, { token });
+  },
+  weekly(token: string, studentId: string, weeks = 8): Promise<PortalWeeklyResponse> {
+    return call<PortalWeeklyResponse>(
+      `/api/portal/children/${encodeURIComponent(studentId)}/analytics/weekly?weeks=${weeks}`,
+      { token }
+    );
+  },
+  settings(token: string, studentId: string): Promise<PortalSettingsResponse> {
+    return call<PortalSettingsResponse>(`/api/portal/children/${encodeURIComponent(studentId)}/settings`, { token });
+  },
+  putSettings(token: string, studentId: string, body: import("./types").ChildSettings): Promise<PortalSettingsPutResponse> {
+    return call<PortalSettingsPutResponse>(`/api/portal/children/${encodeURIComponent(studentId)}/settings`, {
+      method: "PUT",
+      token,
+      body
+    });
+  }
+};

@@ -91,7 +91,8 @@ describe("migration tracking", () => {
         "006_sync_attempt_ledger",
         "007_gamification_ledger",
         "008_hearts_session_outcomes",
-        "009_placement_records"
+        "009_placement_records",
+        "010_portal_child_settings"
       ]
     );
   });

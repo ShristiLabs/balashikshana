@@ -510,11 +510,13 @@ describe("migration 002 reversibility", () => {
   // constraints on top of that, 005 (issue #42) layers the child
   // profiles/device sessions, 006 (issue #48) layers the sync attempt
   // ledger, 007 (issue #55) layers the gamification ledger, and 008
-  // (issue #56) layers the hearts session outcomes, so the rollback
-  // removes all seven post-001 migrations (in order) and the up
+  // (issue #56) layers the hearts session outcomes, 009 (issue #60) layers
+  // the placement records, and 010 (issue #61) layers the portal child
+  // settings, so the rollback
+  // removes all nine post-001 migrations (in order) and the up
   // restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..009 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 8 });
+  test("down removes exactly the 002..010 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 9 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -535,7 +537,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('student_badge_awards') AS student_badge_awards,
            to_regclass('student_gamification_state') AS student_gamification_state,
            to_regclass('student_session_outcomes') AS student_session_outcomes,
-           to_regclass('student_placement_records') AS student_placement_records`
+           to_regclass('student_placement_records') AS student_placement_records,
+           to_regclass('portal_child_settings') AS portal_child_settings`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -552,7 +555,8 @@ describe("migration 002 reversibility", () => {
       student_badge_awards: null,
       student_gamification_state: null,
       student_session_outcomes: null,
-      student_placement_records: null
+      student_placement_records: null,
+      portal_child_settings: null
     });
 
     // 005's students.status column is gone with the rollback.
@@ -575,9 +579,10 @@ describe("migration 002 reversibility", () => {
         "006_sync_attempt_ledger",
         "007_gamification_ledger",
         "008_hearts_session_outcomes",
-        "009_placement_records"
+        "009_placement_records",
+        "010_portal_child_settings"
       ],
-      "up must re-apply 002 through 009"
+      "up must re-apply 002 through 010"
     );
 
     const back = (

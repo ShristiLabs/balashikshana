@@ -13,10 +13,20 @@
  * canonically formed, whose artifact is missing, or whose on-disk size
  * drifted from the manifest is a build/publish error and yields 503
  * problem+json rather than serving suspect bytes.
+ *
+ * #61 parent grade ceiling — OPTIONAL child bearer: when the caller
+ * presents a valid student/child-device token, the parent's grade
+ * ceiling is enforced (index filtered; an above-ceiling artifact is a
+ * 403 problem). Anonymous callers are byte-identical to before: packs
+ * are public artifacts (the device verifies signatures), and parental
+ * controls gate the child's authenticated experience — subject
+ * restrictions live INSIDE signed packs and cannot be carved out
+ * server-side; they gate question-serving instead (server.mjs).
  */
 import fs from "node:fs";
 import path from "node:path";
 import fp from "fastify-plugin";
+import { resolveOptionalStudentId, loadChildSettings, filterPackIndexForChild, GRADE_ORDER } from "./enforcement.mjs";
 
 const GRADE_ID_RE = /^[a-z0-9-]+$/;
 const CONTENT_VERSION_RE = /^\d+\.\d+\.\d+$/;
@@ -49,6 +59,7 @@ function canonicalArtifactName(entry) {
 export const contentPacksPlugin = fp(async (app, options) => {
   const packsDir = path.resolve(String(options.packsDir));
   const logger = options.logger ?? app.log;
+  const db = options.db; // optional (tests may register without it)
 
   function readIndex() {
     const indexPath = path.join(packsDir, "index.json");
@@ -67,7 +78,7 @@ export const contentPacksPlugin = fp(async (app, options) => {
     return index.packs.find((p) => p && p.gradeId === gradeId) ?? null;
   }
 
-  app.get("/api/content/packs", async (_req, reply) => {
+  app.get("/api/content/packs", async (req, reply) => {
     const index = readIndex();
     if (!index) {
       return reply.code(503).send({
@@ -78,9 +89,17 @@ export const contentPacksPlugin = fp(async (app, options) => {
         type: `${options.problemTypeBase ?? "https://balashikshana.dev/problems"}/content-packs-unavailable`,
       });
     }
+    let packs = index.packs;
+    if (db) {
+      const studentId = await resolveOptionalStudentId(db, req.headers.authorization);
+      if (studentId) {
+        const settings = await loadChildSettings(db, studentId);
+        packs = filterPackIndexForChild(packs, settings);
+      }
+    }
     return reply
       .header("cache-control", "public, max-age=300")
-      .send({ formatVersion: index.formatVersion, registryVersion: index.registryVersion, packs: index.packs });
+      .send({ formatVersion: index.formatVersion, registryVersion: index.registryVersion, packs });
   });
 
   app.get("/api/content/packs/:gradeId", async (req, reply) => {
@@ -108,6 +127,26 @@ export const contentPacksPlugin = fp(async (app, options) => {
         status: 404,
         detail: `No content pack is published for grade "${gradeId}".`,
       });
+    }
+    // #61 grade ceiling for child callers (optional bearer; anonymous
+    // behavior unchanged).
+    if (db) {
+      const studentId = await resolveOptionalStudentId(db, req.headers.authorization);
+      if (studentId) {
+        const settings = await loadChildSettings(db, studentId);
+        if (
+          settings.gradeCeiling != null &&
+          GRADE_ORDER.indexOf(settings.gradeCeiling) >= 0 &&
+          GRADE_ORDER.indexOf(gradeId) > GRADE_ORDER.indexOf(settings.gradeCeiling)
+        ) {
+          return reply.code(403).send({
+            title: "Content restricted",
+            status: 403,
+            detail: `Grade "${gradeId}" is above the parent-configured grade ceiling for this child.`,
+            type: `${options.problemTypeBase ?? "https://balashikshana.dev/problems"}/content-restricted`,
+          });
+        }
+      }
     }
     if (!canonicalArtifactName(entry)) {
       return reply.code(503).send({

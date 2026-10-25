@@ -48,18 +48,20 @@ jobs:
             packages/core-engine/package-lock.json
             apps/mobile/package-lock.json
             tools/content-pipeline/package-lock.json
+            apps/parent-portal/package-lock.json
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install workspace dependencies (api, core-engine, mobile, content-pipeline)
+      - name: Install workspace dependencies (api, core-engine, mobile, content-pipeline, parent-portal)
         run: |
           npm ci --workspaces=false --prefix services/api
           npm ci --workspaces=false --prefix packages/core-engine
           npm ci --workspaces=false --prefix apps/mobile
           npm ci --workspaces=false --prefix tools/content-pipeline
+          npm ci --workspaces=false --prefix apps/parent-portal
 
       - name: Validate Canonical Curriculum Registry & 9-Asset Contract (614 Topics)
         run: python3 scripts/validate-curriculum.py
@@ -85,6 +87,13 @@ jobs:
           npm run format:check --workspaces=false --prefix apps/mobile
           npm run typecheck --workspaces=false --prefix apps/mobile
           npm test --workspaces=false --prefix apps/mobile
+
+      - name: Parent Portal Quality Gate (lint, typecheck, component tests, production build)
+        run: |
+          npm run lint --workspaces=false --prefix apps/parent-portal
+          npm run typecheck --workspaces=false --prefix apps/parent-portal
+          npm test --workspaces=false --prefix apps/parent-portal
+          npm run build --workspaces=false --prefix apps/parent-portal
 
       - name: Smoke-Test Migrations, Seed & Full Route Inventory on PostgreSQL
         run: |

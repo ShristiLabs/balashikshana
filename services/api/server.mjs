@@ -24,6 +24,12 @@ import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift
 import { contentPacksPlugin } from "./content-packs.mjs";
 import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
 import { placementPlugin } from "./placement.mjs";
+import { portalPlugin } from "./portal.mjs";
+import {
+  resolveOptionalStudentId,
+  loadChildSettings,
+  unitContentVerdict
+} from "./enforcement.mjs";
 import { gamificationPlugin } from "./gamification.mjs";
 import {
   awardAttemptXp,
@@ -53,7 +59,9 @@ import {
 // --- Environment configuration -------------------------------------------
 // PORT                        listen port                        (default 4000)
 // DATABASE_URL                PostgreSQL connection string       (default compose dev credentials)
-// ALLOWED_ORIGINS             CORS allowlist, comma-separated    (dev default: http://localhost:4200,http://127.0.0.1:4200;
+// ALLOWED_ORIGINS             CORS allowlist, comma-separated    (dev default: http://localhost:4200,http://127.0.0.1:4200,
+//                                                                http://localhost:4300,http://127.0.0.1:4300 — the last two are
+//                                                                the #61 parent-portal dev origins;
 //                                                                REQUIRED, non-empty, non-wildcard when NODE_ENV=production)
 // NODE_ENV                    "production" enables strict config (case-insensitive; default dev)
 // BODY_LIMIT_BYTES            max request body bytes             (default 65536)
@@ -83,7 +91,7 @@ function parseAllowedOrigins() {
   if (IS_PRODUCTION && (!raw || !raw.trim())) {
     throw new Error("ALLOWED_ORIGINS must be set to an explicit origin list when NODE_ENV=production (wildcards are forbidden).");
   }
-  const list = String(raw || "http://localhost:4200,http://127.0.0.1:4200")
+  const list = String(raw || "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4300,http://127.0.0.1:4300")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -621,7 +629,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 await app.register(contentPacksPlugin, {
   packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs"),
   problemTypeBase: PROBLEM_BASE,
-  logger
+  logger,
+  db
 });
 
 // Sync protocol routes (issue #48, D8): child-device-token batch upload
@@ -642,6 +651,13 @@ await app.register(gamificationPlugin, { db });
 // outcome per (student, grade), derived by the sync reconciler from the
 // PLACEMENT attempt stream. Child-device tokens only (sync doctrine).
 await app.register(placementPlugin, { db });
+
+// Parent portal API (issue #61, M5): children overview, quadrant +
+// weekly analytics, and per-child settings (time limits, content
+// controls, notification defaults). Parent session tokens only; the
+// ownership guard resolves children through parent_children. Behind the
+// global per-IP + per-token buckets (every route presents a bearer).
+await app.register(portalPlugin, { db });
 
 // --- Routes --------------------------------------------------------------------
 
@@ -959,6 +975,36 @@ app.get(
       return sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: `Topic ${topicId} not found in database` });
     }
 
+    // #61 parent content controls — enforced server-side when the caller
+    // is a known child (student PIN session or child-device token): a
+    // gated subject or an above-ceiling grade returns the SAME response
+    // shape with ZERO questions plus the restriction reason (the issue
+    // AC: "a gated subject returns no questions"). Anonymous dev-harness
+    // callers are unchanged; controls gate the child's authenticated
+    // experience, not curriculum secrecy (packs are public artifacts).
+    const optionalStudentId = await resolveOptionalStudentId(db, req.headers.authorization);
+    if (optionalStudentId) {
+      const controls = await loadChildSettings(db, optionalStudentId);
+      const verdict = unitContentVerdict(controls, { subject: unitRow.subject, gradeId: unitRow.grade_id });
+      if (verdict.restricted) {
+        return {
+          unitId: unitRow.unit_id,
+          unitTitle: unitRow.title,
+          targetSpeedSec: unitRow.gate_max_speed_sec,
+          minAccuracyPercent: 80,
+          topic: {
+            topicId: topicRow.topic_id,
+            code: topicRow.topic_code,
+            name: topicRow.topic_name,
+            assets: JSON.parse(topicRow.assets_json || "{}")
+          },
+          practiceProblems: [],
+          contentRestricted: true,
+          contentRestrictedReason: verdict.reason
+        };
+      }
+    }
+
     const count = Number(req.query.count || 8);
     const qRows = await db.all(
       "SELECT * FROM practice_questions WHERE topic_id = $1 ORDER BY difficulty_level ASC, question_id ASC LIMIT $2",
@@ -995,6 +1041,36 @@ app.get(
     const unitRow = await db.get("SELECT * FROM units WHERE unit_id = $1", [unitId]);
     if (!unitRow) {
       return sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: `Unit ${unitId} not found` });
+    }
+
+    // #61 parent content controls — same doctrine as the topic route:
+    // a gated child caller gets the unit view with ZERO questions.
+    const optionalStudentId = await resolveOptionalStudentId(db, req.headers.authorization);
+    if (optionalStudentId) {
+      const controls = await loadChildSettings(db, optionalStudentId);
+      const verdict = unitContentVerdict(controls, { subject: unitRow.subject, gradeId: unitRow.grade_id });
+      if (verdict.restricted) {
+        return {
+          unit: {
+            unitId: unitRow.unit_id,
+            gradeId: unitRow.grade_id,
+            subject: unitRow.subject,
+            sequenceOrder: unitRow.sequence_order,
+            title: unitRow.title,
+            prerequisiteUnitIds: JSON.parse(unitRow.prerequisite_unit_ids_json || "[]"),
+            masteryGate: {
+              questionCount: unitRow.gate_question_count,
+              minAccuracyPercent: unitRow.gate_min_accuracy_pct,
+              maxMedianResponseTimeSec: unitRow.gate_max_speed_sec,
+              challengeZoneStreak: unitRow.gate_streak_req
+            },
+            skillTopics: []
+          },
+          generatedQuestions: [],
+          contentRestricted: true,
+          contentRestrictedReason: verdict.reason
+        };
+      }
     }
 
     const topicRows = await db.all("SELECT * FROM skill_topics WHERE unit_id = $1 ORDER BY sequence_order ASC", [unitId]);
