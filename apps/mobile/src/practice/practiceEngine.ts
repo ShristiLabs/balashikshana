@@ -18,6 +18,10 @@ import {
   evaluateMasteryGateAttempt,
   generateTopicPracticeSet,
   beatTargetSharePct,
+  HEART_COUNT,
+  shouldMountHearts,
+  heartStateAfterResponse,
+  heartsSessionEndReason,
 } from "@balashikshana/core-engine";
 import { allocateSpiral, interleaveSpiral, type SpiralSource } from "../gate/spiral";
 import { AttemptRecorder } from "./attemptRecorder";
@@ -105,6 +109,13 @@ interface SessionState {
   /** #52 game session stage + registry mastery goal (summary roll-up). */
   gameStage?: "guided" | "fluency";
   gameTargetMasteryScore?: number;
+  /**
+   * #56 hearts state: HEART_COUNT when the D6 predicate mounted hearts
+   * (G2/G3 x fluency), null for EVERY other session — the null IS the
+   * structural no-fail guard (no hearts UI, no loss transitions, no
+   * outcome row can exist for a Pre-K–G1 or guided session).
+   */
+  heartsRemaining?: number | null;
 }
 
 export interface TopicSessionStart {
@@ -159,6 +170,13 @@ export interface GameSessionStart {
   questions: PracticeQuestion[];
   /** Spiral bucket per question id (telemetry provenance). */
   provenanceByQuestionId: Record<string, "current" | "contrastive" | "spaced-review">;
+  /**
+   * #56 hearts: the starting heart count when the D6 predicate mounted
+   * hearts for this session (Grade 2/3 x fluency), null otherwise. The
+   * screen renders NO hearts UI on null — the structural no-fail guard
+   * for Pre-K–G1 and every guided session.
+   */
+  heartsRemaining: number | null;
 }
 
 /** Game-session completion summary: per-topic progress + game telemetry. */
@@ -191,6 +209,17 @@ export interface GameSessionSummary {
   /** #55: engine-derived reward totals (additive; provisional until sync). */
   xpAwarded: number;
   coinsAwarded: number;
+  /**
+   * #56 hearts summary — present ONLY when this was a hearts session
+   * (G2/G3 fluency sprint). The reframe screen keys off endReason;
+   * endedAtMs anchors the rest-refill reassurance copy.
+   */
+  hearts?: {
+    heartsLost: number;
+    heartsRemaining: number;
+    endReason: "completed" | "hearts-empty";
+    endedAtMs: number;
+  };
 }
 
 export interface GateSessionStart {
@@ -372,7 +401,13 @@ export class PracticeSessionEngine {
   async submitResponse(
     sessionId: string,
     response: SessionResponse,
-  ): Promise<{ seq: number; fluencyGrade: number; cognitiveTimeSec: number }> {
+  ): Promise<{
+    seq: number;
+    fluencyGrade: number;
+    cognitiveTimeSec: number;
+    /** #56 hearts transition — present only in hearts sessions. */
+    hearts?: { remaining: number; lost: boolean };
+  }> {
     const session = this.requireSession(sessionId);
     const question = session.questions.find((q) => q.questionId === response.questionId);
     if (!question)
@@ -415,10 +450,25 @@ export class PracticeSessionEngine {
     };
     const recorded = await this.recorder.record(input);
     session.responses.push(response);
+    // #56: the hearts transition runs ONLY in hearts sessions (D6
+    // predicate set the state at start) and AFTER the attempt is
+    // durable — the loss is UI state derived from the recorded fact,
+    // never the other way around. Re-queue repeats never cost a heart
+    // (the engine rule; the miss already paid on its first answer).
+    let hearts: { remaining: number; lost: boolean } | undefined;
+    if (session.kind === "GAME" && session.heartsRemaining != null) {
+      const transition = heartStateAfterResponse(session.heartsRemaining, {
+        isCorrect: Boolean(response.isCorrect),
+        isRequeue: Boolean(response.isRequeue),
+      });
+      session.heartsRemaining = transition.remaining;
+      hearts = transition;
+    }
     return {
       seq: recorded.seq,
       fluencyGrade: attempt.fluencyGrade,
       cognitiveTimeSec: attempt.cognitiveTimeSec,
+      hearts,
     };
   }
 
@@ -613,6 +663,11 @@ export class PracticeSessionEngine {
     }
 
     const sessionId = this.deps.newSessionId(params.studentId);
+    // #56 D6 mount predicate — the SINGLE gate (core-engine rule): only
+    // a Grade 2/Grade 3 FLUENCY sprint carries hearts. Everything else
+    // (all Pre-K–G1 sessions, every guided stage, unknown grades) is
+    // null here and can never present hearts anywhere downstream.
+    const heartsRemaining = shouldMountHearts(params.gradeId, params.stage) ? HEART_COUNT : null;
     this.sessions.set(sessionId, {
       kind: "GAME",
       sessionId,
@@ -626,6 +681,7 @@ export class PracticeSessionEngine {
       motorBaselineSec: this.motorBaseline(params.motorBaselineSec),
       targetSpeedSec: unit.gate_max_speed_sec,
       startedAtMs: this.deps.now(),
+      heartsRemaining,
       gameTelemetry: {
         spiralProvenance: "",
         targetResponseSpeedSec:
@@ -659,6 +715,7 @@ export class PracticeSessionEngine {
       targetSpeedSec: unit.gate_max_speed_sec,
       questions,
       provenanceByQuestionId,
+      heartsRemaining,
     };
   }
 
@@ -787,6 +844,36 @@ export class PracticeSessionEngine {
       targetResponseSpeedSec,
     );
 
+    // #56 hearts outcome — written ONLY for hearts sessions (Pre-K–G1
+    // and guided sessions never reach here: their heartsRemaining is
+    // null by the D6 predicate). One append-only session_outcomes row
+    // per hearts session, BEFORE the session leaves the map so a
+    // storage failure keeps the session retryable instead of silently
+    // dropping the telemetry. End reason is terminal state: emptied
+    // hearts ended the sprint early; anything else completed the
+    // stream. Hearts never touch progress or rewards — XP/coins above
+    // already credited the effort exactly as in any other game.
+    let hearts: GameSessionSummary["hearts"];
+    if (session.heartsRemaining != null) {
+      const remaining = Math.max(0, Math.min(session.heartsRemaining, HEART_COUNT));
+      hearts = {
+        heartsLost: HEART_COUNT - remaining,
+        heartsRemaining: remaining,
+        endReason: heartsSessionEndReason(remaining),
+        endedAtMs: nowMs,
+      };
+      await this.deps.storage.insertSessionOutcome({
+        studentId: session.studentId,
+        sessionId,
+        sessionType: "GAME",
+        stage,
+        heartsLost: hearts.heartsLost,
+        heartsRemaining: remaining,
+        endReason: hearts.endReason,
+        endedAt: nowMs,
+      });
+    }
+
     this.sessions.delete(sessionId);
 
     // #55: the per-group reward projections, applied as one transition
@@ -828,6 +915,7 @@ export class PracticeSessionEngine {
       perTopic,
       xpAwarded: rewards.xp,
       coinsAwarded: rewards.coins,
+      ...(hearts ? { hearts } : {}),
     };
   }
 

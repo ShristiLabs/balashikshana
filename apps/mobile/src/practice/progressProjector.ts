@@ -42,6 +42,15 @@ export interface SessionResponse {
   rawTimeSec: number;
   audioDurationSec?: number;
   misconceptionTags?: string[];
+  /**
+   * #56 hearts rule input: true when this response answers a re-queued
+   * repeat of an already-missed item (the #50 ladder's re-queue). A
+   * re-queue miss never costs a second heart — the miss already paid
+   * (core-engine heartStateAfterResponse). Optional: absent counts as
+   * a first answer for every pre-#56 session type, which never mounts
+   * hearts anyway.
+   */
+  isRequeue?: boolean;
 }
 
 export interface SrPolicy {

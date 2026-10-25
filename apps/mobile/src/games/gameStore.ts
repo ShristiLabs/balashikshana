@@ -64,6 +64,13 @@ export interface GameState {
   requeuedSeen: number;
   /** Fluency target (0 = untimed) for the in-session speed hint. */
   targetResponseSpeedSec: number | null;
+  /**
+   * #56 hearts mirror: the engine session's heart count when the D6
+   * predicate mounted hearts (G2/G3 x fluency), null otherwise. Null
+   * IS the no-fail guard — no hearts UI renders for Pre-K–G1 or guided
+   * sessions because this stays null (the engine set it, not the UI).
+   */
+  heartsRemaining: number | null;
   summary: GameSessionSummary | null;
 }
 
@@ -90,6 +97,7 @@ export function initialGameState(): GameState {
     answeredCount: 0,
     requeuedSeen: 0,
     targetResponseSpeedSec: null,
+    heartsRemaining: null,
     summary: null,
   };
 }
@@ -125,6 +133,8 @@ export type GameAction =
       origin: "initial" | "requeue";
       index: number;
       questionId: string;
+      /** #56 engine hearts transition (absent in non-hearts sessions). */
+      hearts?: { remaining: number; lost: boolean };
     }
   | { type: "continue-pressed"; sessionId: string }
   | { type: "summary-ready"; sessionId: string; summary: GameSessionSummary }
@@ -170,6 +180,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         streak: 0,
         answeredCount: 0,
         requeuedSeen: 0,
+        heartsRemaining: null,
         summary: null,
       };
     case "session-started":
@@ -189,6 +200,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         answeredCount: 0,
         requeuedSeen: 0,
         targetResponseSpeedSec: action.start.targetResponseSpeedSec,
+        // #56: straight off the engine's start payload — the D6
+        // predicate already decided (G2/G3 x fluency => HEART_COUNT,
+        // everything else null). The UI never re-derives the tier.
+        heartsRemaining: action.start.heartsRemaining,
         summary: null,
         route: {
           kind: "game",
@@ -229,6 +244,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         streak: action.isCorrect ? state.streak + 1 : 0,
         answeredCount: state.answeredCount + 1,
         requeuedSeen: state.requeuedSeen + (action.isRequeue ? 1 : 0),
+        // #56: mirror the engine's authoritative transition (hearts
+        // sessions only — the action carries hearts otherwise nothing
+        // moves; a non-hearts session can never gain hearts here).
+        ...(state.heartsRemaining !== null && action.hearts
+          ? { heartsRemaining: action.hearts.remaining }
+          : {}),
       };
     }
     case "continue-pressed": {

@@ -36,6 +36,7 @@ import {
   type SyncTransport,
   type SyncUploadResponse,
   type SyncAttemptWire,
+  type SessionOutcomeWire,
 } from "./types";
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000").replace(/\/+$/, "");
@@ -88,13 +89,21 @@ export class HttpSyncTransport implements SyncTransport {
     return session.token;
   }
 
-  async uploadAttempts(attempts: SyncAttemptWire[]): Promise<SyncUploadResponse> {
+  async uploadAttempts(
+    attempts: SyncAttemptWire[],
+    outcomes?: SessionOutcomeWire[],
+  ): Promise<SyncUploadResponse> {
     const token = await this.requireToken();
     const clientPacks = this.clientPacks ? await this.clientPacks() : undefined;
+    // #56: hearts session outcomes ride the same request as an
+    // ADDITIVE optional body field (pre-#56 servers ignore it).
+    const body: Record<string, unknown> = { attempts };
+    if (outcomes && outcomes.length > 0) body.sessionOutcomes = outcomes;
+    if (clientPacks) body.clientPacks = clientPacks;
     const res = await this.fetchImpl(`${this.baseUrl}/api/sync/attempts`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(clientPacks ? { attempts, clientPacks } : { attempts }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       throw new SyncTransportError(`sync upload failed (${res.status})`, res.status);

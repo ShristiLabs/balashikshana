@@ -5,9 +5,11 @@
  * - Issue #3: Scientific Child-Calibrated Spaced Repetition Engine (FSRS, Lag +2/+5/+10, Two-Key Sleep Consolidation, FIRe DAG Credit, CPA Fading)
  * - Issue #7: Procedural Question & Smart Misconception Distractor Generator across all 614 Skill Topics
  * - Issue #55 (roadmap D9): Gamification reward rules — XP accrual, level curve, coin/crown derivation, streak days, badge catalog + evaluation (pure functions + data, shared offline/online)
+ * - Issue #56 (roadmap D6): Grade-tiered hearts policy — the G2–G3 fluency-sprint mount predicate, bounded counts, loss/refill transitions, and session-outcome telemetry validation (pure functions + data, shared offline/online)
  */
 
 export * from "./rewards.mjs";
+export * from "./hearts.mjs";
 
 export const UNIT_STATES = {
   LOCKED: "LOCKED",

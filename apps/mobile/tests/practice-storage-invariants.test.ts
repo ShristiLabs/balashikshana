@@ -112,6 +112,7 @@ describe("SQL mutation surface of both adapters", () => {
             "topic_progress",
             "unit_progress",
             "gamification_state",
+            "session_outcomes",
             "pack_meta",
             "pack_info",
             "grades",
@@ -119,7 +120,13 @@ describe("SQL mutation surface of both adapters", () => {
             "skill_topics",
             "practice_questions",
           ]
-        : ["attempt_log", "topic_progress", "unit_progress", "gamification_state"];
+        : [
+            "attempt_log",
+            "topic_progress",
+            "unit_progress",
+            "gamification_state",
+            "session_outcomes",
+          ];
       for (const table of insertTables) expect(allowed).toContain(table);
       // attempt_log is INSERT ... VALUES with NO conflict clause.
       const attemptSegment = source.split("INSERT INTO attempt_log")[1] ?? "";
@@ -137,6 +144,15 @@ describe("SQL mutation surface of both adapters", () => {
         "UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0";
       expect(attemptUpdates.length).toBe(1);
       expect(attemptUpdates[0]).toBe(allowedFlip);
+      // #56: session_outcomes follows the SAME append-only doctrine with
+      // ONE whitelisted mutation — the sync worker's acked-ids synced
+      // flip (never another column, never without the synced = 0 guard).
+      const outcomeSegments = source.split("UPDATE session_outcomes SET synced = 1");
+      expect(outcomeSegments.length).toBe(2);
+      expect(outcomeSegments[1]!.slice(0, 80)).toMatch(/^ WHERE student_id = \? AND id IN \(/);
+      expect(outcomeSegments[1]!.slice(0, 220)).toContain(") AND synced = 0");
+      expect(source).not.toMatch(/DELETE FROM session_outcomes/i);
+      expect(source).not.toMatch(/UPDATE session_outcomes SET (?!synced)/i);
       expect(source).not.toMatch(/DELETE FROM attempt_log/i);
       expect(source).not.toMatch(/DELETE FROM (topic|unit)_progress/i);
       expect(source).not.toMatch(/UPDATE (topic|unit)_progress SET/i);

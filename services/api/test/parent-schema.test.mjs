@@ -509,11 +509,12 @@ describe("migration 002 reversibility", () => {
   // (issue #41) layers the consent policy catalog + consent_records
   // constraints on top of that, 005 (issue #42) layers the child
   // profiles/device sessions, 006 (issue #48) layers the sync attempt
-  // ledger, and 007 (issue #55) layers the gamification ledger, so the
-  // rollback removes all six post-001 migrations (in order) and the up
+  // ledger, 007 (issue #55) layers the gamification ledger, and 008
+  // (issue #56) layers the hearts session outcomes, so the rollback
+  // removes all seven post-001 migrations (in order) and the up
   // restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..007 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 6 });
+  test("down removes exactly the 002..008 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 7 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -532,7 +533,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('child_device_sessions') AS child_device_sessions,
            to_regclass('student_xp_events') AS student_xp_events,
            to_regclass('student_badge_awards') AS student_badge_awards,
-           to_regclass('student_gamification_state') AS student_gamification_state`
+           to_regclass('student_gamification_state') AS student_gamification_state,
+           to_regclass('student_session_outcomes') AS student_session_outcomes`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -547,7 +549,8 @@ describe("migration 002 reversibility", () => {
       child_device_sessions: null,
       student_xp_events: null,
       student_badge_awards: null,
-      student_gamification_state: null
+      student_gamification_state: null,
+      student_session_outcomes: null
     });
 
     // 005's students.status column is gone with the rollback.
@@ -568,9 +571,10 @@ describe("migration 002 reversibility", () => {
         "004_consent_policy_versions",
         "005_child_profiles_device_sessions",
         "006_sync_attempt_ledger",
-        "007_gamification_ledger"
+        "007_gamification_ledger",
+        "008_hearts_session_outcomes"
       ],
-      "up must re-apply 002 through 007"
+      "up must re-apply 002 through 008"
     );
 
     const back = (

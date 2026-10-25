@@ -118,6 +118,9 @@ export {
 // Screens (thin RN layers).
 export { GameHostScreen } from "./GameHostScreen";
 export { GameSessionScreen } from "./GameSessionScreen";
+// #56 D6 hearts display (kid-facing heart row; mounts only when the
+// engine's start payload mounted hearts for a G2/G3 fluency sprint).
+export { HeartsDisplay } from "./HeartsDisplay";
 // #53 pack A renderers (registered in archetypeRegistry).
 export { BlockBuilderGame } from "./BlockBuilderGame";
 export { MarketCashierGame } from "./MarketCashierGame";

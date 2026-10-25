@@ -1096,3 +1096,142 @@ describe("GAME sessions (#52): accepted, per-topic derivation, idempotent", () =
     assert.equal(topic.completed, 1);
   });
 });
+
+// --- Hearts session outcomes (issue #56, roadmap D6: the additive ------
+// --- sessionOutcomes wire field + exactly-once ingestion) ---------------
+
+function uploadWithOutcomes(token, attempts, sessionOutcomes) {
+  return api("/api/sync/attempts", {
+    method: "POST",
+    token,
+    body: { attempts, sessionOutcomes }
+  });
+}
+
+function outcomeWire(overrides = {}) {
+  return {
+    seq: 1,
+    sessionId: "sess-hearts-1",
+    sessionType: "GAME",
+    stage: "fluency",
+    heartsLost: 5,
+    heartsRemaining: 0,
+    endReason: "hearts-empty",
+    endedAtMs: clock,
+    ...overrides
+  };
+}
+
+describe("hearts session outcomes (#56): additive wire, exactly-once, validated", () => {
+  test("a hearts-empty outcome rides the batch, is acknowledged, and persists exactly once", async () => {
+    const kid = await consentedChild();
+    const session = "sess-hearts-1";
+    const batch = Array.from({ length: 6 }, (_, i) =>
+      gameAttemptWire(i + 1, session, "K-M2-G", "K-M2", i < 1)
+    );
+    const res = await uploadWithOutcomes(kid.deviceToken, batch, [outcomeWire()]);
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.deepEqual(res.json.ackedOutcomeIds, [1]);
+    assert.equal(res.json.stats.outcomesInserted, 1);
+
+    const rows = await queryDb(
+      "SELECT session_id, session_type, stage, hearts_lost, hearts_remaining, end_reason, device_id FROM student_session_outcomes WHERE student_id = $1",
+      [kid.studentId]
+    );
+    assert.deepEqual(rows, [
+      {
+        session_id: session,
+        session_type: "GAME",
+        stage: "fluency",
+        hearts_lost: 5,
+        hearts_remaining: 0,
+        end_reason: "hearts-empty",
+        device_id: kid.deviceId
+      }
+    ]);
+
+    // Re-send the same batch (crash-before-ack replay): attempts
+    // dedupe AND the outcome inserts nothing — exactly-once by the
+    // (student, session) constraint, acked again.
+    const replay = await uploadWithOutcomes(kid.deviceToken, batch, [outcomeWire()]);
+    assert.equal(replay.status, 200);
+    assert.equal(replay.json.stats.inserted, 0);
+    assert.equal(replay.json.stats.outcomesInserted, 0);
+    assert.deepEqual(replay.json.ackedOutcomeIds, [1]);
+    const still = await queryDb(
+      "SELECT COUNT(*)::int AS n FROM student_session_outcomes WHERE student_id = $1",
+      [kid.studentId]
+    );
+    assert.equal(still[0].n, 1);
+  });
+
+  test("a completed outcome persists with its full heart row", async () => {
+    const kid = await consentedChild();
+    const batch = [
+      gameAttemptWire(1, "sess-hearts-2", "K-M2-G", "K-M2", true),
+      gameAttemptWire(2, "sess-hearts-2", "K-M2-G", "K-M2", true)
+    ];
+    const res = await uploadWithOutcomes(kid.deviceToken, batch, [
+      outcomeWire({
+        seq: 2,
+        sessionId: "sess-hearts-2",
+        heartsLost: 0,
+        heartsRemaining: 5,
+        endReason: "completed"
+      })
+    ]);
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.equal(res.json.stats.outcomesInserted, 1);
+    const rows = await queryDb(
+      "SELECT hearts_lost, hearts_remaining, end_reason FROM student_session_outcomes WHERE student_id = $1",
+      [kid.studentId]
+    );
+    assert.deepEqual(rows, [{ hearts_lost: 0, hearts_remaining: 5, end_reason: "completed" }]);
+  });
+
+  test("legacy batches (no sessionOutcomes) keep the pre-#56 response shape", async () => {
+    const kid = await consentedChild();
+    const res = await upload(kid.deviceToken, [gameAttemptWire(1, "sess-hearts-3", "K-M2-G", "K-M2", true)]);
+    assert.equal(res.status, 200);
+    assert.ok(!("ackedOutcomeIds" in res.json), "no ack field when no outcomes were sent");
+  });
+
+  test("invalid outcomes fail the WHOLE batch (nothing partial is stored)", async () => {
+    const kid = await consentedChild();
+    const cases = [
+      // Counts that do not account for every heart.
+      outcomeWire({ heartsLost: 2, heartsRemaining: 2 }),
+      // End-reason contradictions.
+      outcomeWire({ heartsLost: 4, heartsRemaining: 1, endReason: "hearts-empty" }),
+      outcomeWire({ heartsLost: 5, heartsRemaining: 0, endReason: "completed" }),
+      // Duplicate session ends in one batch.
+      [outcomeWire({ seq: 1 }), outcomeWire({ seq: 2 })]
+    ];
+    for (const outcomeCase of cases) {
+      const outcomes = Array.isArray(outcomeCase) ? outcomeCase : [outcomeCase];
+      const batch = [gameAttemptWire(1, "sess-hearts-invalid", "K-M2-G", "K-M2", true)];
+      const res = await uploadWithOutcomes(kid.deviceToken, batch, outcomes);
+      assert.equal(res.status, 400, JSON.stringify(outcomes));
+    }
+    assert.equal(await attemptsInDb(kid.studentId), 0);
+    const rows = await queryDb(
+      "SELECT COUNT(*)::int AS n FROM student_session_outcomes WHERE student_id = $1",
+      [kid.studentId]
+    );
+    assert.equal(rows[0].n, 0);
+  });
+
+  test("schema edges: wrong sessionType/stage and out-of-range counts -> 400", async () => {
+    const kid = await consentedChild();
+    const batch = [gameAttemptWire(1, "sess-hearts-edge", "K-M2-G", "K-M2", true)];
+    for (const overrides of [
+      { sessionType: "TOPIC_PRACTICE" },
+      { stage: "guided" },
+      { heartsLost: 6, heartsRemaining: 0 },
+      { endReason: "rage-quit" }
+    ]) {
+      const res = await uploadWithOutcomes(kid.deviceToken, batch, [outcomeWire(overrides)]);
+      assert.equal(res.status, 400, JSON.stringify(overrides));
+    }
+  });
+});
