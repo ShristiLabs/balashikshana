@@ -222,4 +222,39 @@ declare module "@balashikshana/core-engine" {
   export const BADGE_CATALOG: readonly EngineBadge[];
   export function badgeById(id: string): EngineBadge | undefined;
   export function evaluateBadges(context?: Record<string, number>): string[];
+
+  // --- Hearts policy rules (issue #56, roadmap D6; mirrors
+  // --- packages/core-engine/src/hearts.mjs exactly) -----------------------
+
+  export const HEARTS_GRADES: readonly string[];
+  export const HEART_COUNT: number;
+  export const HEART_REGROW_MS_PER_HEART: number;
+  export const HEARTS_END_REASONS: readonly ("completed" | "hearts-empty")[];
+
+  export function shouldMountHearts(gradeId: string, stage: string): boolean;
+
+  export interface HeartsTransition {
+    remaining: number;
+    lost: boolean;
+  }
+
+  export function heartStateAfterResponse(
+    heartsRemaining: number,
+    response: { isCorrect: boolean; isRequeue?: boolean },
+  ): HeartsTransition;
+
+  export function heartsSessionEndReason(heartsRemaining: number): "completed" | "hearts-empty";
+
+  export function heartsRegrowProgress(params: {
+    lostHearts: number;
+    endedAtMs: number;
+    nowMs: number;
+    msPerHeart?: number;
+  }): { regrown: number; stillGrowing: boolean };
+
+  export function heartsOutcomeProblem(outcome: {
+    heartsLost: number;
+    heartsRemaining: number;
+    endReason: string;
+  }): string | null;
 }

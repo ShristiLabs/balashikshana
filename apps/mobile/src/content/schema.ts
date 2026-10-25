@@ -179,6 +179,39 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
        )`,
     ],
   },
+  {
+    // Migration 6 (issue #56 — hearts policy, roadmap D6) adds the
+    // append-only SESSION-OUTCOME table: ONE row per hearts fluency
+    // sprint (Grade 2–3 only, shouldMountHearts-gated) recording the
+    // heart-loss count and the session-end reason. Unlike #52's
+    // local-only attempt columns, these facts DO travel: #48's sync
+    // upload carries them (additive optional sessionOutcomes array)
+    // so the server's gamification ledger context holds them.
+    // INSERT-only like attempt_log — `synced` flips ONLY in the sync
+    // worker (same documented exception; the source-scan test pins
+    // the statement). Sessions without hearts (Pre-K–G1, guided
+    // stages, practice/gate sessions) write NOTHING: the D6 no-fail
+    // tier is structural, not a value of this table.
+    version: 6,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS session_outcomes (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         student_id TEXT NOT NULL,
+         session_id TEXT NOT NULL,
+         session_type TEXT NOT NULL,
+         stage TEXT NOT NULL,
+         hearts_lost INTEGER NOT NULL,
+         hearts_remaining INTEGER NOT NULL,
+         end_reason TEXT NOT NULL,
+         ended_at INTEGER NOT NULL,
+         synced INTEGER NOT NULL DEFAULT 0
+       )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_session_outcomes_session
+         ON session_outcomes(student_id, session_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_session_outcomes_drain
+         ON session_outcomes(student_id, id) WHERE synced = 0`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";

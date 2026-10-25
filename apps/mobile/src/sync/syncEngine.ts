@@ -39,6 +39,7 @@ import type {
   SyncLogEvent,
   SyncRunResult,
   SyncStorage,
+  SessionOutcomeWire,
 } from "./types";
 import type { TopicProgressRecord, UnitProgressRecord } from "../practice/types";
 
@@ -294,7 +295,24 @@ export class SyncEngine {
     }
 
     const wire = uploadable.flatMap((g) => g.rows.map(rowToWire));
-    const response = await this.depsFull.transport.uploadAttempts(wire);
+    // #56: hearts session outcomes ride the same batch (additive wire
+    // field). Drained in id order, capped; an outcome row exists only
+    // after its session closed, so whole-session deferral never applies
+    // to it. A server that acks nothing (pre-#56 shape, no
+    // ackedOutcomeIds) leaves the rows unsynced — they simply ride the
+    // next batch; nothing is lost either way.
+    const outcomeRows = await this.deps.drainUnsyncedOutcomes(studentId, 50);
+    const outcomeWire: SessionOutcomeWire[] = outcomeRows.map((row) => ({
+      seq: row.id,
+      sessionId: row.sessionId,
+      sessionType: row.sessionType,
+      stage: row.stage,
+      heartsLost: row.heartsLost,
+      heartsRemaining: row.heartsRemaining,
+      endReason: row.endReason,
+      endedAtMs: row.endedAt,
+    }));
+    const response = await this.depsFull.transport.uploadAttempts(wire, outcomeWire);
     await this.applySnapshot(studentId, response.progress);
     // End of the UPLOADED PREFIX, not the global max (review finding
     // 5): `uploadable` stops at the first deferred group, so this is
@@ -302,6 +320,14 @@ export class SyncEngine {
     // groups can never flip to synced here.
     const maxSeq = wire[wire.length - 1]!.seq;
     await this.deps.markSyncedUpTo(studentId, maxSeq);
+    if (outcomeWire.length > 0 && response.ackedOutcomeIds) {
+      // No-loss ordering, same doctrine as the attempts flip: mark ONLY
+      // the ids the server explicitly acknowledged, only AFTER the
+      // snapshot is durably applied. A crash before this point simply
+      // re-uploads the outcomes next run (server dedupes by
+      // (student_id, session_id) — exactly-once by constraint).
+      await this.deps.markOutcomesSynced(studentId, response.ackedOutcomeIds);
+    }
     this.signalContent(response.packsOutdated);
 
     return {

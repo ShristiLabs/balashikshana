@@ -31,6 +31,7 @@ import type {
   PackUnitRow,
   PracticeDeps,
   PracticeStorage,
+  SessionOutcomeInput,
   SessionType,
   TopicProgressRecord,
   UnitProgressRecord,
@@ -102,6 +103,71 @@ export class NodePracticeStorage implements PracticeStorage {
       .prepare("UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0")
       .run(studentId, seq);
     return Number(result.changes);
+  }
+
+  async drainUnsyncedOutcomes(studentId: string, limit: number) {
+    const rows = this.db
+      .prepare(
+        `SELECT id, student_id, session_id, session_type, stage,
+                hearts_lost, hearts_remaining, end_reason, ended_at, synced
+         FROM session_outcomes WHERE student_id = ? AND synced = 0 ORDER BY id ASC LIMIT ?`,
+      )
+      .all(studentId, limit) as unknown as {
+      id: number;
+      student_id: string;
+      session_id: string;
+      session_type: string;
+      stage: string;
+      hearts_lost: number;
+      hearts_remaining: number;
+      end_reason: string;
+      ended_at: number;
+      synced: number;
+    }[];
+    return rows.map((row): import("../../src/practice/types").SessionOutcomeRecord => ({
+      id: row.id,
+      studentId: row.student_id,
+      sessionId: row.session_id,
+      sessionType: row.session_type as import("../../src/practice/types").SessionType,
+      stage: row.stage as "guided" | "fluency",
+      heartsLost: row.hearts_lost,
+      heartsRemaining: row.hearts_remaining,
+      endReason: row.end_reason as "completed" | "hearts-empty",
+      endedAt: row.ended_at,
+      synced: row.synced === 1 ? 1 : 0,
+    }));
+  }
+
+  async markOutcomesSynced(studentId: string, ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const placeholders = ids.map(() => "?").join(", ");
+    const result = this.db
+      .prepare(
+        `UPDATE session_outcomes SET synced = 1 WHERE student_id = ? AND id IN (${placeholders}) AND synced = 0`,
+      )
+      .run(studentId, ...ids);
+    return Number(result.changes);
+  }
+
+  async insertSessionOutcome(input: SessionOutcomeInput): Promise<number> {
+    const result = this.db
+      .prepare(
+        `INSERT INTO session_outcomes (
+           student_id, session_id, session_type, stage,
+           hearts_lost, hearts_remaining, end_reason, ended_at, synced
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(
+        input.studentId,
+        input.sessionId,
+        input.sessionType,
+        input.stage,
+        input.heartsLost,
+        input.heartsRemaining,
+        input.endReason,
+        input.endedAt,
+      );
+    return Number(result.lastInsertRowid);
   }
 
   async insertAttempt(input: AttemptInput, answeredAt: number): Promise<number> {

@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useReducer, useRef, useState } from "rea
 import type { ComponentType } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
+import { HEART_COUNT, heartsRegrowProgress } from "@balashikshana/core-engine";
 import type { AudioCoordinator } from "../audio/coordinator";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
@@ -38,6 +39,7 @@ import {
   PROVENANCE_LABELS,
 } from "./gameStore";
 import { rendererForArchetype } from "./archetypeRegistry";
+import { HeartsDisplay } from "./HeartsDisplay";
 import type { GameRendererProps } from "./types";
 
 export interface GameSessionScreenProps {
@@ -94,6 +96,16 @@ export function GameSessionScreen({
   const [state, dispatch] = useReducer(gameReducer, undefined, initialGameState);
   const [exitSheetOpen, setExitSheetOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  /**
+   * #56 rest-refill snapshot for the reframe screen, computed ONCE at
+   * summary time (event handler, not render — the purity rule): how
+   * many lost hearts have grown back by rest. Presentational only; the
+   * next session always starts with a full heart row regardless.
+   */
+  const [heartsRegrow, setHeartsRegrow] = useState<{
+    regrown: number;
+    stillGrowing: boolean;
+  } | null>(null);
   /** #53 carry-over fix 1: play-again double-start guard (the summary
    * unmounts on the transition; this closes the double-tap window). */
   const [restarting, setRestarting] = useState(false);
@@ -334,6 +346,9 @@ export function GameSessionScreen({
           rawTimeSec,
           audioDurationSec: narrationSecRef.current,
           misconceptionTags: activeQuestion.misconceptionTags,
+          // #56: re-queue repeats never cost a second heart — the
+          // engine's heartStateAfterResponse rule keys off this flag.
+          isRequeue: activeItem.origin === "requeue",
         });
         dispatch({
           type: "response-recorded",
@@ -347,6 +362,7 @@ export function GameSessionScreen({
           origin: activeItem.origin,
           index: state.index,
           questionId: activeQuestion.questionId,
+          ...(result.hearts ? { hearts: result.hearts } : {}),
         });
         playMoment(isCorrect ? "onCorrect" : "onGentleRetry", activeQuestion.topicId);
         if (isCorrect && result.fluencyGrade === 4) {
@@ -378,12 +394,27 @@ export function GameSessionScreen({
 
   const handleContinue = useCallback(async () => {
     if (state.phase !== "feedback" || !state.sessionId) return;
-    const isLast = state.index + 1 >= state.schedule.items.length;
+    // #56: an emptied heart row ends the sprint HERE — the same
+    // completeGameSession call (projections + #55 rewards still credit
+    // the effort; the engine stamps the hearts-empty end reason). The
+    // child always sees their feedback for the item first.
+    const isLast = state.index + 1 >= state.schedule.items.length || state.heartsRemaining === 0;
     if (isLast) {
       setCompleting(true);
       try {
         const summary = await getRunnerEngine().completeGameSession(state.sessionId);
         dispatch({ type: "summary-ready", sessionId: state.sessionId, summary });
+        // #56: snapshot the rest-refill progress for the reframe copy
+        // here (event time), never in render (purity rule).
+        setHeartsRegrow(
+          summary.hearts && summary.hearts.endReason === "hearts-empty"
+            ? heartsRegrowProgress({
+                lostHearts: summary.hearts.heartsLost,
+                endedAtMs: summary.hearts.endedAtMs,
+                nowMs: Date.now(),
+              })
+            : null,
+        );
         // Re-arm the play-again guard for the next summary visit.
         setRestarting(false);
         if (summary.metGoal) {
@@ -531,18 +562,41 @@ export function GameSessionScreen({
     const current = state.topicId
       ? (summary.perTopic.find((row) => row.topicId === state.topicId) ?? null)
       : null;
+    // #56 growth reframe: a hearts-empty end is NEVER a fail state.
+    // The copy celebrates effort + mistakes-as-learning (growth
+    // mindset), reassures that hearts come back (next-session refill
+    // by design), and leaves both exits open — no dead end, no block,
+    // no punitive word anywhere. The rest-refill line is the engine's
+    // heartsRegrowProgress rule (a snapshot taken at summary time,
+    // never a timer — static + reduced-motion safe).
+    const heartsEmpty = summary.hearts?.endReason === "hearts-empty";
+    const regrow = heartsRegrow;
     return (
       <ScrollView
         contentContainerStyle={{ padding: spacing.xxl, gap: spacing.lg, alignItems: "center" }}
       >
         <Text style={{ ...typeRamp.h1, color: colors.text, textAlign: "center" }}>
-          {summary.metGoal ? "Goal met!" : "Nice game!"}
+          {heartsEmpty ? "Mistakes grow your brain!" : summary.metGoal ? "Goal met!" : "Nice game!"}
         </Text>
         <Text style={{ ...typeRamp.body, color: colors.textMuted, textAlign: "center" }}>
-          {summary.metGoal
-            ? "You beat the game's goal. Keep it up!"
-            : `Reach ${summary.stage === "fluency" ? "the speed goal" : "the accuracy goal"} next time.`}
+          {heartsEmpty
+            ? "Every tricky answer you tried made your brain stronger. That is how learning works."
+            : summary.metGoal
+              ? "You beat the game's goal. Keep it up!"
+              : `Reach ${summary.stage === "fluency" ? "the speed goal" : "the accuracy goal"} next time.`}
         </Text>
+        {heartsEmpty && summary.hearts ? (
+          <>
+            <HeartsDisplay remaining={summary.hearts.heartsRemaining} total={HEART_COUNT} />
+            <Text style={{ ...typeRamp.body, color: colors.text, textAlign: "center" }}>
+              {regrow &&
+              regrow.regrown >= summary.hearts.heartsLost &&
+              summary.hearts.heartsLost > 0
+                ? "Your hearts are all back. Play again whenever you are ready!"
+                : "Hearts grow back while you rest. Your next game starts with a full heart row!"}
+            </Text>
+          </>
+        ) : null}
         <View
           style={{
             flexDirection: "row",
@@ -597,6 +651,7 @@ export function GameSessionScreen({
             // warm-up's own start, hardcoded baseline) is gone.
             if (restarting) return;
             setRestarting(true);
+            setHeartsRegrow(null);
             dispatch({ type: "stage-selected", stage: summary.stage });
           }}
           accessibilityHint="Start another game session on this topic"
@@ -642,6 +697,13 @@ export function GameSessionScreen({
           </Pressable>
         </View>
         <View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "center" }}>
+          {/* #56 D6: the hearts row exists ONLY when the engine mounted
+           * hearts for this session (G2/G3 x fluency). heartsRemaining
+           * is null for every Pre-K-G1 and guided session — the hearts
+           * UI is structurally absent, per the roadmap M4 gate. */}
+          {state.heartsRemaining !== null ? (
+            <HeartsDisplay remaining={state.heartsRemaining} total={HEART_COUNT} />
+          ) : null}
           {scheduleItem.origin === "requeue" ? (
             <View
               accessibilityLabel="Spaced replay"
@@ -749,7 +811,13 @@ export function GameSessionScreen({
               </Text>
             ) : null}
             <Button
-              label={state.index + 1 >= total ? "See results" : "Keep playing"}
+              label={
+                state.heartsRemaining === 0
+                  ? "See how you did"
+                  : state.index + 1 >= total
+                    ? "See results"
+                    : "Keep playing"
+              }
               onPress={() => void handleContinue()}
               accessibilityHint="Continue the game"
             />

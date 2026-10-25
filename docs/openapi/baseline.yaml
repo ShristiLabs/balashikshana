@@ -2311,6 +2311,18 @@ components:
           description: Whole sessions only (client drains at session boundaries); 200 is the default cap (env SYNC_MAX_ATTEMPTS_PER_BATCH)
           items:
             $ref: "#/components/schemas/SyncAttempt"
+        sessionOutcomes:
+          type: array
+          maxItems: 50
+          description: >-
+            Hearts session outcomes (issue #56, roadmap D6) — one per
+            Grade 2-3 fluency-sprint game session that carried hearts.
+            Additive optional field (pre-#56 clients never send it);
+            outcomes ride only alongside an attempts batch. Exactly-once
+            per (student, session) by database constraint; counts + enum
+            reason only (COPPA — no PII).
+          items:
+            $ref: "#/components/schemas/SessionOutcome"
         clientPacks:
           type: array
           maxItems: 10
@@ -2328,6 +2340,43 @@ components:
                 type: string
                 minLength: 1
                 maxLength: 32
+
+    SessionOutcome:
+      type: object
+      additionalProperties: false
+      required: [seq, sessionId, sessionType, stage, heartsLost, heartsRemaining, endReason, endedAtMs]
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+          description: Client session_outcomes row id (the ackedOutcomeIds mapping key)
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        sessionType:
+          type: string
+          enum: [GAME]
+          description: Hearts exist only in game-framework sessions (D6)
+        stage:
+          type: string
+          enum: [fluency]
+          description: The D6 predicate mounts hearts on fluency sprints alone
+        heartsLost:
+          type: integer
+          minimum: 0
+          maximum: 5
+        heartsRemaining:
+          type: integer
+          minimum: 0
+          maximum: 5
+        endReason:
+          type: string
+          enum: [completed, hearts-empty]
+        endedAtMs:
+          type: integer
+          minimum: 0
+          description: Device-clock epoch ms at session close (recorded as-is; telemetry, not progress math)
 
     SyncSnapshotUnit:
       type: object
@@ -2419,6 +2468,15 @@ components:
           items:
             type: integer
           description: Client sequences acknowledged (inserted now or already present — both are safely synced)
+        ackedOutcomeIds:
+          type: array
+          items:
+            type: integer
+          description: >-
+            Hearts session-outcome row ids acknowledged (issue #56;
+            inserted now or already present — both are safely synced).
+            Absent when the request carried no outcomes (pre-#56
+            responses stay byte-compatible).
         serverTime:
           type: string
           description: Authoritative server clock (ISO-8601)
@@ -2434,6 +2492,9 @@ components:
               type: integer
             clockSkewAdjusted:
               type: integer
+            outcomesInserted:
+              type: integer
+              description: Hearts session outcomes stored by this batch (issue #56; duplicates of already-present rows do not count)
         packsOutdated:
           type: array
           items:

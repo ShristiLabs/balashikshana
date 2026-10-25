@@ -32,6 +32,8 @@ import type {
   PackUnitRow,
   PracticeDeps,
   PracticeStorage,
+  SessionOutcomeInput,
+  SessionOutcomeRecord,
   SessionType,
   TopicProgressRecord,
   UnitProgressRecord,
@@ -186,6 +188,30 @@ function createStorage(): SyncStorage {
       return Number(result.lastInsertRowId);
     },
 
+    async insertSessionOutcome(input: SessionOutcomeInput): Promise<number> {
+      const db = await lifecycleDb();
+      // #56 append-only hearts session outcome (one row per hearts
+      // session; synced stays 0 — only the #48 sync worker flips it,
+      // the same documented exception as attempt_log).
+      const result = await db.runAsync(
+        `INSERT INTO session_outcomes (
+           student_id, session_id, session_type, stage,
+           hearts_lost, hearts_remaining, end_reason, ended_at, synced
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        [
+          input.studentId,
+          input.sessionId,
+          input.sessionType,
+          input.stage,
+          input.heartsLost,
+          input.heartsRemaining,
+          input.endReason,
+          input.endedAt,
+        ],
+      );
+      return Number(result.lastInsertRowId);
+    },
+
     async drainUnsynced(studentId, limit): Promise<AttemptLogRow[]> {
       const db = await lifecycleDb();
       // The ONLY read the sync worker needs: unsynced rows in id order
@@ -226,6 +252,59 @@ function createStorage(): SyncStorage {
       const result = await db.runAsync(
         "UPDATE attempt_log SET synced = 1 WHERE student_id = ? AND id <= ? AND synced = 0",
         [studentId, seq],
+      );
+      return Number(result.changes ?? 0);
+    },
+
+    async drainUnsyncedOutcomes(studentId, limit): Promise<SessionOutcomeRecord[]> {
+      const db = await lifecycleDb();
+      // #56 sync-worker read: unsynced hearts session outcomes in id
+      // order (idx_session_outcomes_drain), capped. Outcomes are only
+      // written at session close, so whole-session batching never
+      // applies — an outcome row exists exactly when its session ended.
+      const rows = await db.getAllAsync<{
+        id: number;
+        student_id: string;
+        session_id: string;
+        session_type: string;
+        stage: string;
+        hearts_lost: number;
+        hearts_remaining: number;
+        end_reason: string;
+        ended_at: number;
+        synced: number;
+      }>(
+        `SELECT id, student_id, session_id, session_type, stage,
+                hearts_lost, hearts_remaining, end_reason, ended_at, synced
+         FROM session_outcomes WHERE student_id = ? AND synced = 0 ORDER BY id ASC LIMIT ?`,
+        [studentId, limit],
+      );
+      return rows.map((row) => ({
+        id: row.id,
+        studentId: row.student_id,
+        sessionId: row.session_id,
+        sessionType: row.session_type as SessionOutcomeRecord["sessionType"],
+        stage: row.stage as SessionOutcomeRecord["stage"],
+        heartsLost: row.hearts_lost,
+        heartsRemaining: row.hearts_remaining,
+        endReason: row.end_reason as SessionOutcomeRecord["endReason"],
+        endedAt: row.ended_at,
+        synced: row.synced === 1 ? 1 : 0,
+      }));
+    },
+
+    async markOutcomesSynced(studentId, ids): Promise<number> {
+      const db = await lifecycleDb();
+      if (ids.length === 0) return 0;
+      // THE ONLY mutation permitted on session_outcomes anywhere in the
+      // app: the synced-flag flip by explicit acked ids, after the
+      // server response is durably applied (the same documented #48
+      // exception as attempt_log; the source-scan test pins this exact
+      // statement shape).
+      const placeholders = ids.map(() => "?").join(", ");
+      const result = await db.runAsync(
+        `UPDATE session_outcomes SET synced = 1 WHERE student_id = ? AND id IN (${placeholders}) AND synced = 0`,
+        [studentId, ...ids],
       );
       return Number(result.changes ?? 0);
     },

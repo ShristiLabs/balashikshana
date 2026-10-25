@@ -82,6 +82,10 @@ import {
   evaluateAndAwardBadges
 } from "./rewards.mjs";
 import { beatTargetSharePct } from "../../packages/core-engine/src/index.mjs";
+import {
+  HEART_COUNT,
+  heartsOutcomeProblem
+} from "../../packages/core-engine/src/index.mjs";
 
 /**
  * A topic's registry fluency-game speed target off its assets_json (the
@@ -141,6 +145,59 @@ const syncAttemptSchema = {
   }
 };
 
+// #56 (roadmap D6): hearts session outcomes — one per Grade 2-3
+// fluency-sprint game session. ADDITIVE wire field: older clients
+// never send it. Counts + enum reason only (COPPA: no PII); the
+// cross-field consistency rules (lost + remaining == HEART_COUNT,
+// end-reason agreement) run in heartsOutcomeBatchProblem below through
+// the SAME core-engine rule the client applied (no fork).
+const SYNC_MAX_OUTCOMES_PER_BATCH = 50;
+
+const HEARTS_END_REASONS = ["completed", "hearts-empty"];
+
+const syncSessionOutcomeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "seq", "sessionId", "sessionType", "stage",
+    "heartsLost", "heartsRemaining", "endReason", "endedAtMs"
+  ],
+  properties: {
+    seq: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+    sessionId: { type: "string", minLength: 1, maxLength: 160 },
+    // Hearts exist only in game-framework fluency sprints (D6).
+    sessionType: { type: "string", enum: ["GAME"] },
+    stage: { type: "string", enum: ["fluency"] },
+    heartsLost: { type: "integer", minimum: 0, maximum: HEART_COUNT },
+    heartsRemaining: { type: "integer", minimum: 0, maximum: HEART_COUNT },
+    endReason: { type: "string", enum: HEARTS_END_REASONS },
+    endedAtMs: { type: "integer", minimum: 0, maximum: 9007199254740991 }
+  }
+};
+
+/**
+ * Whole-batch validation for hearts session outcomes (fail before any
+ * write, the attempts doctrine): per-outcome consistency through the
+ * engine's heartsOutcomeProblem (bounds, the lost+remaining == HEART_COUNT
+ * invariant, end-reason agreement) plus batch-level uniqueness (a
+ * session ends exactly once — duplicate sessionIds in one batch are a
+ * client bug, not a replay). Returns null when the batch is sound.
+ */
+export function heartsOutcomeBatchProblem(outcomes) {
+  const seen = new Set();
+  for (const o of outcomes) {
+    const problem = heartsOutcomeProblem({
+      heartsLost: o.heartsLost,
+      heartsRemaining: o.heartsRemaining,
+      endReason: o.endReason
+    });
+    if (problem) return problem;
+    if (seen.has(o.sessionId)) return "duplicate-session-outcome";
+    seen.add(o.sessionId);
+  }
+  return null;
+}
+
 const syncUploadSchema = {
   body: {
     type: "object",
@@ -148,6 +205,11 @@ const syncUploadSchema = {
     required: ["attempts"],
     properties: {
       attempts: { type: "array", minItems: 1, maxItems: SYNC_MAX_ATTEMPTS_PER_BATCH, items: syncAttemptSchema },
+      sessionOutcomes: {
+        type: "array",
+        maxItems: SYNC_MAX_OUTCOMES_PER_BATCH,
+        items: syncSessionOutcomeSchema
+      },
       clientPacks: {
         type: "array",
         maxItems: 10,
@@ -298,7 +360,7 @@ export async function buildProgressSnapshot(db, studentId) {
  * entire batch (nothing partial is stored — the client retries or
  * refreshes its pack).
  */
-export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, logger }) {
+export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, outcomes = [], logger }) {
   const serverNowMs = Date.now();
 
   // Whole-batch referential validation (fail before writing anything).
@@ -320,11 +382,21 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
   const gradeRows = await db.all(`SELECT grade_id, sr_growth_factor, sr_max_interval_days FROM grades WHERE grade_id = ANY($1)`, [gradeIds]);
   const gradeById = new Map(gradeRows.map((g) => [g.grade_id, g]));
 
+  // #56: hearts outcomes validate with the same whole-batch doctrine
+  // (fail before any write — nothing partial is stored).
+  if (outcomes.length > 0) {
+    const outcomeProblem = heartsOutcomeBatchProblem(outcomes);
+    if (outcomeProblem) {
+      return { validationError: { outcomes: outcomeProblem } };
+    }
+  }
+
   let inserted = 0;
   let clockAdjusted = 0;
   let sessionsReplayed = 0;
   let xpCredited = 0;
   let badgesAwarded = 0;
+  let outcomesInserted = 0;
   const groups = new Map(); // `${sessionType}\u0000${sessionId}` -> { minSeq, items: [{a, iso}] }
 
   await db.withTransaction(async (client) => {
@@ -444,6 +516,36 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
     // over the aggregates the replays above just updated.
     const badges = await evaluateAndAwardBadges(client, { studentId });
     badgesAwarded = badges.newlyAwarded.length;
+
+    // #56: hearts session outcomes, same transaction — exactly-once by
+    // the UNIQUE (student_id, session_id) constraint + ON CONFLICT DO
+    // NOTHING (a replayed batch or crash-before-ack re-upload inserts
+    // nothing). ended_at records the client's session-close clock as-is
+    // (telemetry, not progress math — no skew adoption). No FK to the
+    // session's attempts: an outcome may arrive in a batch ahead of its
+    // session's trailing attempts (batch-cap interleaving); the row is
+    // standalone and joins by session_id whenever needed.
+    for (const o of outcomes) {
+      const result = await client.query(
+        `INSERT INTO student_session_outcomes (
+           student_id, device_id, session_id, session_type, stage,
+           hearts_lost, hearts_remaining, end_reason, ended_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (student_id, session_id) DO NOTHING`,
+        [
+          studentId,
+          deviceId,
+          o.sessionId,
+          o.sessionType,
+          o.stage,
+          o.heartsLost,
+          o.heartsRemaining,
+          o.endReason,
+          new Date(o.endedAtMs).toISOString()
+        ]
+      );
+      outcomesInserted += result.rowCount ?? 0;
+    }
   });
 
   if (logger) {
@@ -457,13 +559,22 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
         sessionsReplayed,
         clockAdjusted,
         xpCredited,
-        badgesAwarded
+        badgesAwarded,
+        outcomesInserted
       },
       "sync batch reconciled"
     );
   }
 
-  return { inserted, duplicates: attempts.length - inserted, sessionsReplayed, clockAdjusted, xpCredited, badgesAwarded };
+  return {
+    inserted,
+    duplicates: attempts.length - inserted,
+    sessionsReplayed,
+    clockAdjusted,
+    xpCredited,
+    badgesAwarded,
+    outcomesInserted
+  };
 }
 
 async function clientGet(client, sql, params) {
@@ -980,15 +1091,36 @@ export const syncPlugin = fp(async (app, options) => {
       });
     }
 
+    // #56: hearts session outcomes (additive optional body field).
+    const outcomes = req.body.sessionOutcomes ?? [];
+    const outcomeProblem = outcomes.length > 0 ? heartsOutcomeBatchProblem(outcomes) : null;
+    if (outcomeProblem) {
+      return sendProblem(reply, 400, {
+        type: `${PROBLEM_BASE}/validation`,
+        title: "Validation failed",
+        detail: `Invalid hearts session outcome: ${outcomeProblem}.`,
+        extensions: { heartsProblem: outcomeProblem }
+      });
+    }
+
     const outcome = await reconcileSyncBatch({
       db,
       studentId: scoped.student_id,
       deviceId: scoped.device_id,
       attempts,
+      outcomes,
       logger
     });
 
     if (outcome.validationError) {
+      if (outcome.validationError.outcomes) {
+        return sendProblem(reply, 400, {
+          type: `${PROBLEM_BASE}/validation`,
+          title: "Validation failed",
+          detail: `Invalid hearts session outcome: ${outcome.validationError.outcomes}.`,
+          extensions: { heartsProblem: outcome.validationError.outcomes }
+        });
+      }
       return sendProblem(reply, 400, {
         type: `${PROBLEM_BASE}/sync-unknown-content`,
         title: "Unknown curriculum content",
@@ -1018,6 +1150,13 @@ export const syncPlugin = fp(async (app, options) => {
 
     return {
       ackedSeqs: attempts.map((a) => a.seq),
+      // #56: every outcome in the batch is durably present post-commit
+      // (inserted now or already there — the exactly-once constraint),
+      // so the ack is the sent id set. Absent entirely when the client
+      // sent none (pre-#56 shape stays byte-compatible).
+      ...(outcomes.length > 0
+        ? { ackedOutcomeIds: outcomes.map((o) => o.seq) }
+        : {}),
       serverTime: new Date().toISOString(),
       stats: {
         inserted: outcome.inserted,
@@ -1025,7 +1164,8 @@ export const syncPlugin = fp(async (app, options) => {
         sessionsReplayed: outcome.sessionsReplayed,
         clockSkewAdjusted: outcome.clockAdjusted,
         xpCredited: outcome.xpCredited,
-        badgesAwarded: outcome.badgesAwarded
+        badgesAwarded: outcome.badgesAwarded,
+        outcomesInserted: outcome.outcomesInserted
       },
       packsOutdated: packsOutdated(packsDir, req.body.clientPacks),
       progress

@@ -46,6 +46,38 @@ export interface GameAttemptTelemetry {
   fallback: boolean;
 }
 
+/**
+ * Hearts session outcome (issue #56, roadmap D6, session_outcomes
+ * migration 6) — ONE row per Grade 2–3 FLUENCY-SPRINT game session
+ * (shouldMountHearts-gated; every other session writes nothing). Unlike
+ * the #52 local-only telemetry columns these facts DO travel: the #48
+ * sync wire carries them (additive optional sessionOutcomes array) into
+ * the server's ledger context. Counts + enum reason only — no PII
+ * (COPPA). INSERT-only like attempt rows; `synced` flips only in the
+ * sync worker. Hearts are session-scoped UI, never a currency and
+ * never a content gate (D6 doctrine).
+ */
+export interface SessionOutcomeInput {
+  studentId: string;
+  sessionId: string;
+  /** Always "GAME" today — hearts exist only in game-framework sessions. */
+  sessionType: SessionType;
+  /** Always "fluency" — the D6 predicate mounts hearts on fluency alone. */
+  stage: "guided" | "fluency";
+  heartsLost: number;
+  heartsRemaining: number;
+  endReason: "completed" | "hearts-empty";
+  /** Device-clock epoch ms at session close (sync reconciles skew server-side). */
+  endedAt: number;
+}
+
+/** Stored session_outcomes row (sync drain shape). */
+export interface SessionOutcomeRecord extends SessionOutcomeInput {
+  /** AUTOINCREMENT id — the sync cursor + wire ack key. */
+  id: number;
+  synced: 0 | 1;
+}
+
 /** A single recorded response — the immutable unit of the attempt log. */
 export interface AttemptInput {
   studentId: string;
@@ -229,6 +261,12 @@ export interface PackContentReader {
 export interface PracticeStorage {
   /** Append one attempt; returns the monotonic sequence id. */
   insertAttempt(input: AttemptInput, answeredAt: number): Promise<number>;
+  /**
+   * Append one hearts session outcome (#56, session_outcomes — the same
+   * INSERT-only append contract as attempts). One row per hearts
+   * session; the engine writes it exactly once at session close.
+   */
+  insertSessionOutcome(input: SessionOutcomeInput): Promise<number>;
   getTopicProgress(studentId: string, topicId: string): Promise<TopicProgressRecord | null>;
   /**
    * Write the projector-computed row. The projector owns the

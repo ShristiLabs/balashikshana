@@ -92,6 +92,8 @@ describe("lifecycle DB migrations on real SQLite", () => {
       "topic_progress",
       "unit_progress",
       "gamification_state",
+      // #56: append-only hearts session outcomes.
+      "session_outcomes",
     ]) {
       expect(tables).toContain(table);
     }
@@ -109,6 +111,16 @@ describe("lifecycle DB migrations on real SQLite", () => {
     expect(indexes.has("idx_attempt_log_unsynced")).toBe(true);
     // #47: ordered drain cursor for the #48 sync worker.
     expect(indexes.has("idx_attempt_log_drain")).toBe(true);
+    // #56: the outcomes' own drain cursor + exactly-once unique key.
+    expect(indexes.has("idx_session_outcomes_drain")).toBe(true);
+    const uniqueIndexes = new Set(
+      (
+        db
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'uq_%'")
+          .all() as { name: string }[]
+      ).map((r) => r.name),
+    );
+    expect(uniqueIndexes.has("uq_session_outcomes_session")).toBe(true);
     db.close();
   });
 
@@ -264,11 +276,11 @@ describe("lifecycle DB migrations on real SQLite", () => {
       0.42,
     );
 
-    runMigrations(db); // the #52 app version opens the same device
+    runMigrations(db); // the #56 app version opens the same device
     const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
-    expect(latest).toBe(5);
+    expect(latest).toBe(6);
     expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      5,
+      6,
     );
     // The pre-game row survived and backfilled to the documented
     // defaults: empty provenance string (NOT NULL ''), zero target,

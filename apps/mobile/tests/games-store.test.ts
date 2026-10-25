@@ -11,6 +11,7 @@ import {
   gameReducer,
   initialGameState,
   PROVENANCE_LABELS,
+  type GameAction,
 } from "../src/games/gameStore";
 
 function startFixture(overrides: Partial<GameSessionStart> = {}): GameSessionStart {
@@ -28,6 +29,10 @@ function startFixture(overrides: Partial<GameSessionStart> = {}): GameSessionSta
     targetResponseSpeedSec: 5.5,
     targetMasteryScore: 80,
     targetSpeedSec: 6,
+    // #56: the fixture's K-M2 topic is a kindergarten pack row, so the
+    // D6 predicate would NOT mount hearts for it — null mirrors that
+    // (hearts tests override explicitly).
+    heartsRemaining: null,
     questions: [
       {
         questionId: "K-M2-G-Q1",
@@ -281,5 +286,119 @@ describe("gameReducer", () => {
     expect(PROVENANCE_LABELS.current).toBe("This topic");
     expect(PROVENANCE_LABELS.contrastive).toBe("Warm-up mix");
     expect(PROVENANCE_LABELS["spaced-review"]).toBe("Memory boost");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #56 hearts mirror: the store REFLECTS engine transitions verbatim and
+// computes nothing (no hearts math, no tier rule — the engine owns both).
+// ---------------------------------------------------------------------------
+
+describe("hearts mirror (#56: reflect-only, never computed)", () => {
+  function heartsSession(): ReturnType<typeof gameReducer> {
+    let state = gameReducer(initialGameState(), {
+      type: "resolved",
+      unitId: "K-M2",
+      unitTitle: "T",
+      topicCode: "G",
+      topicName: "Counting",
+      offeredStages: ["fluency"],
+    });
+    state = gameReducer(state, { type: "stage-selected", stage: "fluency" });
+    return gameReducer(state, {
+      type: "session-started",
+      sessionId: "sess-h",
+      // The engine mounted hearts (a G2/G3 fluency sprint): HEART_COUNT.
+      start: startFixture({ heartsRemaining: 5 }),
+      stageByQuestionId: {},
+    });
+  }
+
+  function response(
+    overrides: Partial<Extract<GameAction, { type: "response-recorded" }>> = {},
+  ): Extract<GameAction, { type: "response-recorded" }> {
+    return {
+      type: "response-recorded",
+      sessionId: "sess-h",
+      isCorrect: false,
+      correctAnswer: "3",
+      explanation: "",
+      isRequeue: false,
+      fluencyGrade: 1,
+      cognitiveTimeSec: 4,
+      origin: "initial",
+      index: 0,
+      questionId: "K-M2-G-Q1",
+      ...overrides,
+    };
+  }
+
+  it("mirrors the engine's start count and per-response transitions verbatim", () => {
+    let state = heartsSession();
+    expect(state.heartsRemaining).toBe(5);
+
+    // First-answer miss: engine transition says 4 — the store copies it.
+    state = gameReducer(state, response({ hearts: { remaining: 4, lost: true } }));
+    expect(state.heartsRemaining).toBe(4);
+
+    // Re-queued repeat (the ladder re-presentation): the engine lost
+    // nothing — the mirror must not move either.
+    state = gameReducer(
+      state,
+      response({
+        isRequeue: true,
+        origin: "requeue",
+        index: 2,
+        hearts: { remaining: 4, lost: false },
+      }),
+    );
+    expect(state.heartsRemaining).toBe(4);
+  });
+
+  it("a non-hearts session (null) can NEVER gain hearts, even from a stray transition", () => {
+    let state = gameReducer(initialGameState(), {
+      type: "resolved",
+      unitId: "K-M2",
+      unitTitle: "T",
+      topicCode: "G",
+      topicName: "Counting",
+      offeredStages: ["fluency"],
+    });
+    state = gameReducer(state, { type: "stage-selected", stage: "fluency" });
+    // Kindergarten fixture: the D6 predicate did NOT mount hearts.
+    state = gameReducer(state, {
+      type: "session-started",
+      sessionId: "sess-nh",
+      start: startFixture(),
+      stageByQuestionId: {},
+    });
+    expect(state.heartsRemaining).toBeNull();
+
+    // Defensive impossibility (a buggy action carrying hearts into a
+    // non-hearts session): the null guard must swallow it.
+    state = gameReducer(state, {
+      type: "response-recorded",
+      sessionId: "sess-nh",
+      isCorrect: false,
+      correctAnswer: "3",
+      explanation: "",
+      isRequeue: false,
+      fluencyGrade: 1,
+      cognitiveTimeSec: 4,
+      origin: "initial",
+      index: 0,
+      questionId: "K-M2-G-Q1",
+      hearts: { remaining: 4, lost: true },
+    });
+    expect(state.heartsRemaining).toBeNull();
+  });
+
+  it("play-again resets the mirror to null until the next engine start payload", () => {
+    let state = heartsSession();
+    state = gameReducer(state, response({ hearts: { remaining: 4, lost: true } }));
+    expect(state.heartsRemaining).toBe(4);
+
+    const restarted = gameReducer(state, { type: "stage-selected", stage: "fluency" });
+    expect(restarted.heartsRemaining).toBeNull();
   });
 });

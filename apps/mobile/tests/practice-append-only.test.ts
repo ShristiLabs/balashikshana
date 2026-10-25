@@ -137,4 +137,36 @@ describe("append-only source scan (no UPDATE/DELETE on attempt_log anywhere)", (
     }
     expect(offenders).toEqual([]);
   });
+
+  it("contains zero mutation statements targeting session_outcomes beyond the sync worker's acked-ids flip (#56)", () => {
+    // The #56 hearts session-outcome table carries the SAME append-only
+    // contract as attempt_log, with ONE documented exception: the sync
+    // worker's synced-flag flip BY EXPLICIT ACKED IDS — never another
+    // column, never a DELETE, never an UPDATE without the synced = 0
+    // guard. The dynamic IN-placeholder list is normalized out before
+    // comparison.
+    const offenders: string[] = [];
+    for (const root of roots) {
+      for (const file of tsFiles(root)) {
+        const source = fs.readFileSync(file, "utf8");
+        const normalized = source
+          .replace(/\$\{[^}]*\}/g, "<ids>")
+          .replace(/`/g, '"')
+          .replace(/\s+/g, " ");
+        const mutations = [
+          ...normalized.matchAll(
+            /UPDATE\s+session_outcomes[^;"]*;?|DELETE\s+FROM\s+session_outcomes[^;"]*;?/gi,
+          ),
+        ]
+          .map((m) => m[0].trim())
+          .filter(
+            (stmt) =>
+              stmt !==
+              "UPDATE session_outcomes SET synced = 1 WHERE student_id = ? AND id IN (<ids>) AND synced = 0",
+          );
+        if (mutations.length > 0) offenders.push(`${file}: ${mutations[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });

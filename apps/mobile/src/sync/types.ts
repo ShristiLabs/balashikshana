@@ -38,6 +38,27 @@ export interface SyncAttemptWire {
   motorBaselineSec: number;
 }
 
+/**
+ * One drained session_outcomes row, in wire shape (#56 hearts
+ * telemetry). ADDITIVE to the #48 wire: the upload body carries an
+ * optional sessionOutcomes array, so pre-#56 servers/clients simply
+ * never see it. Facts only (counts + enum reason; COPPA — no PII):
+ * the server persists them into its gamification ledger context,
+ * exactly-once per (student, session) by database constraint.
+ */
+export interface SessionOutcomeWire {
+  /** Client row id — the ack mapping key (ackedOutcomeIds). */
+  seq: number;
+  sessionId: string;
+  sessionType: SessionType;
+  stage: "guided" | "fluency";
+  heartsLost: number;
+  heartsRemaining: number;
+  endReason: "completed" | "hearts-empty";
+  /** Device-clock epoch ms at session close. */
+  endedAtMs: number;
+}
+
 /** Raw attempt_log row as read from the lifecycle DB. */
 export interface AttemptLogRow {
   id: number;
@@ -111,6 +132,9 @@ export interface ProgressSnapshot {
 
 export interface SyncUploadResponse {
   ackedSeqs: number[];
+  /** #56: acknowledged session-outcome row ids (inserted now or already
+   *  present — both are safely synced). Absent on pre-#56 servers. */
+  ackedOutcomeIds?: number[];
   serverTime: string;
   stats: SyncUploadStats;
   packsOutdated: PackVersionSignal[];
@@ -168,6 +192,21 @@ export interface SyncStorage extends PracticeStorage {
    * snapshot is durably applied (no-loss ordering).
    */
   markSyncedUpTo(studentId: string, seq: number): Promise<number>;
+  /**
+   * #56: unsynced hearts session outcomes in id order
+   * (idx_session_outcomes_drain), capped. Read-only drain.
+   */
+  drainUnsyncedOutcomes(
+    studentId: string,
+    limit: number,
+  ): Promise<import("../practice/types").SessionOutcomeRecord[]>;
+  /**
+   * #56: THE only mutation permitted on session_outcomes — flip the
+   * synced flag for exactly the server-acked row ids, after the
+   * upload response is durably applied (no-loss ordering, same
+   * doctrine as markSyncedUpTo).
+   */
+  markOutcomesSynced(studentId: string, ids: number[]): Promise<number>;
 }
 
 /** The child-device session credential source (onboarding TokenStore). */
@@ -183,7 +222,15 @@ export interface SyncCredentialSource {
 }
 
 export interface SyncTransport {
-  uploadAttempts(attempts: SyncAttemptWire[]): Promise<SyncUploadResponse>;
+  /** Upload one drained batch. #56: hearts session outcomes ride the
+   *  SAME request (additive optional body field); pre-#56 servers
+   *  ignore them. Outcomes ride only alongside an attempts batch — the
+   *  server requires attempts (minItems 1), and an outcome row exists
+   *  only after its session's attempts were recorded. */
+  uploadAttempts(
+    attempts: SyncAttemptWire[],
+    outcomes?: SessionOutcomeWire[],
+  ): Promise<SyncUploadResponse>;
   fetchProgress(): Promise<SyncProgressResponse>;
 }
 
