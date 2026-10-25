@@ -174,10 +174,14 @@ function parentPublic(row) {
 
 // Email delivery seam: production must never see the token; dev/test get
 // it in the response body and (parent-id-keyed, never the email) in the
-// log. SMTP wiring is #63/#57 out of scope.
+// log. Since #63 the mail TRANSPORT seam exists (mailer.mjs: capture /
+// null / SMTP-behind-env), but verification and password-reset mail is
+// still delivered through this dev seam — routing those tokens through
+// real email is deliberately out of scope for #63 (the issue adds the
+// weekly digest only); a future issue flips these calls to the mailer.
 function devDeliveryFields(logger, isProduction, label, parentId, token, expiresAt) {
   if (isProduction) return {};
-  logger?.info?.({ parentId, kind: label, expiresAt, devDeliveryToken: token }, "parent auth token issued (dev seam; no SMTP configured)");
+  logger?.info?.({ parentId, kind: label, expiresAt, devDeliveryToken: token }, "parent auth token issued (dev seam; not routed through the mailer)");
   return { [`${label}Token`]: token, [`${label}TokenExpiresAt`]: expiresAt };
 }
 

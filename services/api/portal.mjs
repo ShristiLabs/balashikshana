@@ -386,4 +386,54 @@ export const portalPlugin = async function portalPlugin(app, opts) {
       return settingsResponse(row, Date.now());
     }
   );
+
+  // --- Notification preferences (issue #63: the weekly email toggle) ---------
+  // PARENT-level (the digest is one email per parent), unlike the per-child
+  // settings above. Stored on parents.weekly_email_enabled (migration 012,
+  // default on); flipping it takes effect on the next digest run — the job
+  // reads the flag at selection time, so an opted-out parent is skipped
+  // entirely (the issue's immediate-effect AC). Same parent-token doctrine
+  // as every portal route; behind the global per-IP + per-token buckets.
+
+  const notificationPreferencesSchema = {
+    body: {
+      type: "object",
+      additionalProperties: false,
+      required: ["weeklyEmailEnabled"],
+      properties: { weeklyEmailEnabled: { type: "boolean" } }
+    }
+  };
+
+  // GET /api/portal/notification-preferences -> the parent's email
+  // notification preferences (today: the weekly summary toggle).
+  app.get("/api/portal/notification-preferences", async (req, reply) => {
+    const session = await requireParentAuth(db, req, reply);
+    if (!session) return reply;
+    const row = await db.get("SELECT weekly_email_enabled FROM parents WHERE parent_id = $1", [
+      req._balashiParentId
+    ]);
+    if (!row) {
+      return sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: "Parent account not found." });
+    }
+    return { weeklyEmailEnabled: Boolean(row.weekly_email_enabled), serverTime: new Date().toISOString() };
+  });
+
+  // PUT /api/portal/notification-preferences -> set the preferences
+  // (full-shape replace: the body IS the new state).
+  app.put(
+    "/api/portal/notification-preferences",
+    { schema: notificationPreferencesSchema },
+    async (req, reply) => {
+      const session = await requireParentAuth(db, req, reply);
+      if (!session) return reply;
+      const row = await db.get(
+        "UPDATE parents SET weekly_email_enabled = $2, updated_at = now() WHERE parent_id = $1 RETURNING weekly_email_enabled",
+        [req._balashiParentId, req.body.weeklyEmailEnabled]
+      );
+      if (!row) {
+        return sendProblem(reply, 404, { type: `${PROBLEM_BASE}/not-found`, detail: "Parent account not found." });
+      }
+      return { weeklyEmailEnabled: Boolean(row.weekly_email_enabled), serverTime: new Date().toISOString() };
+    }
+  );
 };
