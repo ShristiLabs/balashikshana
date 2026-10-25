@@ -100,3 +100,13 @@ export interface PortalSettingsPutResponse {
   updatedAt?: string;
   serverTime: string;
 }
+
+export interface DeletionSummary {
+  deleted: boolean;
+  studentId: string;
+  auditId: string;
+  deletedAt: string;
+  scope: "child-data";
+  consentRecordsDetached: number;
+  deletedCounts: Record<string, number>;
+}

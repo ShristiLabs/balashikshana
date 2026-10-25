@@ -1673,6 +1673,120 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/portal/children/{studentId}/export:
+    get:
+      tags: [portal]
+      operationId: exportChildData
+      summary: One JSON document with every child-data class (COPPA data portability, issue #62)
+      description: |
+        PARENT session tokens only; CLAIMED-binding ownership as the other
+        portal routes (another parent's child id and an unknown id are the
+        same uniform 404). Returns ONE valid JSON document per child
+        covering every child-data class: profile (credential columns
+        excluded — never pin hashes or session tokens), the
+        parent_children binding, child-bound consent records, effective
+        portal settings, the full append-only attempt ledger, topic and
+        unit progress, student sessions and child device sessions
+        (credential verifiers excluded), gamification (XP events, badge
+        awards, state), session outcomes, and placement records. The
+        analytics block is computed through the SAME aggregation path as
+        the quadrant and weekly endpoints, so export numbers equal
+        portal numbers. Served as a downloadable attachment
+        (Content-Disposition). Memory is bounded by one child's rows.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: The child's complete data export (attachment)
+          headers:
+            Content-Disposition:
+              description: 'attachment; filename="balashikshana-data-export-{studentId}-{date}.json"'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildDataExport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such child is linked to this parent account (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/portal/children/{studentId}:
+    delete:
+      tags: [portal]
+      operationId: deleteChildData
+      summary: Delete all of a child's data (COPPA deletion right, issue #62)
+      description: |
+        PARENT session tokens only (child device tokens and student
+        sessions are 403 wrong-token-type) PLUS password
+        re-authentication: the body must carry the parent account's
+        password (12-128 chars, the signup bounds), verified against the
+        stored scrypt hash — a wrong password is 401 re-auth-required.
+        CLAIMED-binding ownership as the other portal routes; a repeat
+        request after a successful deletion is the same uniform 404 (the
+        binding is deleted with the child — the cascade is idempotent at
+        the API surface). One transaction deletes, in order: attempts,
+        topic progress, unit progress, student sessions, child device
+        sessions, XP events, badge awards, gamification state, session
+        outcomes, placement records, portal settings, the
+        parent_children binding, and the child profile row. COPPA
+        record-keeping: consent records are RETAINED with their child
+        linkage severed (student_id set to NULL), and an append-only
+        deletion_audit row (actor parent, child id, policy version,
+        timestamp, scope, per-table counts, detached-consent count) is
+        written in the SAME transaction; the ledger table rejects UPDATE
+        and DELETE at the database level. devices rows survive (parent
+        hardware registrations, not child data). The route carries a
+        tight per-IP password bucket in addition to the global ones.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - $ref: "#/components/parameters/StudentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeletionRequest"
+      responses:
+        "200":
+          description: Deletion completed; summary with audit id and counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletionSummary"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          description: Missing/expired token or failed password re-authentication (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such child is linked to this parent account (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
 components:
   parameters:
     StudentId:
@@ -3389,3 +3503,129 @@ components:
               type: integer
             reminderMinute:
               type: integer
+
+    DeletionRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: The parent account's password (re-authentication for a destructive action)
+
+    DeletionSummary:
+      type: object
+      required: [deleted, studentId, auditId, deletedAt, scope, consentRecordsDetached, deletedCounts]
+      properties:
+        deleted:
+          type: boolean
+        studentId:
+          type: string
+        auditId:
+          type: string
+          description: The deletion_audit ledger row id written atomically with the cascade
+        deletedAt:
+          type: string
+          format: date-time
+        scope:
+          type: string
+          enum: [child-data]
+        consentRecordsDetached:
+          type: integer
+          description: Consent evidence rows retained with their child linkage severed (never deleted)
+        deletedCounts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Deleted row count per table (student_question_attempts, parent_children, students, ...)
+
+    ChildDataExport:
+      type: object
+      required:
+        [formatVersion, exportedAt, studentId, profile, binding, consentRecords, portalSettings, attempts, topicProgress, unitProgress, sessions, deviceSessions, gamification, sessionOutcomes, placementRecords, analytics]
+      properties:
+        formatVersion:
+          type: integer
+          enum: [1]
+        exportedAt:
+          type: string
+          format: date-time
+        studentId:
+          type: string
+        profile:
+          type: object
+          description: The students row (nickname, avatar, grade, streak, coins, hearts); credential columns never exported
+        binding:
+          type: object
+          description: The parent_children row (relation, status, claimedAt)
+        consentRecords:
+          type: array
+          description: Child-bound consent evidence rows (policy version, capturedAt, method)
+          items:
+            type: object
+        portalSettings:
+          type: object
+          description: Effective child settings (same shape as the settings endpoint) plus updatedAt
+        attempts:
+          type: array
+          description: The full append-only attempt ledger for the child (chronological)
+          items:
+            type: object
+        topicProgress:
+          type: array
+          items:
+            type: object
+        unitProgress:
+          type: array
+          items:
+            type: object
+        sessions:
+          type: array
+          description: Student session lifetimes (created/expires); the token is never exported
+          items:
+            type: object
+        deviceSessions:
+          type: array
+          description: Child device session lifetimes; the token hash is never exported
+          items:
+            type: object
+        gamification:
+          type: object
+          required: [xpEvents, badgeAwards, state]
+          properties:
+            xpEvents:
+              type: array
+              items:
+                type: object
+            badgeAwards:
+              type: array
+              items:
+                type: object
+            state:
+              type: object
+              nullable: true
+        sessionOutcomes:
+          type: array
+          items:
+            type: object
+        placementRecords:
+          type: array
+          items:
+            type: object
+        analytics:
+          type: object
+          description: Parity block — the SAME quadrant and weekly (8-week) aggregations the portal endpoints serve
+          required: [quadrant, weekly]
+          properties:
+            quadrant:
+              type: array
+              description: Quadrant points identical to GET .../analytics/quadrant topics
+              items:
+                $ref: "#/components/schemas/PortalQuadrantPoint"
+            weekly:
+              type: array
+              description: Weekly series identical to GET .../analytics/weekly series
+              items:
+                type: object

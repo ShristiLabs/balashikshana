@@ -47,8 +47,12 @@ import {
  * Resolves a child THROUGH the caller's claimed binding. Sends the
  * uniform scoped-404 (same body for "not yours" and "does not exist")
  * and returns null when the caller has no such child.
+ *
+ * Exported since #62: the data-rights routes (export + deletion) resolve
+ * ownership through the EXACT same guard — one ownership doctrine, no
+ * drift between portal reads and destructive routes.
  */
-async function requireOwnedChild(db, req, reply, studentId) {
+export async function requireOwnedChild(db, req, reply, studentId) {
   const row = await db.get(
     `SELECT s.student_id, s.nickname, s.avatar, s.current_grade, s.streak_days,
             pc.status AS binding_status
@@ -66,6 +70,92 @@ async function requireOwnedChild(db, req, reply, studentId) {
     return null;
   }
   return row;
+}
+
+/**
+ * The effective child-settings shape from a portal_child_settings row
+ * (null row -> platform defaults). Exported since #62: the data-rights
+ * export embeds the settings in EXACTLY the shape the portal routes
+ * serve — one derivation, no drift.
+ */
+export function effectiveChildSettings(row) {
+  return row
+    ? {
+        dailyLimitMinutes: row.daily_limit_minutes == null ? null : Number(row.daily_limit_minutes),
+        restrictedSubjects: JSON.parse(row.restricted_subjects || "[]"),
+        gradeCeiling: row.grade_ceiling || null,
+        remindersEnabled: Boolean(row.reminders_enabled),
+        reminderHour: Number(row.reminder_hour),
+        reminderMinute: Number(row.reminder_minute)
+      }
+    : { ...DEFAULT_CHILD_SETTINGS, restrictedSubjects: [] };
+}
+
+/**
+ * Quadrant points for a child: the same SQL + the same pure
+ * buildQuadrantPoints mapping the GET quadrant route serves. Exported
+ * since #62 so the data-rights export computes its analytics parity
+ * block through the identical code path (export numbers == portal
+ * numbers BY CONSTRUCTION, not by copy).
+ */
+export async function quadrantPointsForChild(db, studentId) {
+  const rows = await db.all(
+    `SELECT a.topic_id AS "topicId",
+            t.topic_name AS "topicName",
+            t.unit_id AS "unitId",
+            u.subject AS "subject",
+            COUNT(*)::int AS attempts,
+            SUM(a.is_correct)::int AS correct,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY a.cognitive_time_sec) AS "medianSpeedSec",
+            u.gate_max_speed_sec AS "targetSpeedSec"
+     FROM student_question_attempts a
+     JOIN skill_topics t ON t.topic_id = a.topic_id
+     JOIN units u ON u.unit_id = a.unit_id
+     WHERE a.student_id = $1
+     GROUP BY a.topic_id, t.topic_name, t.unit_id, u.subject, u.gate_max_speed_sec
+     ORDER BY attempts DESC, a.topic_id ASC`,
+    [studentId]
+  );
+  return buildQuadrantPoints(
+    rows.map((r) => ({
+      topicId: r.topicId,
+      topicName: r.topicName,
+      unitId: r.unitId,
+      subject: r.subject,
+      attempts: Number(r.attempts),
+      correct: Number(r.correct),
+      medianSpeedSec: r.medianSpeedSec == null ? null : Number(r.medianSpeedSec),
+      targetSpeedSec: r.targetSpeedSec == null ? null : Number(r.targetSpeedSec)
+    }))
+  );
+}
+
+/**
+ * Weekly series for a child: the same SQL + the same pure
+ * buildWeeklySeries mapping the GET weekly route serves (exported since
+ * #62 — parity by construction, see quadrantPointsForChild).
+ */
+export async function weeklySeriesForChild(db, studentId, weeks, nowMs) {
+  const rows = await db.all(
+    `SELECT EXTRACT(EPOCH FROM (attempted_at::timestamptz))::bigint * 1000 AS "attemptedAtMs",
+            cognitive_time_sec AS "cognitiveTimeSec",
+            is_correct AS "isCorrect",
+            topic_id AS "topicId",
+            session_id AS "sessionId"
+     FROM student_question_attempts
+     WHERE student_id = $1`,
+    [studentId]
+  );
+  return buildWeeklySeries(
+    rows.map((r) => ({
+      attemptedAtMs: Number(r.attemptedAtMs),
+      cognitiveTimeSec: Number(r.cognitiveTimeSec),
+      isCorrect: Number(r.isCorrect) === 1,
+      topicId: r.topicId,
+      sessionId: r.sessionId
+    })),
+    { weeks, nowMs }
+  );
 }
 
 // --- Fastify plugin ------------------------------------------------------------
@@ -113,16 +203,8 @@ export const portalPlugin = async function portalPlugin(app, opts) {
     }
   };
 
-  function settingsResponse(row, nowMs) {    const effective = row
-      ? {
-          dailyLimitMinutes: row.daily_limit_minutes == null ? null : Number(row.daily_limit_minutes),
-          restrictedSubjects: JSON.parse(row.restricted_subjects || "[]"),
-          gradeCeiling: row.grade_ceiling || null,
-          remindersEnabled: Boolean(row.reminders_enabled),
-          reminderHour: Number(row.reminder_hour),
-          reminderMinute: Number(row.reminder_minute)
-        }
-      : { ...DEFAULT_CHILD_SETTINGS, restrictedSubjects: [] };
+  function settingsResponse(row, nowMs) {
+    const effective = effectiveChildSettings(row);
     return { settings: effective, updatedAt: row ? row.updated_at : null, serverTime: new Date(nowMs).toISOString() };
   }
 
@@ -183,35 +265,7 @@ export const portalPlugin = async function portalPlugin(app, opts) {
       const child = await requireOwnedChild(db, req, reply, req.params.studentId);
       if (!child) return reply;
 
-      const rows = await db.all(
-        `SELECT a.topic_id AS "topicId",
-                t.topic_name AS "topicName",
-                t.unit_id AS "unitId",
-                u.subject AS "subject",
-                COUNT(*)::int AS attempts,
-                SUM(a.is_correct)::int AS correct,
-                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY a.cognitive_time_sec) AS "medianSpeedSec",
-                u.gate_max_speed_sec AS "targetSpeedSec"
-         FROM student_question_attempts a
-         JOIN skill_topics t ON t.topic_id = a.topic_id
-         JOIN units u ON u.unit_id = a.unit_id
-         WHERE a.student_id = $1
-         GROUP BY a.topic_id, t.topic_name, t.unit_id, u.subject, u.gate_max_speed_sec
-         ORDER BY attempts DESC, a.topic_id ASC`,
-        [child.student_id]
-      );
-      const topics = buildQuadrantPoints(
-        rows.map((r) => ({
-          topicId: r.topicId,
-          topicName: r.topicName,
-          unitId: r.unitId,
-          subject: r.subject,
-          attempts: Number(r.attempts),
-          correct: Number(r.correct),
-          medianSpeedSec: r.medianSpeedSec == null ? null : Number(r.medianSpeedSec),
-          targetSpeedSec: r.targetSpeedSec == null ? null : Number(r.targetSpeedSec)
-        }))
-      );
+      const topics = await quadrantPointsForChild(db, child.student_id);
       return {
         studentId: child.student_id,
         // Empty child -> empty array (the UI renders the empty state).
@@ -232,28 +286,9 @@ export const portalPlugin = async function portalPlugin(app, opts) {
       const child = await requireOwnedChild(db, req, reply, req.params.studentId);
       if (!child) return reply;
 
-      const rows = await db.all(
-        `SELECT EXTRACT(EPOCH FROM (attempted_at::timestamptz))::bigint * 1000 AS "attemptedAtMs",
-                cognitive_time_sec AS "cognitiveTimeSec",
-                is_correct AS "isCorrect",
-                topic_id AS "topicId",
-                session_id AS "sessionId"
-         FROM student_question_attempts
-         WHERE student_id = $1`,
-        [child.student_id]
-      );
       const nowMs = Date.now();
       const weeks = Number(req.query?.weeks || 8);
-      const series = buildWeeklySeries(
-        rows.map((r) => ({
-          attemptedAtMs: Number(r.attemptedAtMs),
-          cognitiveTimeSec: Number(r.cognitiveTimeSec),
-          isCorrect: Number(r.isCorrect) === 1,
-          topicId: r.topicId,
-          sessionId: r.sessionId
-        })),
-        { weeks, nowMs }
-      );
+      const series = await weeklySeriesForChild(db, child.student_id, weeks, nowMs);
       return { studentId: child.student_id, weeks: series.length, series, generatedAt: new Date(nowMs).toISOString() };
     }
   );
@@ -272,16 +307,7 @@ export const portalPlugin = async function portalPlugin(app, opts) {
        WHERE s.parent_id = $1 AND s.student_id = $2`,
       [req._balashiParentId, child.student_id]
     );
-    const settings = row
-      ? {
-          dailyLimitMinutes: row.daily_limit_minutes == null ? null : Number(row.daily_limit_minutes),
-          restrictedSubjects: JSON.parse(row.restricted_subjects || "[]"),
-          gradeCeiling: row.grade_ceiling || null,
-          remindersEnabled: Boolean(row.reminders_enabled),
-          reminderHour: Number(row.reminder_hour),
-          reminderMinute: Number(row.reminder_minute)
-        }
-      : { ...DEFAULT_CHILD_SETTINGS, restrictedSubjects: [] };
+    const settings = effectiveChildSettings(row);
     const nowMs = Date.now();
     const usedMinutesToday = await recordedMinutesForDay(db, child.student_id, utcDayKey(nowMs));
     return {

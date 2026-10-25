@@ -25,6 +25,8 @@ import { contentPacksPlugin } from "./content-packs.mjs";
 import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
 import { placementPlugin } from "./placement.mjs";
 import { portalPlugin } from "./portal.mjs";
+import { dataRightsPlugin } from "./data-rights.mjs";
+import { startRetentionSweep } from "./retention.mjs";
 import {
   resolveOptionalStudentId,
   loadChildSettings,
@@ -111,6 +113,9 @@ const RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_
 const RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_TOKEN_PER_IP_MIN || 10);
 const RATE_LIMIT_PARENT_RESET_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_RESET_PER_IP_MIN || 5);
 const RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN || 10);
+// #62: the password re-authentication on child-data deletion (the
+// login-bucket doctrine for a password surface).
+const RATE_LIMIT_DELETE_PER_IP_MIN = Number(process.env.RATE_LIMIT_DELETE_PER_IP_MIN || 5);
 const URL_LENGTH_LIMIT = 2048;
 const SESSION_TTL_MS = 30 * 86400000;
 
@@ -658,6 +663,24 @@ await app.register(placementPlugin, { db });
 // ownership guard resolves children through parent_children. Behind the
 // global per-IP + per-token buckets (every route presents a bearer).
 await app.register(portalPlugin, { db });
+
+// Data-rights API (issue #62, M5): the per-child COPPA JSON export and
+// the password-re-authenticated child-data deletion with its append-only
+// deletion_audit ledger. Same parent-token + claimed-binding doctrine as
+// the portal (shared guard); deletion carries its own tight password
+// bucket in addition to the global ones.
+await app.register(dataRightsPlugin, {
+  db,
+  rateLimits: {
+    delete: { max: RATE_LIMIT_DELETE_PER_IP_MIN, timeWindow: "1 minute" }
+  }
+});
+
+// Retention/cleanup sweep (issue #62): one pass at boot, then every
+// RETENTION_SWEEP_INTERVAL_MS (default 6h, 0 disables). Idempotent,
+// single-statement purges of expired session/token rows; never touches
+// evidence tables. The timer is unref'd — it never holds the process.
+startRetentionSweep(db, logger);
 
 // --- Routes --------------------------------------------------------------------
 
