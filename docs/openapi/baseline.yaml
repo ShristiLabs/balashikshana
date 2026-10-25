@@ -1581,11 +1581,16 @@ components:
       properties:
         sessionType:
           type: string
-          # The ledger's session vocabulary is open by design (grew GAME in
-          # #52, PLACEMENT in #60); x-extensible-enum declares that growth
-          # non-breaking for old clients (the unknown-value policy is
-          # ignore-and-skip — the mobile projector already tolerates
+          # The legacy closed enum stays byte-identical to the published
+          # contract: under the oasdiff additive-only gate both growing a
+          # closed response enum AND removing it are breaking errors. The
+          # x-extensible-enum extension declares the growth vocabulary
+          # (PLACEMENT in #60) — oasdiff treats x-extensible-enum value
+          # additions as non-breaking. Future session types extend
+          # x-extensible-enum ONLY. Unknown-value policy on old clients
+          # is ignore-and-skip (the mobile projector tolerates
           # unrecognized session types on adoption).
+          enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]
           x-extensible-enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT]
         sessionId:
           type: string
