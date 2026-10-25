@@ -1075,6 +1075,12 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/PracticeQuestion"
+                  contentRestricted:
+                    type: boolean
+                    description: "#61 parent content controls: true (with zero questions) for a child caller whose parent restricts this unit's subject or grade"
+                  contentRestrictedReason:
+                    type: string
+                    enum: [subject-restricted, grade-ceiling]
         "400":
           $ref: "#/components/responses/Validation"
         "404":
@@ -1132,6 +1138,16 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/PracticeQuestion"
+                  contentRestricted:
+                    type: boolean
+                    description: |
+                      #61 parent content controls: true when the caller
+                      is a known child whose parent restricts this unit's
+                      subject or a grade above the ceiling — the response
+                      then carries ZERO questions.
+                  contentRestrictedReason:
+                    type: string
+                    enum: [subject-restricted, grade-ceiling]
         "400":
           $ref: "#/components/responses/Validation"
         "404":
@@ -1314,6 +1330,17 @@ paths:
         batch (400 sync-unknown-content) with nothing written. Dedicated
         per-token sync rate bucket (env RATE_LIMIT_SYNC_PER_TOKEN_MIN,
         default 30/min) on top of the global buckets.
+
+        #61 parent time limits (server-side enforcement): when the
+        child's parent has configured a daily limit and the child's
+        RECORDED active time (sum of per-attempt cognitive seconds) for
+        the current UTC day is at or over the cap, a batch that would
+        add today-dated sessions is refused whole with 429
+        time-limit-exceeded (problem extensions limitMinutes /
+        usedMinutes / resetsAtUtc, Retry-After until the UTC reset).
+        Backfill of earlier UTC days always lands; the device keeps its
+        append-only queue and retries after reset. No limit configured
+        (the default) leaves the route unchanged.
       parameters:
         - $ref: "#/components/parameters/SessionToken"
       requestBody:
@@ -1423,6 +1450,224 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/portal/children:
+    get:
+      tags: [portal]
+      operationId: listPortalChildren
+      summary: Children overview cards for the parent portal (issue #61)
+      description: |
+        PARENT session tokens only (the #40 dual-token doctrine): student
+        PIN sessions and child device tokens get 403 wrong-token-type;
+        anonymous callers get 401. Returns one card per child linked via
+        a CLAIMED parent_children binding: profile fields (nickname,
+        avatar, grade, relation), the streak, and unit-achievement
+        counts (units started, units mastered = Silver keys, Gold keys).
+        Ownership is resolved server-side through the binding — a parent
+        can only ever see their own children.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: The caller's children overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalChildrenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/portal/children/{studentId}/analytics/quadrant:
+    get:
+      tags: [portal]
+      operationId: getChildQuadrant
+      summary: Accuracy-vs-speed quadrant data per skill topic (server-side aggregation)
+      description: |
+        PARENT session tokens only; the child must be linked to the caller
+        via a CLAIMED parent_children binding (another parent's child id
+        and an unknown id are the same uniform 404 — anti-enumeration).
+        Per skill topic, aggregated server-side from the append-only
+        student_question_attempts ledger: attempt count, correct count,
+        accuracy %, and the median cognitive speed (exact
+        PERCENTILE_CONT), plus the unit's target speed for the fluency
+        split. Quadrant classification (architecture doc sec 3): green
+        fluent (accurate AND at/under target speed), yellow
+        accurate-slow, orange rushing, red needs-review; the split is 80%
+        accuracy (the platform pass line) and the unit's target speed; a
+        topic without a usable target speed is returned with a null
+        quadrant (plotted, not classified). A child with no attempts
+        returns an empty topics array.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: Quadrant points for every practiced skill topic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalQuadrantResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such child is linked to this parent account (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/portal/children/{studentId}/analytics/weekly:
+    get:
+      tags: [portal]
+      operationId: getChildWeekly
+      summary: Weekly time/progress series aggregated by ISO week (Monday UTC)
+      description: |
+        PARENT session tokens only; CLAIMED-binding ownership as the
+        quadrant route. Active time is the sum of per-attempt cognitive
+        seconds (the motor-baseline-adjusted engagement measure — the
+        same field family as the quadrant speed axis), aggregated into
+        Monday-anchored ISO weeks in UTC. Weeks inside the requested
+        window with no activity return ZEROED rows (accuracy null, not
+        0%), never errors. The series also carries per-week first-passed
+        topic counts (sessions with >= 80% accuracy, first occurrence
+        only) and the cumulative mastered-topics curve. `weeks` defaults
+        to 8, capped at 26.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - $ref: "#/components/parameters/StudentId"
+        - name: weeks
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 26
+            default: 8
+          description: Number of ISO-week buckets ending with the current week
+      responses:
+        "200":
+          description: Zero-filled weekly series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalWeeklyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such child is linked to this parent account (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/portal/children/{studentId}/settings:
+    get:
+      tags: [portal]
+      operationId: getChildSettings
+      summary: Effective parent controls (time limit, content controls, notification defaults) + today's usage
+      description: |
+        PARENT session tokens only; CLAIMED-binding ownership as the
+        other portal routes. Returns the effective settings — the stored
+        row, or the platform defaults when the parent has not configured
+        anything (no daily limit, nothing restricted, no grade ceiling,
+        reminders OFF per the #57 COPPA-safe default) — plus today's
+        recorded active minutes and the exceeded flag so the portal can
+        render the live cap state.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: Effective settings and today's usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalSettingsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such child is linked to this parent account (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+    put:
+      tags: [portal]
+      operationId: putChildSettings
+      summary: Upsert the parent's controls for one child (full-shape replace)
+      description: |
+        PARENT session tokens only; CLAIMED-binding ownership. Full-shape
+        upsert: the body IS the new effective state (absent optional
+        fields reset to defaults; restrictedSubjects and
+        remindersEnabled are required so the choice is always explicit).
+        Bounds: dailyLimitMinutes null (unlimited) or 5-480;
+        restrictedSubjects a unique subset of math, ela, science,
+        socialStudies; gradeCeiling null or a registry grade id;
+        reminder time integers 0-23 / 0-59 (stored as the 17:00 default
+        shape when reminders are disabled). Enforcement is server-side:
+        the daily cap refuses new-practice sync uploads once the child's
+        recorded active time for the UTC day reaches it (429
+        time-limit-exceeded on POST /api/sync/attempts), subject and
+        grade controls empty the question-serving routes for child
+        callers, and above-ceiling pack artifacts are a 403.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+        - $ref: "#/components/parameters/StudentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortalChildSettings"
+      responses:
+        "200":
+          description: The stored settings row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalSettingsPutResponse"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such child is linked to this parent account (problem+json)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -2634,6 +2879,13 @@ components:
                 type: string
         progress:
           $ref: "#/components/schemas/SyncProgressSnapshot"
+        parentSettings:
+          $ref: "#/components/schemas/ParentSettingsBlock"
+          description: |
+            #61 advisory block (additive): the parent's live limits and
+            controls so an offline-first device can gate new practice
+            locally before burning an upload. Advisory only — the
+            refusals stay server-side.
 
     StudentProfile:
       description: Full student record with progress maps (shape is engine-defined and additive)
@@ -2902,3 +3154,238 @@ components:
           format: date-time
         retrievabilityPct:
           type: number
+
+    PortalChildrenResponse:
+      type: object
+      required: [parentId, children]
+      properties:
+        parentId:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalChildOverview"
+
+    PortalChildOverview:
+      type: object
+      required: [studentId, nickname, avatar, currentGrade, streakDays, unitsStarted, unitsMastered, silverKeys, goldKeys]
+      properties:
+        studentId:
+          type: string
+        nickname:
+          type: string
+        avatar:
+          type: string
+        currentGrade:
+          type: string
+        relation:
+          type: string
+        streakDays:
+          type: integer
+        lastActiveAt:
+          type: string
+        unitsStarted:
+          type: integer
+        unitsMastered:
+          type: integer
+          description: Units with a Silver key awarded (the platform's mastery bar)
+        silverKeys:
+          type: integer
+        goldKeys:
+          type: integer
+
+    PortalQuadrantResponse:
+      type: object
+      required: [studentId, topics, generatedAt]
+      properties:
+        studentId:
+          type: string
+        topics:
+          type: array
+          description: Empty for a child with no recorded attempts
+          items:
+            $ref: "#/components/schemas/PortalQuadrantPoint"
+        generatedAt:
+          type: string
+          format: date-time
+
+    PortalQuadrantPoint:
+      type: object
+      required: [topicId, attempts, correct, accuracyPct, medianSpeedSec, quadrant]
+      properties:
+        topicId:
+          type: string
+        topicName:
+          type: string
+        unitId:
+          type: string
+        subject:
+          type: string
+        attempts:
+          type: integer
+        correct:
+          type: integer
+        accuracyPct:
+          type: number
+          description: 0-100, one decimal
+        medianSpeedSec:
+          type: number
+          description: Exact median of per-attempt cognitive seconds
+        targetSpeedSec:
+          type: number
+          nullable: true
+          description: The unit's fluency bar (gate_max_speed_sec) — the quadrant speed split
+        quadrant:
+          type: string
+          nullable: true
+          enum: [fluent, accurate-slow, rushing, needs-review]
+          description: |
+            Classified at 80% accuracy (platform pass line) x unit target
+            speed; null when the topic has no usable target speed.
+
+    PortalWeeklyResponse:
+      type: object
+      required: [studentId, weeks, series, generatedAt]
+      properties:
+        studentId:
+          type: string
+        weeks:
+          type: integer
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalWeeklyWeek"
+        generatedAt:
+          type: string
+          format: date-time
+
+    PortalWeeklyWeek:
+      type: object
+      required: [weekStartIso, attempts, correct, accuracyPct, activeMinutes, topicsPracticed, topicsFirstMastered, cumulativeTopicsMastered]
+      properties:
+        weekStartIso:
+          type: string
+          format: date-time
+          description: Monday 00:00 UTC of the ISO week
+        weekStartMs:
+          type: integer
+        attempts:
+          type: integer
+        correct:
+          type: integer
+        accuracyPct:
+          type: number
+          nullable: true
+          description: Null on weeks with no attempts (zeroed week, no fake 0%)
+        activeMinutes:
+          type: number
+          description: Sum of per-attempt cognitive seconds / 60
+        topicsPracticed:
+          type: integer
+        topicsFirstMastered:
+          type: integer
+          description: Topics whose FIRST >=80%-accuracy session fell in this week
+        cumulativeTopicsMastered:
+          type: integer
+
+    PortalChildSettings:
+      type: object
+      additionalProperties: false
+      required: [restrictedSubjects, remindersEnabled]
+      properties:
+        dailyLimitMinutes:
+          type: integer
+          nullable: true
+          minimum: 5
+          maximum: 480
+          description: Null = unlimited
+        restrictedSubjects:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [math, ela, science, socialStudies]
+        gradeCeiling:
+          type: string
+          nullable: true
+          enum: [pre-k, kindergarten, grade-1, grade-2, grade-3]
+        remindersEnabled:
+          type: boolean
+        reminderHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        reminderMinute:
+          type: integer
+          minimum: 0
+          maximum: 59
+
+    PortalSettingsResponse:
+      type: object
+      required: [studentId, settings, usage, serverTime]
+      properties:
+        studentId:
+          type: string
+        settings:
+          $ref: "#/components/schemas/PortalChildSettings"
+        updatedAt:
+          type: string
+          nullable: true
+        usage:
+          $ref: "#/components/schemas/PortalTimeLimitUsage"
+        serverTime:
+          type: string
+          format: date-time
+
+    PortalSettingsPutResponse:
+      type: object
+      required: [settings, serverTime]
+      properties:
+        settings:
+          $ref: "#/components/schemas/PortalChildSettings"
+        updatedAt:
+          type: string
+        serverTime:
+          type: string
+          format: date-time
+
+    PortalTimeLimitUsage:
+      type: object
+      required: [dailyLimitMinutes, usedMinutesToday, exceeded]
+      properties:
+        dailyLimitMinutes:
+          type: integer
+          nullable: true
+        usedMinutesToday:
+          type: number
+          description: Recorded active minutes for the current UTC day
+        exceeded:
+          type: boolean
+
+    ParentSettingsBlock:
+      type: object
+      required: [timeLimits, contentControls, notifications]
+      properties:
+        timeLimits:
+          $ref: "#/components/schemas/PortalTimeLimitUsage"
+        contentControls:
+          type: object
+          required: [restrictedSubjects, gradeCeiling]
+          properties:
+            restrictedSubjects:
+              type: array
+              items:
+                type: string
+            gradeCeiling:
+              type: string
+              nullable: true
+        notifications:
+          type: object
+          required: [remindersEnabled, reminderHour, reminderMinute]
+          properties:
+            remindersEnabled:
+              type: boolean
+            reminderHour:
+              type: integer
+            reminderMinute:
+              type: integer

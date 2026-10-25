@@ -57,6 +57,13 @@ import { sendProblem, PROBLEM_BASE } from "./problem.mjs";
 import { resolveBearerAuth } from "./parent-auth.mjs";
 import { requireConsentForStudent } from "./consent.mjs";
 import {
+  loadChildSettings,
+  recordedMinutesForDay,
+  timeLimitVerdict,
+  parentSettingsBlock,
+  utcDayKey
+} from "./enforcement.mjs";
+import {
   evaluateMasteryGateAttempt,
   computeCognitiveTimeSec,
   computeFluencyGrade,
@@ -1243,6 +1250,43 @@ export const syncPlugin = fp(async (app, options) => {
       });
     }
 
+    // #61 parent time limits — the server-side enforcement point for
+    // "a child over the daily cap is refused new practice". The verdict
+    // runs on the RECORDED ledger (already-ingested attempts for the
+    // current UTC day): once usage is at/over the parent's cap, an
+    // upload that would add TODAY-dated sessions is refused whole (the
+    // device keeps its append-only queue per D8 and retries after the
+    // UTC reset or a cap raise). Pure backfill of earlier days always
+    // lands. The session that crosses the line was accepted in full —
+    // attempts are never split.
+    const settings = await loadChildSettings(db, scoped.student_id);
+    if (settings.dailyLimitMinutes != null) {
+      const nowMs = Date.now();
+      const usedMinutesToday = await recordedMinutesForDay(db, scoped.student_id, utcDayKey(nowMs));
+      // Same clock policy as ingest: a future client timestamp beyond
+      // tolerance is clamped to server now, so a broken-fast device
+      // clock cannot dodge the cap by dating attempts "tomorrow".
+      const clampedAttempts = attempts.map((a) => ({
+        answeredAtMs: Math.min(Number(a.answeredAtMs) || 0, nowMs + SYNC_FUTURE_CLOCK_TOLERANCE_MS)
+      }));
+      const verdict = timeLimitVerdict(settings, { usedMinutesToday, nowMs }, clampedAttempts);
+      if (verdict.limited) {
+        const resetsAt = new Date(verdict.resetsAtUtc).getTime();
+        reply.header("retry-after", String(Math.max(1, Math.ceil((resetsAt - nowMs) / 1000))));
+        return sendProblem(reply, 429, {
+          type: `${PROBLEM_BASE}/time-limit-exceeded`,
+          title: "Daily time limit reached",
+          detail:
+            "This child has reached the parent-configured daily practice limit. New practice resumes after the limit resets.",
+          extensions: {
+            limitMinutes: verdict.limitMinutes,
+            usedMinutes: verdict.usedMinutes,
+            resetsAtUtc: verdict.resetsAtUtc
+          }
+        });
+      }
+    }
+
     const outcome = await reconcileSyncBatch({
       db,
       studentId: scoped.student_id,
@@ -1343,9 +1387,19 @@ export const syncPlugin = fp(async (app, options) => {
       }
 
       const progress = await buildProgressSnapshot(db, scoped.student_id);
+      // #61 advisory block: the parent's live limits/controls so an
+      // offline-first device can gate new practice locally (stop
+      // offering sessions past the cap, hide restricted subjects)
+      // BEFORE burning an upload. Advisory only — the refusals stay
+      // server-side (upload 429 above; question-route gating in
+      // server.mjs). Additive response field; older clients ignore it.
+      const nowMs = Date.now();
+      const settings = await loadChildSettings(db, scoped.student_id);
+      const usedMinutesToday = await recordedMinutesForDay(db, scoped.student_id, utcDayKey(nowMs));
       return {
-        serverTime: new Date().toISOString(),
+        serverTime: new Date(nowMs).toISOString(),
         packsOutdated: packsOutdated(packsDir, clientPacks),
+        parentSettings: parentSettingsBlock(settings, { usedMinutesToday }),
         progress
       };
     }

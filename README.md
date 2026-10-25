@@ -280,6 +280,17 @@ Roadmap E10 (the placement half), the M4 capstone: a short adaptive exploration 
 - **The family decides, gently:** the offer appears once per grade (never blocks the journey map; a kill mid-probe simply re-offers — #44 resumability), and the recommendation screen always shows both "start where recommended" and an explicit "start from the beginning" option. Copy frames it as a short exploration, never a test.
 - Architecture detail: `docs/architecture.md` section 2.16.
 
+### 22. Parent Portal Web App (`apps/parent-portal`, issue #61)
+M5 (roadmap D4/D5): a separate lightweight **Vite + React 19 + TypeScript SPA** for parents — login with the #40 parent account, children overview, per-child analytics, and the parental controls the SERVER enforces. Deliberately never linked from any child surface (D5 isolation; own origin, dev port 4300).
+
+- **Right-sized stack, zero third-party SDKs:** an SPA (not Next.js) because every screen sits behind login — no SSR/SEO surface, static build only; own lockfile (the `apps/mobile` precedent); hand-rolled components over design tokens; hand-rolled SVG charts (the quadrant is positioned dots, the weekly view bars) so the bundle carries no chart library (COPPA: first-party code only, audited).
+- **Parent-token-only API:** every `/api/portal/*` route requires a parent session token — student PIN and child-device tokens are 403 wrong-token-type, anonymous 401. Child ids resolve only through the caller's `parent_children` binding; another parent's child returns the same 404 as an unknown id. SPA keeps the token in-memory + sessionStorage mirror (never localStorage; no cookie surface), one refresh attempt on 401.
+- **What the parent sees:** children overview cards (nickname, avatar, grade, streak, mastered units, Silver/Gold keys); the accuracy-vs-speed quadrant per child — per skill topic, accuracy % (split at the 80% pass line) against MEDIAN cognitive speed (split at the unit's own target speed — "fast" means at/under the fluency bar crowns use); weekly active time + progress in Monday-anchored ISO weeks (UTC), zero-filled quiet weeks.
+- **Controls enforced server-side, one source of truth** (`services/api/enforcement.mjs`, shared by portal + sync + question-serving): daily time limits (UTC day; once recorded active time is at/over the cap, `POST /api/sync/attempts` refuses today-dated batches with 429 + `Retry-After`, backfill always lands, the crossing session landed in full — D8 append-only); subject/grade content controls (a gated subject serves ZERO questions; the pack index filters by ceiling, above-ceiling artifacts 403 for child callers); fail-closed grade vocabulary (unknown ceiling restricts, unknown unit grade is above-ceiling). Controls gate what is served — they never rewrite recorded attempts, and subject controls cannot be carved out of signed packs (question-serving enforces them instead).
+- **Settings home:** migration 010 `portal_child_settings` (one row per claiming parent + child; absent row = platform defaults). Notification settings are the #57 reminder MIRROR — parent-owned defaults, default OFF; the reminder itself stays device-local per D5, delivered to devices as the advisory `parentSettings` block on `GET /api/sync/progress`.
+- Run it: `npm --workspaces=false --prefix apps/parent-portal run dev` (Vite :4300; the API's CORS allowlist includes the dev origin).
+- Architecture detail: `docs/architecture.md` section 3.
+
 
 ---
 
@@ -292,7 +303,7 @@ balashikshana/
 ├── startup.sh / stop.sh                      # One-command startup and shutdown scripts
 ├── package.json                              # Monorepo workspaces configuration
 ├── GradePrekto3MathCurrGuide.pdf             # Reference Pre-K to Grade 3 Mathematics Curriculum Guide
-├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG validation, engine verifier + vitest suites (postgres:16 service), mobile app-shell quality gate, live smoke & OpenAPI breaking-change gate
+├── .github/workflows/ci.yml                  # GitHub Actions CI: curriculum DAG validation, engine verifier + vitest suites (postgres:16 service), mobile app-shell + parent-portal quality gates, live smoke & OpenAPI breaking-change gate
 ├── docker/
 │   ├── docker-compose.yml                    # Postgres, Redis, API & Web container orchestration
 │   ├── Dockerfile.api                        # Backend Sync & Mastery API container
@@ -304,7 +315,8 @@ balashikshana/
 │       ├── migrations/                       # node-pg-migrate migrations (served datastore, PostgreSQL)
 │       └── sqlite/                           # On-device SQLite schema reference (offline store, roadmap D2)
 ├── apps/
-│   └── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router, offline practice core) + static web dev harness (public/)
+│   ├── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router, offline practice core) + static web dev harness (public/)
+│   └── parent-portal/                        # Parent portal SPA (Vite + React 19 + TS): login, children overview, quadrant/weekly analytics, server-enforced parental controls (issue #61)
 ├── tools/
 │   └── content-pipeline/                     # Signed per-grade content-pack compiler (node:sqlite + node:crypto, zero runtime deps)
 ├── docs/
