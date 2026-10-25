@@ -1,40 +1,24 @@
 /**
- * Celebration narration lines (issue #58) — the topic's registry
+ * Celebration narration lines (issue #58; the asset folded into the
+ * unified narration-lines asset by #59) — the topic's registry
  * celebrationPrompts, voiced through the #45 TTS coordinator.
  *
- * Source of truth: assets/narration/celebration-lines.json, derived
- * verbatim from voice-narration-manifest.json by
- * scripts/build-celebration-lines.mjs and pinned 1:1 by
- * tests/mascot-celebrations.test.ts (every topic present, every line
- * equal). The compact asset is imported directly (the #45
- * sounds-manifest import precedent) instead of bundling the full SSML
- * manifest. Pure module: JSON in, strings out — no React Native.
+ * Data source: apps/mobile/src/audio/topicNarration.ts (the single
+ * narration binding asset for ALL registry line kinds — #59); this
+ * module keeps the celebration PICK POLICY (deterministic rotation +
+ * generic fallback) and its tested API. Pinned 1:1 against
+ * voice-narration-manifest.json by tests/narration-coverage.test.ts.
+ * Pure module: no React Native.
  */
-import rawLines from "../../../../assets/narration/celebration-lines.json";
-
-interface CelebrationLinesItem {
-  topicId: string;
-  grade: string;
-  lines: string[];
-}
-interface CelebrationLinesAsset {
-  totalTopics: number;
-  items: CelebrationLinesItem[];
-}
-
-const asset = rawLines as unknown as CelebrationLinesAsset;
-
-const BY_TOPIC = new Map<string, CelebrationLinesItem>(
-  asset.items.map((item) => [item.topicId, item]),
-);
+import { narrationTopicCount, topicNarrationFor } from "../audio/topicNarration";
 
 /** Generic fallback when a topic has no registry lines (defensive only). */
 export const FALLBACK_CELEBRATION_LINE = "Awesome job! Keep that focus going!";
 
 /** All registry celebration lines for a topic (empty array when unknown). */
 export function celebrationLinesForTopic(topicId: string): string[] {
-  const item = BY_TOPIC.get(topicId);
-  return item ? [...item.lines] : [];
+  const item = topicNarrationFor(topicId);
+  return item ? [...item.celebration] : [];
 }
 
 /**
@@ -51,5 +35,7 @@ export function celebrationLineForTopic(topicId: string, occurrence: number): st
 
 /** Topic count in the asset (completeness pin vs the source manifest). */
 export function celebrationLineTopicCount(): number {
-  return asset.items.length;
+  // Re-exported through the narration module so the count can never
+  // drift from the unified asset.
+  return narrationTopicCount();
 }

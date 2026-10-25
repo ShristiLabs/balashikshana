@@ -56,7 +56,12 @@ describe("adaptNarration", () => {
 
   it("passes plain text through with entity decoding", () => {
     const adapted = adaptNarration("Count &amp; say: 1, 2, 3");
-    expect(adapted).toEqual({ plainText: "Count & say: 1, 2, 3", rateWpm: null, breakMs: 0 });
+    expect(adapted).toEqual({
+      plainText: "Count & say: 1, 2, 3",
+      rateWpm: null,
+      breakMs: 0,
+      pitchMultiplier: null,
+    });
   });
 
   it("tolerates malformed SSML by degrading to tag-stripped text", () => {
@@ -83,6 +88,65 @@ describe("adaptNarration", () => {
   });
 
   it("handles empty input", () => {
-    expect(adaptNarration("")).toEqual({ plainText: "", rateWpm: null, breakMs: 0 });
+    expect(adaptNarration("")).toEqual({
+      plainText: "",
+      rateWpm: null,
+      breakMs: 0,
+      pitchMultiplier: null,
+    });
+  });
+});
+
+describe("prosody pitch adaptation (#59)", () => {
+  it("maps percent pitches to platform multipliers", () => {
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="+5%">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBe(1.05);
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="-10%">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBe(0.9);
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="15%">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBe(1.15);
+  });
+
+  it("clamps out-of-range pitches to the documented platform band", () => {
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="+500%">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBe(2);
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="-90%">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBe(0.5);
+  });
+
+  it("degrades to null on absent, labeled, or malformed pitch", () => {
+    // Absent attribute (the registry's grade-1 lines ship pitch="default").
+    expect(
+      adaptNarration('<speak><prosody pitch="default">Hi</prosody></speak>').pitchMultiplier,
+    ).toBeNull();
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm">Hi</prosody></speak>').pitchMultiplier,
+    ).toBeNull();
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="x-low">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBeNull();
+    expect(
+      adaptNarration('<speak><prosody rate="110wpm" pitch="+five%">Hi</prosody></speak>')
+        .pitchMultiplier,
+    ).toBeNull();
+    // Non-SSML text never carries a pitch.
+    expect(adaptNarration("Just words").pitchMultiplier).toBeNull();
+  });
+
+  it("keeps the registry prompt pitch (+5%) alongside the rate", () => {
+    const adapted = adaptNarration(REGISTRY_PROMPT);
+    expect(adapted.rateWpm).toBe(110);
+    expect(adapted.pitchMultiplier).toBe(1.05);
   });
 });

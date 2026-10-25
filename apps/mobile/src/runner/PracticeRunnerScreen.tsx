@@ -20,6 +20,12 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { router } from "expo-router";
 import { badgeById } from "@balashikshana/core-engine";
 import type { AudioCoordinator } from "../audio/coordinator";
+import { adaptNarration } from "../audio/ssml";
+import {
+  hintLineForTopic,
+  introLineForTopic,
+  remediationLineForTopic,
+} from "../audio/topicNarration";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
 import { spacing, typeRamp } from "../design/tokens";
@@ -35,6 +41,7 @@ import type {
   PracticeQuestion,
   TopicProgressRecord,
 } from "../practice/types";
+import type { TopicSessionSummary } from "../practice/practiceEngine";
 import { getNativePracticeDeps } from "../practice/nativePractice";
 import { GHOST_FLASH_MS, stageForTopicProgress, stageLabelFor } from "./cpaStages";
 import {
@@ -97,6 +104,8 @@ export function PracticeRunnerScreen({
   const [structural, setStructural] = useState<StructuralDraft>(EMPTY_DRAFT);
   const [exitSheetOpen, setExitSheetOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  /** #59: the revealed hint for the CURRENT question only (null = hidden). */
+  const [hintShown, setHintShown] = useState<{ questionId: string; text: string } | null>(null);
 
   const audioRef = useRef<AudioCoordinator | null>(null);
   const narrationSecRef = useRef(0);
@@ -230,6 +239,20 @@ export function PracticeRunnerScreen({
     };
   }, [state.phase, state.index, state.sessionId, questionId, prompt, topicId]);
 
+  // #59: speak the completion summary once when it appears (pre-readers
+  // get the outcome, not just readers). Any first-mastery celebration
+  // line (#58) is already queued ahead of this by completion order.
+  // Fires once per summary (phase+sessionId identity), app copy — the
+  // registry owns per-topic lines, the summary text is the same copy
+  // the screen renders (summarySpeechText keeps the two in lockstep).
+  useEffect(() => {
+    if (state.phase !== "summary" || !state.summary) return;
+    const text = summarySpeechText(state.summary, state.prevCrowns ?? 0);
+    void audioRef.current
+      ?.speak({ text, grade: asGradeId(effectiveGradeRef.current) })
+      .catch(() => undefined);
+  }, [state.phase, state.sessionId, state.summary, state.prevCrowns]);
+
   const replayPrompt = useCallback((promptText: string, promptTopicId: string) => {
     void audioRef.current
       ?.speak({
@@ -240,6 +263,30 @@ export function PracticeRunnerScreen({
       })
       .catch(() => undefined);
   }, []);
+
+  // #59: the guided-hint affordance. Speaking the topic's registry hint
+  // line is the ONLY live producer of the mascot's hint-shown event
+  // (the #58 machine vocabulary finally has its dispatcher). The
+  // adapted plain text is ALSO revealed visually so reading kids and
+  // screen-reader users (TTS defers to VoiceOver per the #45 policy)
+  // get the same coaching; the reveal is keyed to the question so it
+  // never leaks across question boundaries.
+  const requestHint = useCallback(() => {
+    const activeQuestion = currentQuestion(state);
+    if (!activeQuestion || state.phase !== "question") return;
+    const line = hintLineForTopic(activeQuestion.topicId);
+    if (!line) return;
+    setHintShown({ questionId: activeQuestion.questionId, text: adaptNarration(line).plainText });
+    fireMascot({ type: "hint-shown" });
+    void audioRef.current
+      ?.speak({
+        text: line,
+        grade: asGradeId(effectiveGradeRef.current),
+        topicId: activeQuestion.topicId,
+        line: "hint",
+      })
+      .catch(() => undefined);
+  }, [state, fireMascot]);
 
   // ------------------------------------------------------------------
   // Draft plumbing (structural widgets -> store string draft). Plain
@@ -339,6 +386,21 @@ export function PracticeRunnerScreen({
         }
         const prev = progressByTopicRef.current[start.topicId];
         setStructural(EMPTY_DRAFT);
+        // #59: the topic's registry intro line opens the session (SSML
+        // through the coordinator; the first question's prompt narration
+        // queues behind it in the platform speech queue). A missing line
+        // is a warned silent skip - never a block.
+        const intro = introLineForTopic(start.topicId);
+        if (intro) {
+          void audioRef.current
+            ?.speak({
+              text: intro,
+              grade: asGradeId(effectiveGradeRef.current),
+              topicId: start.topicId,
+              line: "intro",
+            })
+            .catch(() => undefined);
+        }
         dispatch({
           type: "session-started",
           sessionId: start.sessionId,
@@ -407,6 +469,23 @@ export function PracticeRunnerScreen({
         playMoment("onStreakCombo", activeQuestion.topicId);
       }
       void audioRef.current?.haptic(isCorrect ? "correct" : "gentle-retry");
+      // #59: a wrong answer speaks the topic's registry remediation
+      // line at the gentle-retry moment (speech was already stopped at
+      // check time, so the queue is clear). Pre-readers get the same
+      // coaching the feedback panel shows readers.
+      if (!isCorrect) {
+        const remediation = remediationLineForTopic(activeQuestion.topicId);
+        if (remediation) {
+          void audioRef.current
+            ?.speak({
+              text: remediation,
+              grade: asGradeId(effectiveGradeRef.current),
+              topicId: activeQuestion.topicId,
+              line: "remediation",
+            })
+            .catch(() => undefined);
+        }
+      }
     } catch (error) {
       // Free sync liveness BEFORE surfacing the failure (review finding
       // 1): a failed submit must not strand the session id in the
@@ -809,10 +888,27 @@ export function PracticeRunnerScreen({
           >
             <Text style={{ ...typeRamp.title, color: colors.secondary.label }}>{"▶"}</Text>
           </Pressable>
+          {/* #59: guided hint - speaks the topic's registry hint line and
+              reveals it as text (48pt target, same affordance row). */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Get a hint"
+            accessibilityHint="Reads a clue for this question"
+            onPress={requestHint}
+            style={{ minHeight: 48, minWidth: 48, alignItems: "center", justifyContent: "center" }}
+          >
+            <Text style={{ ...typeRamp.title, color: colors.secondary.label }}>{"?"}</Text>
+          </Pressable>
           <Text style={{ ...typeRamp.h3, color: colors.text, flexShrink: 1 }}>
             {question.prompt}
           </Text>
         </View>
+
+        {hintShown?.questionId === question.questionId ? (
+          <Text testID="question-hint" style={{ ...typeRamp.body, color: colors.textMuted }}>
+            {hintShown.text}
+          </Text>
+        ) : null}
 
         {plan.visualMode !== "none" ? (
           <VisualScaffold
@@ -991,4 +1087,21 @@ function SummaryStat({
       {hint ? <Text style={{ ...typeRamp.caption, color: colors.textMuted }}>{hint}</Text> : null}
     </View>
   );
+}
+
+/**
+ * #59: the spoken form of the completion summary - same copy as the
+ * rendered heading/body, with the crown glyphs replaced by their count
+ * (a spoken "star star star" is noise; the count is the information).
+ * Pure: kept beside the screen so the visual and spoken summaries
+ * drift together.
+ */
+function summarySpeechText(summary: TopicSessionSummary, prevCrowns: number): string {
+  if (summary.passedTopic) {
+    const delta = summary.crownsAwarded - prevCrowns;
+    return `Topic complete! You earned ${summary.crownsAwarded} crowns${
+      delta > 0 ? ` (up ${delta})` : ""
+    }.`;
+  }
+  return "Nice practice! Keep going - reach 80% to earn your next crown.";
 }

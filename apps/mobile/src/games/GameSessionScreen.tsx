@@ -37,6 +37,7 @@ import {
   resolveRunnerIdentity,
 } from "../runner/runnerNative";
 import type { TopicProgressRecord } from "../practice/types";
+import type { GameSessionSummary } from "../practice/practiceEngine";
 import { getNativePracticeDeps } from "../practice/nativePractice";
 import {
   currentGameQuestion,
@@ -433,15 +434,13 @@ export function GameSessionScreen({
         if (summary.metGoal) {
           playMoment("onCorrect", currentGameQuestion(state)?.topicId);
           // #58: the registry's own celebrationPrompts line for the
-          // topic (was a hardcoded string; #45 TTS, deterministic pick).
-          const celebrationTopicId =
-            currentGameQuestion(state)?.topicId ?? state.topicId ?? undefined;
+          // topic (#45 TTS, deterministic pick; #59: unknown topics
+          // fall back INSIDE the module - no hardcoded spoken strings
+          // at the call site).
+          const celebrationTopicId = currentGameQuestion(state)?.topicId ?? state.topicId ?? "";
           void audioRef.current
             ?.speak({
-              text:
-                celebrationTopicId !== undefined
-                  ? celebrationLineForTopic(celebrationTopicId, 0)
-                  : "Great game! You met your goal.",
+              text: celebrationLineForTopic(celebrationTopicId, 0),
               grade: asGradeId(effectiveGradeRef.current),
               topicId: celebrationTopicId,
               line: "celebration",
@@ -469,6 +468,20 @@ export function GameSessionScreen({
     void audioRef.current?.stopSpeech();
     router.back();
   }, [state.sessionId]);
+
+  // #59: speak the game summary once when it appears - pre-readers get
+  // the same outcome copy readers see (the #56 hearts-empty reframe is
+  // the load-bearing moment: it is spoken, not just displayed). Any
+  // goal-met registry celebration line (#58) is already queued ahead of
+  // this by completion order. Fires once per summary (phase+sessionId).
+  useEffect(() => {
+    if (state.phase !== "summary" || !state.summary) return;
+    const text = gameSummarySpeechText(state.summary, heartsRegrow);
+    if (!text) return;
+    void audioRef.current
+      ?.speak({ text, grade: asGradeId(effectiveGradeRef.current) })
+      .catch(() => undefined);
+  }, [state.phase, state.sessionId, state.summary, heartsRegrow]);
 
   // ------------------------------------------------------------------
   // Render
@@ -910,4 +923,34 @@ export function GameSessionScreen({
       </Sheet>
     </View>
   );
+}
+
+/**
+ * #59: the spoken form of the game summary - the same copy the summary
+ * renders (heading + body, plus the hearts-back reassurance line for
+ * the #56 hearts-empty reframe). Pure module-scope helper so the visual
+ * and spoken summaries drift together. Returns null when nothing
+ * should be spoken (not expected today; keeps the contract explicit).
+ */
+function gameSummarySpeechText(
+  summary: GameSessionSummary,
+  regrow: { regrown: number } | null,
+): string | null {
+  const heartsEmpty = summary.hearts?.endReason === "hearts-empty";
+  if (heartsEmpty) {
+    const heartsBack =
+      summary.hearts &&
+      regrow &&
+      regrow.regrown >= summary.hearts.heartsLost &&
+      summary.hearts.heartsLost > 0
+        ? " Your hearts are all back. Play again whenever you are ready!"
+        : " Hearts grow back while you rest. Your next game starts with a full heart row!";
+    return `Mistakes grow your brain! Every tricky answer you tried made your brain stronger. That is how learning works.${heartsBack}`;
+  }
+  if (summary.metGoal) {
+    return "Goal met! You beat the game's goal. Keep it up!";
+  }
+  return `Nice game! Reach ${
+    summary.stage === "fluency" ? "the speed goal" : "the accuracy goal"
+  } next time.`;
 }

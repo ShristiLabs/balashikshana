@@ -195,7 +195,7 @@ describe("celebration copy doctrine (positive-only, PII-free)", () => {
   });
 });
 
-describe("celebration lines asset (registry-derived, pinned 1:1)", () => {
+describe("celebration lines (registry-derived; asset folded into narration-lines.json by #59, pinned 1:1)", () => {
   it("covers every narration-manifest topic with identical lines", () => {
     expect(celebrationLineTopicCount()).toBe(narrationManifest.items.length);
     for (const item of narrationManifest.items) {
@@ -357,19 +357,26 @@ describe("tester gap pins: screen-level suppression, lifecycle, seams", () => {
     expect(hook).toContain("clearInterval(timer)");
   });
 
-  it("snap-confirm and hint-shown have no live dispatcher yet (documented seam) — vocabulary-only", () => {
-    // True today: the only producers of these events are the machine's
-    // own map and the tests. Harmless by design: the poses are the
-    // registry vocabulary; hint narration lands with #59.
-    for (const event of ["snap-confirm", "hint-shown"]) {
-      const producers = [
-        runnerScreen,
-        gameScreen,
-        src("apps/mobile/src/gate/GateRunnerScreen.tsx"),
-        src("apps/mobile/src/journey/JourneyScreen.tsx"),
-      ].filter((contents) => contents.includes(`type: "${event}"`));
-      expect(producers).toEqual([]);
-    }
+  it("hint-shown has a live producer (#59 hint narration); snap-confirm stays vocabulary-only", () => {
+    // #59 lit the dormant producer: the runner's guided-hint affordance
+    // fires hint-shown when it speaks the registry hint line. snap-confirm
+    // deliberately has NO dispatcher (it shares the correct-answer pose
+    // — the #58 decision, still true).
+    const hintProducers = [
+      runnerScreen,
+      gameScreen,
+      src("apps/mobile/src/gate/GateRunnerScreen.tsx"),
+      src("apps/mobile/src/journey/JourneyScreen.tsx"),
+    ].filter((contents) => contents.includes('type: "hint-shown"'));
+    expect(hintProducers).toEqual([runnerScreen]);
+
+    const snapProducers = [
+      runnerScreen,
+      gameScreen,
+      src("apps/mobile/src/gate/GateRunnerScreen.tsx"),
+      src("apps/mobile/src/journey/JourneyScreen.tsx"),
+    ].filter((contents) => contents.includes('type: "snap-confirm"'));
+    expect(snapProducers).toEqual([]);
   });
 
   it("the animation budget check passes on the real tree (spawn)", async () => {

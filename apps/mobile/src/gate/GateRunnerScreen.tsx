@@ -35,6 +35,7 @@ import { answerTextFor, stageForTopicProgress, stageLabelFor } from "../runner";
 import { EMPTY_STRUCTURAL_DRAFT, QuestionBody, type StructuralDraft } from "../runner/QuestionBody";
 import type { RunnerOption } from "../runner/questionShapes";
 import { formatGoldCountdown } from "./countdown";
+import { ceremonyCopy } from "./ceremony";
 import {
   currentGateQuestion,
   gateReducer,
@@ -409,10 +410,14 @@ export function GateRunnerScreen({
       dispatch({ type: "ceremony-started", kind, animationsEnabled: motion.animationsEnabled });
       audioRef.current?.sfx("sfx_star_fanfare");
       void audioRef.current?.haptic("correct");
-      const line = kind === "gold" ? "Gold key earned!" : "Silver key earned!";
+      // #59: spoken ceremony copy comes from the SAME copy module the
+      // ceremony renders (no hardcoded spoken strings) - title plus the
+      // provisional note when the online journal check is pending.
+      const copy = ceremonyCopy(kind, provisional);
+      const spoken = copy.provisionalNote ? `${copy.title} ${copy.provisionalNote}` : copy.title;
       void audioRef.current
         ?.speak({
-          text: provisional ? `${line} We will check it with your online journal.` : line,
+          text: spoken,
           grade: asGradeId(effectiveGradeRef.current),
           line: "celebration",
         })
@@ -638,10 +643,15 @@ export function GateRunnerScreen({
       <View style={{ padding: spacing.xxl, gap: spacing.md, alignItems: "center" }}>
         <Text style={{ ...typeRamp.h2, color: colors.text }}>
           {/* Fresh from this flow, not the mount-time snapshot: a Gold
-           * check that just upgraded would read stale Silver state. */}
-          {state.mode === "goldCheck" && state.verification?.upgraded
-            ? "Gold key earned!"
-            : "Silver key earned!"}
+           * check that just upgraded would read stale Silver state.
+           * Copy (and speech, in the ceremony) come from ceremonyCopy —
+           * one module owns the key-earned wording. */}
+          {
+            ceremonyCopy(
+              state.mode === "goldCheck" && state.verification?.upgraded ? "gold" : "silver",
+              false,
+            ).title
+          }
         </Text>
         <Text style={{ ...typeRamp.bodyMuted, color: colors.textMuted, textAlign: "center" }}>
           Your journey continues. The next unit unlocks from the map.
