@@ -8,6 +8,13 @@
  * ENABLED, and the exact same revealed state rendered instantly when
  * reduced motion is on. The animation is decorative: every action and
  * every piece of information works without it.
+ *
+ * #58 composition: the ceremony is the unit-complete moment — the
+ * mascot celebrates beside the key and this session's newly earned
+ * #55 badges bloom below (text-redundant titles; static frames under
+ * reduced motion). Badges arrive RESOLVED (title/tier/description)
+ * from the gate screen; none were earned renders exactly the #51
+ * ceremony, nothing new.
  */
 import React, { useEffect, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
@@ -16,6 +23,9 @@ import { Button } from "../design/primitives";
 import { useTheme } from "../design/theme";
 import { spacing, typeRamp } from "../design/tokens";
 import { goldBadge, silverBadge } from "../journey/art";
+import { BadgeBloomView, type BadgeBloomBadge } from "../mascot/BadgeBloomView";
+import { MascotView } from "../mascot/MascotView";
+import { celebrateMascotState } from "../mascot/CelebrationStack";
 import type { CeremonyKind } from "./ceremony";
 import { ceremonyCopy } from "./ceremony";
 
@@ -25,6 +35,8 @@ export interface KeyCeremonyProps {
   /** False (reduced motion): render the revealed state instantly. */
   animationsEnabled: boolean;
   onDone: () => void;
+  /** #58: badges newly earned with the gate session (resolved catalog metadata). */
+  badges?: BadgeBloomBadge[];
   testID?: string;
 }
 
@@ -33,11 +45,15 @@ export function KeyCeremony({
   provisional,
   animationsEnabled,
   onDone,
+  badges,
   testID,
 }: KeyCeremonyProps): React.ReactElement {
   const { colors } = useTheme();
   const copy = ceremonyCopy(kind, provisional);
   const badge = kind === "gold" ? goldBadge(colors) : silverBadge(colors);
+  const mascotState = celebrateMascotState(
+    kind === "gold" ? "key-ceremony-gold" : "key-ceremony-silver",
+  );
 
   // Lazy useState (not a ref initializer): the Animated.Value is
   // created exactly once and never read during render.
@@ -80,6 +96,14 @@ export function KeyCeremony({
           </Svg>
         </Animated.View>
       </Pressable>
+      {/* #58: the celebrating mascot beside the key (decorative; the
+          summary label above carries the information). */}
+      <MascotView
+        state={mascotState}
+        animationsEnabled={animationsEnabled}
+        size={64}
+        testID="key-ceremony-mascot"
+      />
       <Text style={{ ...typeRamp.h1, color: colors.text, textAlign: "center" }}>{copy.title}</Text>
       <Text style={{ ...typeRamp.body, color: colors.textMuted, textAlign: "center" }}>
         {copy.body}
@@ -88,6 +112,26 @@ export function KeyCeremony({
         <Text style={{ ...typeRamp.caption, color: colors.textMuted, textAlign: "center" }}>
           {copy.provisionalNote}
         </Text>
+      ) : null}
+      {badges && badges.length > 0 ? (
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: spacing.lg,
+            paddingTop: spacing.sm,
+          }}
+        >
+          {badges.map((bloom, index) => (
+            <BadgeBloomView
+              key={`${bloom.id}-${String(index)}`}
+              badge={bloom}
+              animationsEnabled={animationsEnabled}
+              testID={`key-ceremony-bloom-${bloom.id}`}
+            />
+          ))}
+        </View>
       ) : null}
       <View style={{ paddingTop: spacing.lg, minWidth: 220 }}>
         <Button label="Keep going" onPress={onDone} accessibilityHint="Back to the journey map" />

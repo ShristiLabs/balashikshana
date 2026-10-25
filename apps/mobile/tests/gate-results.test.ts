@@ -39,6 +39,13 @@ function summaryFixture(overrides: Partial<GateSessionSummary> = {}): GateSessio
     remediationPrescription: "Mastery Achieved!",
     xpAwarded: 0,
     coinsAwarded: 0,
+    celebration: {
+      badgesAwarded: [],
+      leveledUp: false,
+      level: 1,
+      streakDays: 1,
+      streakIncreased: false,
+    },
     conditions: {
       overallAccuracyPassed: true,
       perTopicFloorPassed: false,

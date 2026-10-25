@@ -34,6 +34,8 @@ import { getNativePracticeDeps } from "../practice/nativePractice";
 import { getSyncController, subscribeContentOutdated } from "../sync/SyncBootstrap";
 import { GamificationHeaderStrip } from "../gamification/GamificationHeaderStrip";
 import { useGamificationSummary } from "../gamification/useGamificationSummary";
+import { MascotView } from "../mascot/MascotView";
+import { initialMascotState } from "../mascot/mascotMachine";
 import { GardenHealthView } from "./GardenHealth";
 import { GradeSwitcher } from "./GradeSwitcher";
 import { JourneyPath } from "./JourneyPath";
@@ -78,6 +80,9 @@ export function JourneyScreen(): React.ReactElement {
   // can key off it (identityRef is render-stable by design).
   const [studentId, setStudentId] = useState<string | null>(null);
   const gamification = useGamificationSummary(studentId);
+  // #58: the journey mascot — a decorative idle companion next to the
+  // reward strip (never expires; celebrations fire on session screens).
+  const mascotIdle = useMemo(() => initialMascotState(0), []);
   // The LIVE selected grade (not a render closure): the mount hydration
   // can resolve long after the child switched grades, and its reload
   // must target whatever grade is selected NOW.
@@ -281,7 +286,19 @@ export function JourneyScreen(): React.ReactElement {
           activeGrade={state.activeGrade}
           onSelect={handleGradeSelect}
         />
-        {gamification ? <GamificationHeaderStrip summary={gamification} /> : null}
+        {gamification ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+            <MascotView
+              state={mascotIdle}
+              animationsEnabled={motion.animationsEnabled}
+              size={56}
+              testID="journey-mascot"
+            />
+            <View style={{ flex: 1 }}>
+              <GamificationHeaderStrip summary={gamification} />
+            </View>
+          </View>
+        ) : null}
         <GardenHealthView garden={model.garden} />
       </View>
       <ScrollView

@@ -18,6 +18,7 @@ import {
   evaluateMasteryGateAttempt,
   generateTopicPracticeSet,
   beatTargetSharePct,
+  levelForXp,
   HEART_COUNT,
   shouldMountHearts,
   heartStateAfterResponse,
@@ -56,6 +57,7 @@ import {
   evaluateAndMergeBadges,
   initialGamificationState,
 } from "../gamification/rewardsProjector";
+import { buildCelebrationReport, type CelebrationReport } from "../mascot/celebrationEvents";
 
 import type {
   AttemptInput,
@@ -145,6 +147,8 @@ export interface TopicSessionSummary {
   /** #55: engine-derived reward totals (additive; provisional until sync). */
   xpAwarded: number;
   coinsAwarded: number;
+  /** #58: celebration event hooks (badges/level-up/streak) for the bloom. */
+  celebration: CelebrationReport;
 }
 
 /** Game-session start payload (issue #52) — everything the host + renderer need. */
@@ -209,6 +213,11 @@ export interface GameSessionSummary {
   /** #55: engine-derived reward totals (additive; provisional until sync). */
   xpAwarded: number;
   coinsAwarded: number;
+  /**
+   * #58: celebration event hooks (badges newly earned, level-up, streak
+   * transition) — the mascot/bloom moments consume this.
+   */
+  celebration: CelebrationReport;
   /**
    * #56 hearts summary — present ONLY when this was a hearts session
    * (G2/G3 fluency sprint). The reframe screen keys off endReason;
@@ -278,6 +287,8 @@ export interface GateSessionSummary {
   /** #55: engine-derived reward totals (additive; provisional until sync). */
   xpAwarded: number;
   coinsAwarded: number;
+  /** #58: celebration event hooks (badges/level-up/streak) for the ceremonies. */
+  celebration: CelebrationReport;
 }
 
 export interface GoldStatus {
@@ -298,6 +309,8 @@ export interface GoldVerificationSummary {
   reason: string;
   /** #55: engine-derived XP (additive; provisional until sync). */
   xpAwarded: number;
+  /** #58: celebration event hooks for the Gold ceremony (present on upgrade). */
+  celebration?: CelebrationReport;
 }
 
 export class PracticeSessionEngine {
@@ -537,6 +550,7 @@ export class PracticeSessionEngine {
       topicProgress: merged,
       xpAwarded: rewards.xp,
       coinsAwarded: rewards.coins,
+      celebration: rewards.celebration,
     };
   }
 
@@ -915,6 +929,7 @@ export class PracticeSessionEngine {
       perTopic,
       xpAwarded: rewards.xp,
       coinsAwarded: rewards.coins,
+      celebration: rewards.celebration,
       ...(hearts ? { hearts } : {}),
     };
   }
@@ -1156,6 +1171,7 @@ export class PracticeSessionEngine {
       unitProgress: merged,
       xpAwarded: rewards.xp,
       coinsAwarded: rewards.coins,
+      celebration: rewards.celebration,
     };
   }
 
@@ -1233,6 +1249,7 @@ export class PracticeSessionEngine {
         keyState: derivation.record.keyState,
         reason: "GOLD_KEY awarded after sleep-consolidation verification",
         xpAwarded: rewards.xp,
+        celebration: rewards.celebration,
       };
     }
     const status = prev?.keyState;
@@ -1307,20 +1324,39 @@ export class PracticeSessionEngine {
    * this AFTER persisting the session's projections). Persisted only
    * when the gamification seam exists; summary totals are computed
    * either way so no caller depends on the seam.
+   *
+   * #58: also derives the CelebrationReport (badges newly earned,
+   * level-up, streak transition) from the before/after projector
+   * deltas — the celebration event hooks the mascot consumes.
    */
   private async projectRewards(
     studentId: string,
     apply: (state: GamificationState) => { xp: number; coins: number },
     nowMs: number,
-  ): Promise<{ xp: number; coins: number }> {
+  ): Promise<{ xp: number; coins: number; celebration: CelebrationReport }> {
     const gamification = this.deps.gamificationStorage;
     if (!gamification) {
       const scratch = initialGamificationState(studentId, nowMs);
-      return apply(scratch);
+      const levelBefore = levelForXp(scratch.totalXp).level;
+      const streakBefore = scratch.streakDays;
+      const outcome = apply(scratch);
+      const badgesAwarded = [] as string[];
+      return {
+        ...outcome,
+        celebration: buildCelebrationReport({
+          badgesAwarded,
+          levelBefore,
+          levelAfter: levelForXp(scratch.totalXp).level,
+          streakBefore,
+          streakAfter: scratch.streakDays,
+        }),
+      };
     }
     const state =
       (await gamification.getGamificationState(studentId)) ??
       initialGamificationState(studentId, nowMs);
+    const levelBefore = levelForXp(state.totalXp).level;
+    const streakBefore = state.streakDays;
     const outcome = apply(state);
     const [topicRows, unitRows, gateUnits, goldUnits] = await Promise.all([
       this.deps.storage.allTopicProgress(studentId),
@@ -1328,7 +1364,7 @@ export class PracticeSessionEngine {
       gamification.playedUnitIds(studentId, "GATE"),
       gamification.playedUnitIds(studentId, "GOLD_VERIFICATION"),
     ]);
-    evaluateAndMergeBadges(
+    const badgesAwarded = evaluateAndMergeBadges(
       state,
       badgeAggregates({
         state,
@@ -1340,7 +1376,16 @@ export class PracticeSessionEngine {
       nowMs,
     );
     await gamification.upsertGamificationState(state);
-    return outcome;
+    return {
+      ...outcome,
+      celebration: buildCelebrationReport({
+        badgesAwarded,
+        levelBefore,
+        levelAfter: levelForXp(state.totalXp).level,
+        streakBefore,
+        streakAfter: state.streakDays,
+      }),
+    };
   }
 
   /** Per-attempt reward inputs for a session's responses (the recorded grades recomputed deterministically). */

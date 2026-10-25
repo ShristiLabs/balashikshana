@@ -22,6 +22,7 @@
 import React, { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
+import { badgeById } from "@balashikshana/core-engine";
 import type { AudioCoordinator } from "../audio/coordinator";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
@@ -45,6 +46,21 @@ import { asGradeId, getGateAudio, getGateEngine, resolveGateIdentity } from "./g
 import { ANTI_GUESS, GOLD_CHECK_BUDGET_SEC, isRapidGuessViolation } from "./rules";
 import { GateResultsView } from "./GateResultsView";
 import { KeyCeremony } from "./KeyCeremony";
+import type { BadgeBloomBadge } from "../mascot/BadgeBloomView";
+
+/**
+ * #58: resolve the ceremony's badge blooms from whichever summary is
+ * live (gate pass or Gold upgrade) — catalog metadata only (title/
+ * tier/description), no PII.
+ */
+function ceremonyBadges(ids: string[] | undefined): BadgeBloomBadge[] {
+  if (!ids) return [];
+  return ids.flatMap((id) => {
+    const meta = badgeById(id);
+    if (!meta) return [];
+    return [{ id, title: meta.title, tier: meta.tier, description: meta.description }];
+  });
+}
 
 export interface GateRunnerScreenProps {
   /** Journey param (or the snapshot's active grade when absent). */
@@ -598,12 +614,20 @@ export function GateRunnerScreen({
   }
 
   if (state.phase === "ceremony" && state.ceremony && state.ceremony.phase !== "dismissed") {
+    // #58: bloom the badges earned with whichever summary drove this
+    // ceremony (gate pass or Gold upgrade).
+    const earnedIds =
+      state.ceremony.kind === "gold"
+        ? (state.verification?.celebration?.badgesAwarded ??
+          state.gateSummary?.celebration.badgesAwarded)
+        : state.gateSummary?.celebration.badgesAwarded;
     return (
       <KeyCeremony
         kind={state.ceremony.kind}
         provisional={state.gold.provisional}
         animationsEnabled={motion.animationsEnabled}
         onDone={() => dispatch({ type: "ceremony-done" })}
+        badges={ceremonyBadges(earnedIds)}
         testID="gate-ceremony"
       />
     );
