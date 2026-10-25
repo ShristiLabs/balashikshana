@@ -304,4 +304,125 @@ declare module "@balashikshana/core-engine" {
     settings: { enabled: unknown; hour: unknown; minute: unknown };
     permission: string;
   }): ReminderPlan;
+
+  // --- Placement diagnostic rules (issue #60, roadmap E10; mirrors
+  // --- packages/core-engine/src/placement.mjs exactly) ----------------------
+
+  export const PLACEMENT_RULES: Readonly<{
+    maxItems: number;
+    maxSkipAheadUnits: number;
+    provisionalBaseStabilityDays: number;
+    dagCreditWeight: number;
+  }>;
+
+  export const DEFAULT_PLACEMENT_SEED: number;
+
+  export interface PlacementUnit {
+    unitId: string;
+    strand: string;
+    sequenceOrder: number;
+    title?: string;
+    prerequisiteUnitIds?: string[];
+    masteryGate?: { maxMedianResponseTimeSec?: number };
+    skillTopics?: { code: string; name: string; assets?: Record<string, unknown> }[];
+  }
+
+  export interface PlacementProbeState {
+    rules: { maxItems: number; maxSkipAheadUnits: number };
+    rngSeed: number;
+    itemsAsked: number;
+    chains: { strand: string; units: PlacementUnit[] }[];
+    strands: Record<
+      string,
+      {
+        status: "probing" | "confirming" | "confirmed" | "chain-end";
+        depth: number;
+        pendingConfirmUnitId: string | null;
+        lastTopicIndexByUnit: Record<string, number>;
+      }
+    >;
+  }
+
+  export interface PlacementProbeItem {
+    kind: "probe" | "confirm";
+    strand: string;
+    unitId: string;
+    topicId: string;
+    topicCode: string;
+    question: EngineGeneratedQuestion & { questionId: string; unitId: string };
+  }
+
+  export interface PlacementCreditedTopic {
+    topicCode: string;
+    topicId: string;
+    correctItems: number;
+    askedItems: number;
+    provisionalStabilityDays: number;
+  }
+
+  export interface PlacementCreditedUnit {
+    unitId: string;
+    strand: string;
+    topics: PlacementCreditedTopic[];
+    implicitDagCredit: EngineDagCredit[];
+  }
+
+  export interface PlacementOutcome {
+    rules: { maxItems: number; maxSkipAheadUnits: number };
+    itemsAsked: number;
+    recommendedStartUnitId: string | null;
+    perStrand: {
+      strand: string;
+      frontierIndex: number;
+      creditedUnits: number;
+      startUnitId: string;
+      cappedBySkipAhead: boolean;
+    }[];
+    creditedUnits: PlacementCreditedUnit[];
+    skipAheadUnitCount: number;
+    confidence: { strandsTotal: number; probedUnits: number; demonstratedUnits: number };
+    prerequisiteChainCredited: true;
+    keysAwarded: never[];
+  }
+
+  export function nextPlacementRand(seed: number): { seed: number; value: number };
+
+  export function strandChainsFromUnits(units: PlacementUnit[]): {
+    strand: string;
+    units: PlacementUnit[];
+  }[];
+
+  export function initialPlacementState(params: {
+    units: PlacementUnit[];
+    seed?: number;
+    rules?: { maxItems: number; maxSkipAheadUnits: number };
+  }): PlacementProbeState;
+
+  export function placementNextItem(
+    state: PlacementProbeState,
+    options: { unitsBy: Map<string, PlacementUnit> | Record<string, PlacementUnit> },
+  ): { state: PlacementProbeState; item?: PlacementProbeItem; done: boolean };
+
+  export function recordPlacementResponse(
+    state: PlacementProbeState,
+    response: { unitId: string; isCorrect: boolean },
+  ): PlacementProbeState;
+
+  export function derivePlacementOutcome(params: {
+    responses: {
+      unitId: string;
+      topicId: string;
+      isCorrect: boolean;
+      rawTimeSec?: number;
+      motorBaselineSec?: number;
+    }[];
+    units: PlacementUnit[];
+    unitMap?: Map<string, PlacementUnit> | Record<string, PlacementUnit>;
+    rules?: { maxItems: number; maxSkipAheadUnits: number };
+  }): PlacementOutcome;
+
+  export function updatePlacementStability(params?: {
+    currentStabilityDays?: number;
+    fluencyGrade?: number;
+  }): { stabilityDays: number; cpaStage: string; intraSessionExpandingLags: number[] };
 }

@@ -609,8 +609,26 @@ describe("server parity tripwires (source scans)", () => {
     expect(syncSource).toContain("groupOf(item.a.topicId).items.push(item)");
   });
 
-  it("the OpenAPI baseline carries the additive GAME enum value", () => {
+  it("the OpenAPI baseline carries the additive GAME + PLACEMENT enum values", () => {
     const baseline = readFileSync(`${repoRoot}/docs/openapi/baseline.yaml`, "utf-8");
-    expect(baseline).toContain("enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME]");
+    // (?<!-) excludes the tail of "x-extensible-enum:" lines, which
+    // would otherwise also match the bare "enum: [" prefix.
+    // #52 grew the closed AttemptInput enum by GAME; #60 grew it again
+    // by PLACEMENT (the same additive precedent, pinned here).
+    expect(
+      baseline.match(/(?<!-)enum: \[TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT\]/g),
+    ).toHaveLength(1);
+    // The ledger's response enum cannot grow without breaking the
+    // oasdiff additive-only gate, so #60 keeps the legacy closed enum
+    // byte-identical and declares the PLACEMENT growth via the
+    // x-extensible-enum extension (non-breaking by oasdiff doctrine).
+    expect(
+      baseline.match(/(?<!-)enum: \[TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME\]/g),
+    ).toHaveLength(1);
+    expect(baseline).toContain(
+      "x-extensible-enum: [TOPIC_PRACTICE, GATE, GOLD_VERIFICATION, GAME, PLACEMENT]",
+    );
+    // #60 also added the placement record read.
+    expect(baseline).toContain("/api/placement/record:");
   });
 });
