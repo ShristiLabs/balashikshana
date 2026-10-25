@@ -2,8 +2,9 @@
  * Parent area (issue #44): the #43 seam is now live - NOTHING renders
  * here until the hold-to-confirm parental gate passes (roadmap D5; the
  * gate component is the same one onboarding step 1 uses). Behind the
- * gate: account summary and the token-lifecycle actions (sign out /
- * switch parent). The full parent portal surface is #61.
+ * gate: account summary, the #57 daily practice reminder settings
+ * seam, and the token-lifecycle actions (sign out / switch parent).
+ * The full parent portal surface is #61.
  */
 import React, { useCallback, useEffect, useState } from "react";
 import { Text, View } from "react-native";
@@ -11,6 +12,7 @@ import { router } from "expo-router";
 import { Button } from "../../src/design/primitives";
 import { useTheme } from "../../src/design/theme";
 import { spacing, typeRamp } from "../../src/design/tokens";
+import { ReminderSettingsSection } from "../../src/notifications/ReminderSettingsSection";
 import { createApiClient } from "../../src/onboarding/api";
 import { ParentalGate } from "../../src/onboarding/ParentalGate";
 import { createNativeDependencies } from "../../src/onboarding/nativeStores";
@@ -98,6 +100,10 @@ export default function ParentScreen() {
             Signed out - run setup from the launcher to sign back in.
           </Text>
         ) : null}
+      </View>
+
+      <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+        <ReminderSettingsSection />
       </View>
 
       <View style={{ gap: spacing.md, marginTop: spacing.md }}>

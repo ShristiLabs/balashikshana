@@ -257,4 +257,51 @@ declare module "@balashikshana/core-engine" {
     heartsRemaining: number;
     endReason: string;
   }): string | null;
+
+  // --- Daily practice-reminder rules (issue #57, roadmap D5; mirrors
+  // --- packages/core-engine/src/reminders.mjs exactly) ---------------------
+
+  export const REMINDER_NOTIFICATION_ID: string;
+  export const DEFAULT_REMINDER_HOUR: number;
+  export const DEFAULT_REMINDER_MINUTE: number;
+  export const REMINDER_PERMISSION_STATES: readonly ("granted" | "denied" | "undetermined")[];
+
+  export type ReminderPermissionStatus = "granted" | "denied" | "undetermined";
+
+  export interface ReminderSettings {
+    enabled: boolean;
+    hour: number;
+    minute: number;
+  }
+
+  export function reminderSettingsProblem(settings: {
+    enabled: unknown;
+    hour: unknown;
+    minute: unknown;
+  }): string | null;
+
+  export function normalizeReminderSettings(input?: {
+    enabled?: unknown;
+    hour?: unknown;
+    minute?: unknown;
+  }): ReminderSettings;
+
+  export function nextReminderOccurrenceMs(params: {
+    nowMs: number;
+    hour: number;
+    minute: number;
+    utcOffsetMinutes?: number;
+  }): number | null;
+
+  export interface ReminderPlan {
+    action: "schedule" | "cancel" | "none";
+    reason: string;
+    hour: number;
+    minute: number;
+  }
+
+  export function reminderPlan(params: {
+    settings: { enabled: unknown; hour: unknown; minute: unknown };
+    permission: string;
+  }): ReminderPlan;
 }

@@ -28,6 +28,8 @@ import {
   GATE_PASS_COINS,
   computeCognitiveTimeSec,
   computeFluencyGrade,
+  dayKeyForMs,
+  nextStreakState,
 } from "@balashikshana/core-engine";
 import { PracticeSessionEngine } from "../src/practice/practiceEngine";
 import {
@@ -630,5 +632,139 @@ describe("no-fork source pins (D9)", () => {
     expect(serverSync).not.toContain("15 + derivation.crowns");
     expect(serverHandlers).not.toContain("15 + crowns * 5");
     expect(serverHandlers).not.toContain("star_coins = star_coins + 50");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #57 acceptance: streak derives identically offline and after #48 sync
+// replay (D9 agreement). The offline side is the projector (what the
+// session engine runs at completion); the replay side is a faithful
+// port of services/api rewards.mjs applyStreakForSession (the exact
+// logic the server runs per replayed session, in DRAIN order = the
+// attempt-log id order the sync worker uploads). Both call the SAME
+// engine nextStreakState; this spec proves the two compositions
+// converge on a stream with every boundary: same-day duplicates, a
+// multi-day run, a gap reset, and a late out-of-order arrival.
+// ---------------------------------------------------------------------------
+
+describe("D9 streak agreement: offline projector == #48 sync replay (#57)", () => {
+  interface StreamSession {
+    sessionMs: number;
+    /** Arrival position in the sync drain (attempt-log id order). */
+    drainIndex: number;
+  }
+
+  /** Port of services/api rewards.mjs applyStreakForSession: the server's
+   *  per-session streak transition over students.streak_days + the state
+   *  row's last_active_day_key. */
+  function serverReplayStreak(sessions: StreamSession[]): {
+    streakDays: number;
+    lastActiveDayKey: string;
+  } {
+    let streakDays = 0;
+    let lastActiveDayKey = "";
+    for (const session of [...sessions].sort((a, b) => a.drainIndex - b.drainIndex)) {
+      const sessionDayKey = dayKeyForMs(session.sessionMs);
+      if (sessionDayKey === "") continue;
+      const next = nextStreakState({
+        currentStreakDays: streakDays,
+        lastActiveDayKey,
+        sessionDayKey,
+      });
+      if (next.changed) {
+        streakDays = next.streakDays;
+        lastActiveDayKey = next.lastActiveDayKey;
+      }
+    }
+    return { streakDays, lastActiveDayKey };
+  }
+
+  it("a boundary-heavy stream converges: same-day duplicates, a run, a gap reset, a late arrival", () => {
+    const d = (day: number, hour = 10) => Date.UTC(2026, 9, day, hour);
+    const stream: StreamSession[] = [
+      { sessionMs: d(12, 9), drainIndex: 0 },
+      { sessionMs: d(12, 16), drainIndex: 1 }, // same UTC day: idempotent
+      { sessionMs: d(13, 9), drainIndex: 2 }, // consecutive: 2
+      { sessionMs: d(14, 9), drainIndex: 3 }, // consecutive: 3
+      { sessionMs: d(17, 9), drainIndex: 4 }, // 3-day gap: reset to 1
+      { sessionMs: d(18, 9), drainIndex: 5 }, // consecutive: 2
+      // A late-draining session from an EARLIER day (offline backlog
+      // replayed after newer sessions): the engine never moves the
+      // streak backwards — no-op on the server side.
+      { sessionMs: d(16, 20), drainIndex: 6 },
+    ];
+
+    // Offline: the projector path (the session engine's completion call).
+    const local = initialGamificationState(STUDENT, 0);
+    for (const session of stream) {
+      applyTopicLikeSession(local, {
+        sessionType: "TOPIC_PRACTICE",
+        attempts: [],
+        passed: false,
+        crowns: 0,
+        sessionMs: session.sessionMs,
+        nowMs: session.sessionMs,
+      });
+    }
+
+    // Replay: the server port, in drain order (incl. the late arrival).
+    const server = serverReplayStreak(stream);
+
+    expect(local.streakDays).toBe(server.streakDays);
+    expect(local.lastActiveDayKey).toBe(server.lastActiveDayKey);
+    expect(server.streakDays).toBe(2);
+    expect(server.lastActiveDayKey).toBe("2026-10-18");
+  });
+
+  it("the confirmed ledger adopts the same streak (the D8 confirm step keeps the value)", () => {
+    const local = initialGamificationState(STUDENT, 0);
+    applyTopicLikeSession(local, {
+      sessionType: "TOPIC_PRACTICE",
+      attempts: [],
+      passed: false,
+      crowns: 0,
+      sessionMs: Date.UTC(2026, 9, 12, 9),
+      nowMs: 1,
+    });
+    applyTopicLikeSession(local, {
+      sessionType: "TOPIC_PRACTICE",
+      attempts: [],
+      passed: false,
+      crowns: 0,
+      sessionMs: Date.UTC(2026, 9, 13, 9),
+      nowMs: 2,
+    });
+    const server = serverReplayStreak([
+      { sessionMs: Date.UTC(2026, 9, 12, 9), drainIndex: 0 },
+      { sessionMs: Date.UTC(2026, 9, 13, 9), drainIndex: 1 },
+    ]);
+    const confirmed = adoptServerLedger(
+      local,
+      {
+        studentId: STUDENT,
+        totalXp: local.totalXp,
+        level: levelForXp(local.totalXp),
+        starCoins: local.starCoins,
+        streakDays: server.streakDays,
+        bestBeatTargetPct: local.bestBeatTargetPct,
+        badges: [],
+        generatedAt: "2026-10-13T10:00:00.000Z",
+      },
+      3,
+    );
+    expect(confirmed.streakDays).toBe(local.streakDays);
+    expect(confirmed.provisional).toBe(false);
+  });
+
+  it("#57 surfacing seam: useStreak and the journey strip surface the same summary streak", () => {
+    const hook = readFileSync(`${repoRoot}/apps/mobile/src/gamification/useStreak.ts`, "utf8");
+    const strip = readFileSync(
+      `${repoRoot}/apps/mobile/src/gamification/GamificationHeaderStrip.tsx`,
+      "utf8",
+    );
+    expect(hook).toContain("useGamificationSummary(studentId)");
+    expect(hook).toContain("streakDays: summary.streakDays");
+    expect(hook).toContain("provisional: summary.provisional");
+    expect(strip).toContain('label="Day streak"');
   });
 });

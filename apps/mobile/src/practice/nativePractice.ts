@@ -18,11 +18,13 @@
  *   single JS-thread writer, so read-merge-write is sequential).
  */
 import * as SQLite from "expo-sqlite";
+import { reminderSettingsProblem } from "@balashikshana/core-engine";
 import { CONTENT_DB_NAME, CONTENT_DB_MIGRATIONS } from "../content/schema";
 import { contentPackDirectory } from "../content/nativeContent";
 import type { AttemptLogRow, SyncStorage } from "../sync/types";
 import type { GamificationState } from "../gamification/types";
 import type { GamificationStorage } from "../gamification/storage";
+import type { ReminderSettingsStorage } from "../notifications/reminderSettings";
 import type {
   AttemptInput,
   GradeSrPolicy,
@@ -546,6 +548,59 @@ function createGamificationStorage(): GamificationStorage {
       return rows.map((row) => row.unit_id);
     },
   };
+}
+
+// ----------------------------------------------------------------------
+// Reminder settings storage (#57 — device-local parent settings, v7)
+// ----------------------------------------------------------------------
+
+interface ReminderSqlRow {
+  enabled: number;
+  hour: number;
+  minute: number;
+  updated_at: number;
+}
+
+function createReminderSettingsStorage(): ReminderSettingsStorage {
+  return {
+    async getReminderSettings() {
+      const db = await lifecycleDb();
+      const rows = await db.getAllAsync<ReminderSqlRow>(
+        "SELECT enabled, hour, minute, updated_at FROM reminder_settings WHERE id = 1",
+      );
+      const row = rows[0];
+      if (!row) return null;
+      return {
+        enabled: row.enabled === 1,
+        hour: row.hour,
+        minute: row.minute,
+        updatedAt: row.updated_at,
+      };
+    },
+
+    async upsertReminderSettings(settings, nowMs) {
+      // The engine rule gate: a corrupt row can never reach the DB.
+      if (reminderSettingsProblem(settings)) {
+        throw new Error(`invalid reminder settings: ${String(reminderSettingsProblem(settings))}`);
+      }
+      const db = await lifecycleDb();
+      await db.runAsync(
+        `INSERT INTO reminder_settings (id, enabled, hour, minute, updated_at)
+         VALUES (1, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           enabled = excluded.enabled,
+           hour = excluded.hour,
+           minute = excluded.minute,
+           updated_at = excluded.updated_at`,
+        [settings.enabled ? 1 : 0, settings.hour, settings.minute, nowMs],
+      );
+    },
+  };
+}
+
+/** #57 seam: the device-local reminder settings storage (parent surface + bootstrap). */
+export function getNativeReminderSettingsStorage(): ReminderSettingsStorage {
+  return createReminderSettingsStorage();
 }
 
 // ----------------------------------------------------------------------

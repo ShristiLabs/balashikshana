@@ -22,6 +22,8 @@ import path from "node:path";
 import { CONTENT_DB_MIGRATIONS, CONTENT_DB_NAME } from "../../src/content/schema";
 import type { GamificationStorage } from "../../src/gamification/storage";
 import type { GamificationState } from "../../src/gamification/types";
+import type { ReminderSettingsStorage } from "../../src/notifications/reminderSettings";
+import { reminderSettingsProblem } from "@balashikshana/core-engine";
 import type {
   AttemptInput,
   GradeSrPolicy,
@@ -784,6 +786,52 @@ export class NodeGamificationStorage implements GamificationStorage {
     return rows.map((row) => row.unit_id);
   }
 }
+
+// ----------------------------------------------------------------------
+// Reminder settings storage adapter (issue #57) — mirrors nativePractice.ts
+// SQL + its engine-rule validation gate exactly.
+// ----------------------------------------------------------------------
+
+type ReminderSqlRow = { enabled: number; hour: number; minute: number; updated_at: number };
+
+export class NodeReminderSettingsStorage implements ReminderSettingsStorage {
+  readonly db: DatabaseSync;
+
+  constructor(db: DatabaseSync) {
+    this.db = db;
+  }
+
+  async getReminderSettings() {
+    const row = this.db
+      .prepare("SELECT enabled, hour, minute, updated_at FROM reminder_settings WHERE id = 1")
+      .get() as ReminderSqlRow | undefined;
+    if (!row) return null;
+    return {
+      enabled: row.enabled === 1,
+      hour: row.hour,
+      minute: row.minute,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  async upsertReminderSettings(settings: ReminderSettingsInput, nowMs: number): Promise<void> {
+    const problem = reminderSettingsProblem(settings);
+    if (problem) throw new Error(`invalid reminder settings: ${String(problem)}`);
+    this.db
+      .prepare(
+        `INSERT INTO reminder_settings (id, enabled, hour, minute, updated_at)
+         VALUES (1, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           enabled = excluded.enabled,
+           hour = excluded.hour,
+           minute = excluded.minute,
+           updated_at = excluded.updated_at`,
+      )
+      .run(settings.enabled ? 1 : 0, settings.hour, settings.minute, nowMs);
+  }
+}
+
+type ReminderSettingsInput = Parameters<ReminderSettingsStorage["upsertReminderSettings"]>[0];
 
 // ----------------------------------------------------------------------
 // Assembled environment
