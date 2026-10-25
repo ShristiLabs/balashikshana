@@ -8,6 +8,8 @@
  * - GamificationHeaderStrip: the journey-home surfacing (level/XP/coins/
  *   streak/badges); display wiring for session summaries and badge blooms
  *   lands with their consumers (#56/#57/#58).
+ * - useStreak: the #57 streak-surfacing hook for screens that want only
+ *   the day streak (same summary pipeline, same D9 agreement).
  */
 export * from "./types";
 export * from "./rewardsProjector";
@@ -15,3 +17,4 @@ export * from "./storage";
 export * from "./gamificationStore";
 export * from "./api";
 export { GamificationHeaderStrip } from "./GamificationHeaderStrip";
+export { useStreak } from "./useStreak";

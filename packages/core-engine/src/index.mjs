@@ -6,10 +6,12 @@
  * - Issue #7: Procedural Question & Smart Misconception Distractor Generator across all 614 Skill Topics
  * - Issue #55 (roadmap D9): Gamification reward rules — XP accrual, level curve, coin/crown derivation, streak days, badge catalog + evaluation (pure functions + data, shared offline/online)
  * - Issue #56 (roadmap D6): Grade-tiered hearts policy — the G2–G3 fluency-sprint mount predicate, bounded counts, loss/refill transitions, and session-outcome telemetry validation (pure functions + data, shared offline/online)
+ * - Issue #57 (roadmap D5): Daily practice-reminder rules — parent-controlled local-notification scheduling policy (settings validation, next-occurrence time, schedule/cancel/hold plan; pure functions + data, default OFF)
  */
 
 export * from "./rewards.mjs";
 export * from "./hearts.mjs";
+export * from "./reminders.mjs";
 
 export const UNIT_STATES = {
   LOCKED: "LOCKED",

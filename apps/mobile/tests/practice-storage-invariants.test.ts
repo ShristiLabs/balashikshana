@@ -106,6 +106,9 @@ describe("SQL mutation surface of both adapters", () => {
       // #55: gamification_state is the optimistic reward projection's
       // upsert target — the same projector-owned full-row write doctrine
       // as the two progress tables.
+      // #57: reminder_settings is the device-local parent settings
+      // singleton (schema v7) — upserted only by the parent surface's
+      // adapter with an engine-rule validation gate.
       const allowed = label.startsWith("tests/")
         ? [
             "attempt_log",
@@ -113,6 +116,7 @@ describe("SQL mutation surface of both adapters", () => {
             "unit_progress",
             "gamification_state",
             "session_outcomes",
+            "reminder_settings",
             "pack_meta",
             "pack_info",
             "grades",
@@ -126,6 +130,7 @@ describe("SQL mutation surface of both adapters", () => {
             "unit_progress",
             "gamification_state",
             "session_outcomes",
+            "reminder_settings",
           ];
       for (const table of insertTables) expect(allowed).toContain(table);
       // attempt_log is INSERT ... VALUES with NO conflict clause.

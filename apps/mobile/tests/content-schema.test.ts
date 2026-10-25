@@ -94,6 +94,8 @@ describe("lifecycle DB migrations on real SQLite", () => {
       "gamification_state",
       // #56: append-only hearts session outcomes.
       "session_outcomes",
+      // #57: device-local parent reminder settings (singleton).
+      "reminder_settings",
     ]) {
       expect(tables).toContain(table);
     }
@@ -276,11 +278,11 @@ describe("lifecycle DB migrations on real SQLite", () => {
       0.42,
     );
 
-    runMigrations(db); // the #56 app version opens the same device
+    runMigrations(db); // the #57 app version opens the same device
     const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
-    expect(latest).toBe(6);
+    expect(latest).toBe(7);
     expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      6,
+      7,
     );
     // The pre-game row survived and backfilled to the documented
     // defaults: empty provenance string (NOT NULL ''), zero target,

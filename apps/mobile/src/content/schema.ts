@@ -212,6 +212,27 @@ export const CONTENT_DB_MIGRATIONS: ContentDbMigration[] = [
          ON session_outcomes(student_id, id) WHERE synced = 0`,
     ],
   },
+  {
+    // Migration 7 (issue #57 — streaks + local notifications, roadmap
+    // D5) adds the DEVICE-LOCAL parent reminder settings: ONE singleton
+    // row (id = 1, enforced by CHECK) holding the parent-chosen daily
+    // reminder state. These settings NEVER leave the device — there is
+    // deliberately NO sync wire field, NO server table, and no student
+    // id on the row (reminders are per-DEVICE, not per-child; the #61
+    // portal may later add per-child config on top). Default OFF: an
+    // absent row means disabled (normalizeReminderSettings fails
+    // closed), so a fresh install never schedules anything.
+    version: 7,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS reminder_settings (
+         id INTEGER PRIMARY KEY CHECK (id = 1),
+         enabled INTEGER NOT NULL DEFAULT 0,
+         hour INTEGER NOT NULL DEFAULT 17,
+         minute INTEGER NOT NULL DEFAULT 0,
+         updated_at INTEGER NOT NULL DEFAULT 0
+       )`,
+    ],
+  },
 ];
 
 export const CONTENT_DB_NAME = "balashikshana_content.db";
