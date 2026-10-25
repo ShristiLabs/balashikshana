@@ -20,6 +20,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { CONTENT_DB_MIGRATIONS, CONTENT_DB_NAME } from "../../src/content/schema";
+import type { GamificationStorage } from "../../src/gamification/storage";
+import type { GamificationState } from "../../src/gamification/types";
 import type {
   AttemptInput,
   GradeSrPolicy,
@@ -29,6 +31,7 @@ import type {
   PackUnitRow,
   PracticeDeps,
   PracticeStorage,
+  SessionType,
   TopicProgressRecord,
   UnitProgressRecord,
 } from "../../src/practice/types";
@@ -620,6 +623,103 @@ export function openPackReader(file: string): PackContentReader & { close(): voi
 }
 
 // ----------------------------------------------------------------------
+// Gamification storage adapter (issue #55) — mirrors nativePractice.ts SQL
+// ----------------------------------------------------------------------
+
+type GamificationSqlRow = {
+  student_id: string;
+  total_xp: number;
+  star_coins: number;
+  streak_days: number;
+  last_active_day_key: string;
+  best_beat_target_pct: number;
+  sessions_completed: number;
+  earned_badges_json: string;
+  provisional: number;
+  updated_at: number;
+};
+
+export class NodeGamificationStorage implements GamificationStorage {
+  readonly db: DatabaseSync;
+
+  constructor(db: DatabaseSync) {
+    this.db = db;
+  }
+
+  async getGamificationState(studentId: string) {
+    const row = this.db
+      .prepare(
+        `SELECT student_id, total_xp, star_coins, streak_days, last_active_day_key,
+                best_beat_target_pct, sessions_completed, earned_badges_json, provisional, updated_at
+         FROM gamification_state WHERE student_id = ?`,
+      )
+      .get(studentId) as GamificationSqlRow | undefined;
+    if (!row) return null;
+    let earnedBadges: string[] = [];
+    try {
+      const parsed = JSON.parse(row.earned_badges_json || "[]") as unknown;
+      if (Array.isArray(parsed))
+        earnedBadges = parsed.filter((b): b is string => typeof b === "string");
+    } catch {
+      earnedBadges = [];
+    }
+    return {
+      studentId: row.student_id,
+      totalXp: row.total_xp,
+      starCoins: row.star_coins,
+      streakDays: row.streak_days,
+      lastActiveDayKey: row.last_active_day_key,
+      bestBeatTargetPct: row.best_beat_target_pct,
+      sessionsCompleted: row.sessions_completed,
+      earnedBadges,
+      provisional: row.provisional === 1,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  async upsertGamificationState(state: GamificationState): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO gamification_state (
+           student_id, total_xp, star_coins, streak_days, last_active_day_key,
+           best_beat_target_pct, sessions_completed, earned_badges_json, provisional, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(student_id) DO UPDATE SET
+           total_xp = excluded.total_xp,
+           star_coins = excluded.star_coins,
+           streak_days = excluded.streak_days,
+           last_active_day_key = excluded.last_active_day_key,
+           best_beat_target_pct = excluded.best_beat_target_pct,
+           sessions_completed = excluded.sessions_completed,
+           earned_badges_json = excluded.earned_badges_json,
+           provisional = excluded.provisional,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        state.studentId,
+        state.totalXp,
+        state.starCoins,
+        state.streakDays,
+        state.lastActiveDayKey,
+        state.bestBeatTargetPct,
+        state.sessionsCompleted,
+        JSON.stringify(state.earnedBadges),
+        state.provisional ? 1 : 0,
+        state.updatedAt,
+      );
+  }
+
+  async playedUnitIds(studentId: string, sessionType: SessionType): Promise<string[]> {
+    const rows = this.db
+      .prepare(
+        "SELECT DISTINCT unit_id FROM attempt_log WHERE student_id = ? AND session_type = ? AND unit_id <> ''",
+      )
+      .all(studentId, sessionType) as { unit_id: string }[];
+    return rows.map((row) => row.unit_id);
+  }
+}
+
+// ----------------------------------------------------------------------
 // Assembled environment
 // ----------------------------------------------------------------------
 
@@ -628,17 +728,23 @@ export interface PracticeTestEnv {
   deps: PracticeDeps;
   clock: FakeClock;
   dir: string;
+  /** #55: the gamification seam wired into deps (null when disabled). */
+  gamification: NodeGamificationStorage | null;
   dispose(): void;
 }
 
 export function createPracticeEnv(options?: {
   packFileName?: string;
   prerequisiteUnit?: boolean;
+  /** Default true: wire the #55 gamification projection into the engine. */
+  gamification?: boolean;
 }): PracticeTestEnv {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "practice-env-"));
   const lifecycle = new DatabaseSync(path.join(dir, CONTENT_DB_NAME));
   runMigrations(lifecycle);
   const storage = new NodePracticeStorage(lifecycle);
+  const gamification =
+    options?.gamification === false ? null : new NodeGamificationStorage(lifecycle);
 
   const packFile = path.join(dir, options?.packFileName ?? "pack-kindergarten-v1.0.0.sqlite");
   buildPackFixture(packFile, { prerequisiteUnit: options?.prerequisiteUnit });
@@ -672,12 +778,14 @@ export function createPracticeEnv(options?: {
     now: () => clock.nowMs,
     newSessionId: () => `sess-${(sessionCounter += 1)}`,
     motorBaselineSec: 0.42,
+    gamificationStorage: gamification ?? undefined,
   };
 
   return {
     storage,
     deps,
     clock,
+    gamification,
     dir,
     dispose() {
       lifecycle.close();

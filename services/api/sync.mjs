@@ -72,6 +72,33 @@ import {
   UNIT_PROGRESS_UPSERT_SQL,
   ATTEMPT_INSERT_SQL
 } from "./derivations.mjs";
+import {
+  awardAttemptXp,
+  awardTopicOutcomeRewards,
+  awardGateOutcomeRewards,
+  awardGoldUpgradeRewards,
+  applyStreakForSession,
+  updateBestBeatTargetPct,
+  evaluateAndAwardBadges
+} from "./rewards.mjs";
+import { beatTargetSharePct } from "../../packages/core-engine/src/index.mjs";
+
+/**
+ * A topic's registry fluency-game speed target off its assets_json (the
+ * same JSON path the mobile gamesAssets parser reads: assets.games.
+ * fluencySprintGame.targetResponseSpeedSec — positive finite, else 0).
+ * The beat-the-target share (the speed badge input) is computed from the
+ * SAME registry value on both sides, so the badge can never fork.
+ */
+function fluencyTargetFromAssetsJson(assetsJson) {
+  try {
+    const parsed = JSON.parse(assetsJson || "{}");
+    const target = parsed?.games?.fluencySprintGame?.targetResponseSpeedSec;
+    return typeof target === "number" && Number.isFinite(target) && target > 0 ? target : 0;
+  } catch {
+    return 0;
+  }
+}
 
 // --- Environment (documented at the top of server.mjs) -----------------------
 
@@ -296,6 +323,8 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
   let inserted = 0;
   let clockAdjusted = 0;
   let sessionsReplayed = 0;
+  let xpCredited = 0;
+  let badgesAwarded = 0;
   const groups = new Map(); // `${sessionType}\u0000${sessionId}` -> { minSeq, items: [{a, iso}] }
 
   await db.withTransaction(async (client) => {
@@ -376,7 +405,7 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
     const orderedKeys = [...groups.entries()].sort((x, y) => x[1].minSeq - y[1].minSeq).map(([k]) => k);
 
     for (const key of orderedKeys) {
-      const [sessionType] = key.split("\u0000");
+      const [sessionType, sessionId] = key.split("\u0000");
       const group = groups.get(key);
       const priorItems = priorByKey.get(key) ?? [];
       const items = [...priorItems, ...group.items].sort((x, y) => {
@@ -393,17 +422,28 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
       const targetSpeed = unit.gate_max_speed_sec;
       const sessionMs = Date.parse(items[items.length - 1].iso);
 
+      let rewardXp = 0;
       if (sessionType === "TOPIC_PRACTICE") {
-        await replayTopicSession({ client, studentId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
+        rewardXp = await replayTopicSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else if (sessionType === "GATE") {
-        await replayGateSession({ client, studentId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
+        rewardXp = await replayGateSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else if (sessionType === "GAME") {
-        await replayGameSession({ client, studentId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
+        rewardXp = await replayGameSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems });
       } else {
-        await replayGoldVerificationSession({ client, studentId, unitId: first.unitId, sessionMs, items });
+        rewardXp = await replayGoldVerificationSession({ client, studentId, deviceId, sessionId, unitId: first.unitId, sessionMs, items });
       }
+      // #55: the streak transition rides every replayed session, at the
+      // session's OWN adopted timestamp (UTC day keys; idempotent per
+      // day by the engine rule).
+      await applyStreakForSession(client, { studentId, sessionMs });
+      xpCredited += rewardXp;
       sessionsReplayed += 1;
     }
+
+    // #55: badge evaluation once per batch, inside the same transaction,
+    // over the aggregates the replays above just updated.
+    const badges = await evaluateAndAwardBadges(client, { studentId });
+    badgesAwarded = badges.newlyAwarded.length;
   });
 
   if (logger) {
@@ -415,13 +455,15 @@ export async function reconcileSyncBatch({ db, studentId, deviceId, attempts, lo
         inserted,
         duplicates: attempts.length - inserted,
         sessionsReplayed,
-        clockAdjusted
+        clockAdjusted,
+        xpCredited,
+        badgesAwarded
       },
       "sync batch reconciled"
     );
   }
 
-  return { inserted, duplicates: attempts.length - inserted, sessionsReplayed, clockAdjusted };
+  return { inserted, duplicates: attempts.length - inserted, sessionsReplayed, clockAdjusted, xpCredited, badgesAwarded };
 }
 
 async function clientGet(client, sql, params) {
@@ -459,7 +501,7 @@ function priorRowToItem(row) {
   };
 }
 
-async function replayTopicSession({ client, studentId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
+async function replayTopicSession({ client, studentId, deviceId, sessionId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
   const toResponses = (list) =>
     list.map(({ a }) => ({
       isCorrect: a.isCorrect,
@@ -520,14 +562,59 @@ async function replayTopicSession({ client, studentId, unitId, gradeRow, targetS
     now,
     reReplay ? 0 : 1
   ]);
-  if (derivation.passedTopic && !priorPassed) {
-    const rewardCoins = 15 + derivation.crowns * 5;
-    await client.query("UPDATE students SET star_coins = star_coins + $1, last_active_at = $2 WHERE student_id = $3", [
-      rewardCoins,
-      now,
-      studentId
-    ]);
+
+  // #55 (D9) reward derivation — the same engine rules the online
+  // handler and the mobile projector run, keyed idempotently:
+  // - per-attempt XP only over THIS batch's newly inserted rows (prior
+  //   rows were credited at their own first arrival; the dedupe key
+  //   `att:<deviceId>:<seq>` makes a duplicate delivery a no-op);
+  // - outcome XP + coins only on the pass TRANSITION (the pre-#55 coin
+  //   rule, now engine-owned), keyed by the session identity.
+  let creditedXp = 0;
+  for (const { a, iso } of groupNewItems(items, priorItems)) {
+    const fluency = computeFluencyGrade(
+      a.isCorrect,
+      computeCognitiveTimeSec(a.rawTimeSec || 3.0, motorSec, 0),
+      targetSpeed
+    );
+    creditedXp += await awardAttemptXp(client, {
+      studentId,
+      sessionType: "TOPIC_PRACTICE",
+      sessionId,
+      unitId,
+      topicId,
+      isCorrect: Boolean(a.isCorrect),
+      fluencyGrade: fluency,
+      awardedAtIso: iso,
+      dedupeKey: `att:${deviceId}:${a.seq}`
+    });
   }
+  if (derivation.passedTopic && !priorPassed) {
+    const outcome = await awardTopicOutcomeRewards(client, {
+      studentId,
+      sessionType: "TOPIC_PRACTICE",
+      sessionId,
+      unitId,
+      topicId,
+      passed: true,
+      crowns: derivation.crowns,
+      awardedAtIso: now,
+      dedupeKey: `out:TOPIC_PRACTICE:${sessionId}:${topicId}`
+    });
+    creditedXp += outcome.xp;
+  }
+  return creditedXp;
+}
+
+/**
+ * The newly-inserted subset of a union replay: the batch's own rows
+ * (group.items), i.e. every item whose seq is NOT among the prior rows'
+ * seqs. The reconciler calls this for per-attempt XP so a re-replay
+ * never re-credits attempts that already arrived.
+ */
+function groupNewItems(items, priorItems) {
+  const priorSeqs = new Set(priorItems.map(({ a }) => a.seq));
+  return items.filter(({ a }) => !priorSeqs.has(a.seq));
 }
 
 /**
@@ -547,7 +634,7 @@ async function replayTopicSession({ client, studentId, unitId, gradeRow, targetS
  * registry's per-game targetResponseSpeedSec is pacing/telemetry on
  * the client and deliberately never reaches a derivation.
  */
-async function replayGameSession({ client, studentId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
+async function replayGameSession({ client, studentId, deviceId, sessionId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
   const toResponses = (list) =>
     list.map(({ a }) => ({
       isCorrect: a.isCorrect,
@@ -567,6 +654,20 @@ async function replayGameSession({ client, studentId, unitId, gradeRow, targetSp
   };
   for (const item of items) groupOf(item.a.topicId).items.push(item);
   for (const prior of priorItems) groupOf(prior.a.topicId).priorItems.push(prior);
+
+  // The beat-the-target inputs (speed badge): each group's OWN registry
+  // fluency target off the topic's assets (the same JSON path the mobile
+  // parser reads). Fetched once per session, not per group loop.
+  const topicAssets = await clientAll(
+    client,
+    "SELECT topic_id, assets_json FROM skill_topics WHERE topic_id = ANY($1)",
+    [[...groups.keys()]]
+  );
+  const fluencyTargetByTopic = new Map(
+    topicAssets.map((row) => [row.topic_id, fluencyTargetFromAssetsJson(row.assets_json)])
+  );
+
+  let creditedXp = 0;
   for (const [topicId, group] of groups) {
     // Foreign-topic items carry their own unit id on the row; the
     // upsert's unit attribution follows the topic's owning unit.
@@ -622,18 +723,62 @@ async function replayGameSession({ client, studentId, unitId, gradeRow, targetSp
       now,
       reReplay ? 0 : 1
     ]);
+
+    // #55 (D9) per-group rewards: attempt XP over the NEW rows (the
+    // GAME audio rule — audio-aware, exactly like the rows the mobile
+    // recorder derives), outcome XP + coins on the group's pass
+    // TRANSITION, and the beat-the-target share against the topic's OWN
+    // registry fluency target (the speed badge input, engine-computed).
+    for (const { a, iso } of groupNewItems(group.items, group.priorItems)) {
+      const audio = a.audioDurationSec || 0;
+      const fluency = computeFluencyGrade(
+        a.isCorrect,
+        computeCognitiveTimeSec(a.rawTimeSec || 3.0, motorSec, audio),
+        targetSpeed
+      );
+      creditedXp += await awardAttemptXp(client, {
+        studentId,
+        sessionType: "GAME",
+        sessionId,
+        unitId: group.unitId,
+        topicId,
+        isCorrect: Boolean(a.isCorrect),
+        fluencyGrade: fluency,
+        awardedAtIso: iso,
+        dedupeKey: `att:${deviceId}:${a.seq}`
+      });
+    }
     if (derivation.passedTopic && !priorPassed) {
-      const rewardCoins = 15 + derivation.crowns * 5;
-      await client.query("UPDATE students SET star_coins = star_coins + $1, last_active_at = $2 WHERE student_id = $3", [
-        rewardCoins,
-        now,
-        studentId
-      ]);
+      const outcome = await awardTopicOutcomeRewards(client, {
+        studentId,
+        sessionType: "GAME",
+        sessionId,
+        unitId: group.unitId,
+        topicId,
+        passed: true,
+        crowns: derivation.crowns,
+        awardedAtIso: now,
+        dedupeKey: `out:GAME:${sessionId}:${topicId}`
+      });
+      creditedXp += outcome.xp;
+    }
+    // The speed-badge input: only a PASSING topic group updates the best
+    // share, and only CORRECT answers carry speed credit (fast-wrong
+    // answers are grade 1 everywhere else in the engine — rushing is
+    // never lightning learning). Same rule on the mobile side.
+    const fluencyTarget = fluencyTargetByTopic.get(topicId) ?? 0;
+    if (derivation.passedTopic && fluencyTarget > 0) {
+      const share = beatTargetSharePct(
+        group.items.filter(({ a }) => a.isCorrect).map(({ a }) => a.rawTimeSec || 3.0),
+        fluencyTarget
+      );
+      await updateBestBeatTargetPct(client, { studentId, pct: share, awardedAtIso: now });
     }
   }
+  return creditedXp;
 }
 
-async function replayGateSession({ client, studentId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
+async function replayGateSession({ client, studentId, deviceId, sessionId, unitId, gradeRow, targetSpeed, motorSec, sessionMs, items, priorItems }) {
   const fullUnit = await clientGet(client, "SELECT * FROM units WHERE unit_id = $1", [unitId]);
   const topicRows = await clientAll(
     client,
@@ -695,12 +840,44 @@ async function replayGateSession({ client, studentId, unitId, gradeRow, targetSp
     keyTransition.goldVerifiedAtMs > 0 ? new Date(keyTransition.goldVerifiedAtMs).toISOString() : null,
     reReplay ? 0 : 1
   ]);
-  if (evalResult.passed && !priorPassed) {
-    await client.query("UPDATE students SET star_coins = star_coins + 50, last_active_at = $1 WHERE student_id = $2", [now, studentId]);
+
+  // #55 (D9): attempt XP over the NEW rows (gate items are audio-aware)
+  // + the engine's gate outcome (XP + the historical 50 coins) on the
+  // pass TRANSITION — the pre-#55 inline award, now engine-owned.
+  let creditedXp = 0;
+  for (const { a, iso } of groupNewItems(items, priorItems)) {
+    const fluency = computeFluencyGrade(
+      a.isCorrect,
+      computeCognitiveTimeSec(a.rawTimeSec || 3.0, motorSec, a.audioDurationSec || 0),
+      targetSpeed
+    );
+    creditedXp += await awardAttemptXp(client, {
+      studentId,
+      sessionType: "GATE",
+      sessionId,
+      unitId,
+      topicId: a.topicId,
+      isCorrect: Boolean(a.isCorrect),
+      fluencyGrade: fluency,
+      awardedAtIso: iso,
+      dedupeKey: `att:${deviceId}:${a.seq}`
+    });
   }
+  if (evalResult.passed && !priorPassed) {
+    const outcome = await awardGateOutcomeRewards(client, {
+      studentId,
+      sessionId,
+      unitId,
+      passed: true,
+      awardedAtIso: now,
+      dedupeKey: `out:GATE:${sessionId}:${unitId}`
+    });
+    creditedXp += outcome.xp;
+  }
+  return creditedXp;
 }
 
-async function replayGoldVerificationSession({ client, studentId, unitId, sessionMs, items }) {
+async function replayGoldVerificationSession({ client, studentId, deviceId, sessionId, unitId, sessionMs, items }) {
   // `items` is the FULL union (prior + new rows): the 4-of-5 verdict is
   // evaluated over the session's whole persisted evidence, and the
   // transition itself is forward-only idempotent (a replayed upgrade
@@ -713,7 +890,7 @@ async function replayGoldVerificationSession({ client, studentId, unitId, sessio
     [studentId, unitId]
   );
   const transition = computeGoldVerificationTransition({ prev, correctCount, sessionMs });
-  if (!transition.upgraded) return;
+  if (!transition.upgraded) return 0;
 
   const now = new Date(sessionMs).toISOString();
   await client.query(
@@ -724,6 +901,18 @@ async function replayGoldVerificationSession({ client, studentId, unitId, sessio
      WHERE student_id = $1 AND unit_id = $2`,
     [studentId, unitId, new Date(transition.goldVerifiedAtMs).toISOString(), now]
   );
+
+  // #55: the Gold-upgrade XP event — engine amount, dedupe-keyed by the
+  // session (a replayed upgrade is already a no-op above; the key is
+  // belt-and-braces under concurrent batches).
+  const outcome = await awardGoldUpgradeRewards(client, {
+    studentId,
+    sessionId,
+    unitId,
+    awardedAtIso: now,
+    dedupeKey: `out:GOLD_VERIFICATION:${sessionId}:${unitId}`
+  });
+  return outcome.xp;
 }
 
 // --- Plugin ---------------------------------------------------------------------
@@ -820,7 +1009,9 @@ export const syncPlugin = fp(async (app, options) => {
         inserted: outcome.inserted,
         duplicates: outcome.duplicates,
         sessionsReplayed: outcome.sessionsReplayed,
-        clockAdjusted: outcome.clockAdjusted
+        clockAdjusted: outcome.clockAdjusted,
+        xpCredited: outcome.xpCredited,
+        badgesAwarded: outcome.badgesAwarded
       },
       "sync upload complete"
     );
@@ -832,7 +1023,9 @@ export const syncPlugin = fp(async (app, options) => {
         inserted: outcome.inserted,
         duplicates: outcome.duplicates,
         sessionsReplayed: outcome.sessionsReplayed,
-        clockSkewAdjusted: outcome.clockAdjusted
+        clockSkewAdjusted: outcome.clockAdjusted,
+        xpCredited: outcome.xpCredited,
+        badgesAwarded: outcome.badgesAwarded
       },
       packsOutdated: packsOutdated(packsDir, req.body.clientPacks),
       progress

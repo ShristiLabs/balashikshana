@@ -4,7 +4,10 @@
  * - Issue #2: Curriculum DAG Resolver & 5-Condition Mastery Gate Engine (Accuracy + Speed + Motor Calibration)
  * - Issue #3: Scientific Child-Calibrated Spaced Repetition Engine (FSRS, Lag +2/+5/+10, Two-Key Sleep Consolidation, FIRe DAG Credit, CPA Fading)
  * - Issue #7: Procedural Question & Smart Misconception Distractor Generator across all 614 Skill Topics
+ * - Issue #55 (roadmap D9): Gamification reward rules — XP accrual, level curve, coin/crown derivation, streak days, badge catalog + evaluation (pure functions + data, shared offline/online)
  */
+
+export * from "./rewards.mjs";
 
 export const UNIT_STATES = {
   LOCKED: "LOCKED",

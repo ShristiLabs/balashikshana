@@ -14,7 +14,11 @@
  * truth and #48 re-derives progress server-side from it (D8).
  * In-memory session state lives only between start and complete.
  */
-import { evaluateMasteryGateAttempt, generateTopicPracticeSet } from "@balashikshana/core-engine";
+import {
+  evaluateMasteryGateAttempt,
+  generateTopicPracticeSet,
+  beatTargetSharePct,
+} from "@balashikshana/core-engine";
 import { allocateSpiral, interleaveSpiral, type SpiralSource } from "../gate/spiral";
 import { AttemptRecorder } from "./attemptRecorder";
 import { TWO_KEY_RULES, goldEligibleAtMs } from "./goldKey";
@@ -40,6 +44,15 @@ import {
   summarizeGameTelemetry,
 } from "../games/sessionModel";
 import { gameSessionLength, parseGamesAssetBlock } from "../games/gamesAssets";
+import {
+  applyGateSession,
+  applyGoldUpgrade,
+  applyTopicLikeSession,
+  badgeAggregates,
+  evaluateAndMergeBadges,
+  initialGamificationState,
+} from "../gamification/rewardsProjector";
+
 import type {
   AttemptInput,
   GameAttemptTelemetry,
@@ -51,6 +64,7 @@ import type {
   TopicProgressRecord,
   UnitProgressRecord,
 } from "./types";
+import type { GamificationState, RewardAttempt } from "../gamification/types";
 
 /**
  * The documented default motor baseline (seconds). #53 carry-over fix
@@ -117,6 +131,9 @@ export interface TopicSessionSummary {
   cpaStage: string;
   nextReviewAt: number;
   topicProgress: TopicProgressRecord;
+  /** #55: engine-derived reward totals (additive; provisional until sync). */
+  xpAwarded: number;
+  coinsAwarded: number;
 }
 
 /** Game-session start payload (issue #52) — everything the host + renderer need. */
@@ -171,6 +188,9 @@ export interface GameSessionSummary {
     passedTopic: boolean;
     crowns: number;
   }[];
+  /** #55: engine-derived reward totals (additive; provisional until sync). */
+  xpAwarded: number;
+  coinsAwarded: number;
 }
 
 export interface GateSessionStart {
@@ -226,6 +246,9 @@ export interface GateSessionSummary {
   remediationPrescription: string;
   conditions: Record<string, boolean>;
   unitProgress: UnitProgressRecord;
+  /** #55: engine-derived reward totals (additive; provisional until sync). */
+  xpAwarded: number;
+  coinsAwarded: number;
 }
 
 export interface GoldStatus {
@@ -244,6 +267,8 @@ export interface GoldVerificationSummary {
   upgraded: boolean;
   keyState: UnitProgressRecord["keyState"];
   reason: string;
+  /** #55: engine-derived XP (additive; provisional until sync). */
+  xpAwarded: number;
 }
 
 export class PracticeSessionEngine {
@@ -432,6 +457,22 @@ export class PracticeSessionEngine {
     await this.deps.storage.upsertTopicProgress(merged);
     this.sessions.delete(sessionId);
 
+    // #55: the optimistic reward projection AFTER the progress row is
+    // durable (badges evaluate over the fresh aggregates).
+    const rewards = await this.projectRewards(
+      session.studentId,
+      (state) =>
+        applyTopicLikeSession(state, {
+          sessionType: "TOPIC_PRACTICE",
+          attempts: this.rewardAttemptsFor(session, session.responses),
+          passed: derivation.passedTopic,
+          crowns: derivation.crowns,
+          sessionMs: nowMs,
+          nowMs,
+        }),
+      nowMs,
+    );
+
     return {
       sessionId,
       passedTopic: derivation.passedTopic,
@@ -444,6 +485,8 @@ export class PracticeSessionEngine {
       cpaStage: derivation.cpaStage,
       nextReviewAt: merged.nextReviewAt,
       topicProgress: merged,
+      xpAwarded: rewards.xp,
+      coinsAwarded: rewards.coins,
     };
   }
 
@@ -652,6 +695,20 @@ export class PracticeSessionEngine {
     }
 
     const perTopic: GameSessionSummary["perTopic"] = [];
+    // #55: each group's OWN registry fluency target (the speed badge
+    // input — the same assets_json value the server replay parses).
+    const fluencyTargetByTopic = new Map<string, number>();
+    for (const topicId of byTopic.keys()) {
+      const topicRow = await reader.topic(topicId);
+      const block = topicRow ? parseGamesAssetBlock(packTopicToEngineTopic(topicRow).assets) : null;
+      fluencyTargetByTopic.set(topicId, block?.fluencySprintGame?.targetResponseSpeedSec ?? 0);
+    }
+    const groupRewards: {
+      attempts: RewardAttempt[];
+      passed: boolean;
+      crowns: number;
+      beatTargetPct: number | undefined;
+    }[] = [];
     for (const [topicId, group] of byTopic) {
       const topicCode = topicId.startsWith(`${session.unitId}-`)
         ? topicId.slice(session.unitId.length + 1)
@@ -682,6 +739,23 @@ export class PracticeSessionEngine {
         medianCogSpeedSec: derivation.medianCogSpeedSec,
         passedTopic: derivation.passedTopic,
         crowns: derivation.crowns,
+      });
+      const fluencyTarget = fluencyTargetByTopic.get(topicId) ?? 0;
+      groupRewards.push({
+        attempts: this.rewardAttemptsFor(session, group.responses),
+        passed: derivation.passedTopic,
+        crowns: derivation.crowns,
+        // The engine's binding composition rule (mirrored server-side):
+        // only a PASSING group's CORRECT answers carry speed credit —
+        // fast-wrong answers are grade 1 everywhere else; rushing is
+        // never lightning learning.
+        beatTargetPct:
+          derivation.passedTopic && fluencyTarget > 0
+            ? beatTargetSharePct(
+                group.responses.filter((r) => r.isCorrect).map((r) => r.rawTimeSec || 3.0),
+                fluencyTarget,
+              )
+            : undefined,
       });
     }
 
@@ -714,6 +788,33 @@ export class PracticeSessionEngine {
     );
 
     this.sessions.delete(sessionId);
+
+    // #55: the per-group reward projections, applied as one transition
+    // set (each group earns exactly like a topic session — the server's
+    // replayGameSession reward blocks, mirrored).
+    const rewards = await this.projectRewards(
+      session.studentId,
+      (state) => {
+        let xp = 0;
+        let coins = 0;
+        for (const g of groupRewards) {
+          const t = applyTopicLikeSession(state, {
+            sessionType: "GAME",
+            attempts: g.attempts,
+            passed: g.passed,
+            crowns: g.crowns,
+            beatTargetPct: g.beatTargetPct,
+            sessionMs: nowMs,
+            nowMs,
+          });
+          xp += t.xp;
+          coins += t.coins;
+        }
+        return { xp, coins };
+      },
+      nowMs,
+    );
+
     return {
       sessionId,
       stage,
@@ -725,6 +826,8 @@ export class PracticeSessionEngine {
       speed: rollup.speed,
       provenanceCounts: rollup.provenanceCounts,
       perTopic,
+      xpAwarded: rewards.xp,
+      coinsAwarded: rewards.coins,
     };
   }
 
@@ -928,6 +1031,19 @@ export class PracticeSessionEngine {
     await this.deps.storage.upsertUnitProgress(merged);
     this.sessions.delete(sessionId);
 
+    // #55: gate rewards (attempt XP + the flat pass bonus/coins).
+    const rewards = await this.projectRewards(
+      session.studentId,
+      (state) =>
+        applyGateSession(state, {
+          attempts: this.rewardAttemptsFor(session, session.responses),
+          passed: verdict.passed,
+          sessionMs: nowMs,
+          nowMs,
+        }),
+      nowMs,
+    );
+
     return {
       sessionId,
       passed: verdict.passed,
@@ -950,6 +1066,8 @@ export class PracticeSessionEngine {
       remediationPrescription: verdict.remediationPrescription ?? "",
       conditions: verdict.conditions ?? {},
       unitProgress: merged,
+      xpAwarded: rewards.xp,
+      coinsAwarded: rewards.coins,
     };
   }
 
@@ -1013,6 +1131,12 @@ export class PracticeSessionEngine {
     this.sessions.delete(sessionId);
     if (derivation.upgraded && derivation.record) {
       await this.deps.storage.upsertUnitProgress(derivation.record);
+      // #55: the Gold-upgrade XP event (engine amount, mirrored server-side).
+      const rewards = await this.projectRewards(
+        session.studentId,
+        (state) => applyGoldUpgrade(state, { sessionMs: nowMs, nowMs }),
+        nowMs,
+      );
       return {
         sessionId,
         correctCount,
@@ -1020,6 +1144,7 @@ export class PracticeSessionEngine {
         upgraded: true,
         keyState: derivation.record.keyState,
         reason: "GOLD_KEY awarded after sleep-consolidation verification",
+        xpAwarded: rewards.xp,
       };
     }
     const status = prev?.keyState;
@@ -1037,6 +1162,7 @@ export class PracticeSessionEngine {
       upgraded: false,
       keyState: prev?.keyState ?? null,
       reason,
+      xpAwarded: 0,
     };
   }
 
@@ -1083,6 +1209,68 @@ export class PracticeSessionEngine {
   // ------------------------------------------------------------------
   // Internals
   // ------------------------------------------------------------------
+
+  /**
+   * #55 (D9): project the OPTIMISTIC local reward ledger for a completed
+   * session. The `apply` callback runs the pure projector transitions
+   * (the SAME engine reward rules the server's ledger materialization
+   * runs — services/api/rewards.mjs); badges then re-evaluate over the
+   * full local aggregates (fresh progress rows included: callers run
+   * this AFTER persisting the session's projections). Persisted only
+   * when the gamification seam exists; summary totals are computed
+   * either way so no caller depends on the seam.
+   */
+  private async projectRewards(
+    studentId: string,
+    apply: (state: GamificationState) => { xp: number; coins: number },
+    nowMs: number,
+  ): Promise<{ xp: number; coins: number }> {
+    const gamification = this.deps.gamificationStorage;
+    if (!gamification) {
+      const scratch = initialGamificationState(studentId, nowMs);
+      return apply(scratch);
+    }
+    const state =
+      (await gamification.getGamificationState(studentId)) ??
+      initialGamificationState(studentId, nowMs);
+    const outcome = apply(state);
+    const [topicRows, unitRows, gateUnits, goldUnits] = await Promise.all([
+      this.deps.storage.allTopicProgress(studentId),
+      this.deps.storage.allUnitProgress(studentId),
+      gamification.playedUnitIds(studentId, "GATE"),
+      gamification.playedUnitIds(studentId, "GOLD_VERIFICATION"),
+    ]);
+    evaluateAndMergeBadges(
+      state,
+      badgeAggregates({
+        state,
+        topicRows,
+        unitRows,
+        gateUnitIds: gateUnits,
+        goldVerificationUnitIds: goldUnits,
+      }),
+      nowMs,
+    );
+    await gamification.upsertGamificationState(state);
+    return outcome;
+  }
+
+  /** Per-attempt reward inputs for a session's responses (the recorded grades recomputed deterministically). */
+  private rewardAttemptsFor(session: SessionState, responses: SessionResponse[]): RewardAttempt[] {
+    return responses.map((response) => {
+      const attempt = deriveAttempt({
+        response,
+        sessionType: session.kind,
+        motorBaselineSec: session.motorBaselineSec,
+        targetSpeedSec: session.targetSpeedSec,
+      });
+      return {
+        isCorrect: response.isCorrect,
+        fluencyGrade: attempt.fluencyGrade,
+        rawTimeSec: response.rawTimeSec || 3.0,
+      };
+    });
+  }
 
   /**
    * The server's stratified builder (/api/curriculum/unit and the #47

@@ -257,6 +257,8 @@ describe("answer flow with re-queue integration", () => {
         stabilityDays: 2,
         cpaStage: "PICTORIAL_STATIC",
         nextReviewAt: 0,
+        xpAwarded: 0,
+        coinsAwarded: 0,
         topicProgress: {} as TopicProgressRecord,
       },
     });
@@ -306,6 +308,8 @@ describe("stale-session guard (#49 race class)", () => {
         stabilityDays: 3,
         cpaStage: "PICTORIAL_STATIC",
         nextReviewAt: 0,
+        xpAwarded: 0,
+        coinsAwarded: 0,
         topicProgress: {} as TopicProgressRecord,
       },
     });

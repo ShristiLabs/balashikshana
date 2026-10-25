@@ -88,7 +88,8 @@ describe("migration tracking", () => {
         "003_parent_auth_tokens",
         "004_consent_policy_versions",
         "005_child_profiles_device_sessions",
-        "006_sync_attempt_ledger"
+        "006_sync_attempt_ledger",
+        "007_gamification_ledger"
       ]
     );
   });

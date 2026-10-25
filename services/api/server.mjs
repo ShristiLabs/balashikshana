@@ -23,6 +23,14 @@ import {
 import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift } from "./children.mjs";
 import { contentPacksPlugin } from "./content-packs.mjs";
 import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
+import { gamificationPlugin } from "./gamification.mjs";
+import {
+  awardAttemptXp,
+  awardTopicOutcomeRewards,
+  awardGateOutcomeRewards,
+  applyStreakForSession,
+  evaluateAndAwardBadges
+} from "./rewards.mjs";
 import {
   deriveTopicSession,
   deriveTopicFluencyAndSr,
@@ -624,6 +632,11 @@ await app.register(syncPlugin, {
   packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs")
 });
 
+// Gamification ledger read (issue #55, D9): the kid-facing reward view.
+// Student-scoped read auth (like GET /api/students/:id); everything
+// displayed is engine-derived.
+await app.register(gamificationPlugin, { db });
+
 // --- Routes --------------------------------------------------------------------
 
 app.get("/api/health", async () => {
@@ -1070,10 +1083,14 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
   // Every online completion gets a session id so all its attempt rows
   // belong to exactly one session (#48 session-granular ledger).
   const onlineSessionId = `online-${crypto.randomUUID()}`;
+  // #55: engine-derived reward totals for the response (additive fields).
+  const rewardTotals = { xp: 0, coins: 0 };
 
   await db.withTransaction(async (client) => {
+    let attemptIndex = 0;
     for (const r of responses) {
       const cSec = computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, 0);
+      const attemptGrade = perAttemptFluencyGrade(r.isCorrect, cSec, targetSpeed);
       await client.query(`
         INSERT INTO student_question_attempts (
           student_id, session_type, unit_id, topic_id, question_id,
@@ -1090,11 +1107,25 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
         r.isCorrect ? 1 : 0,
         r.rawTimeSec || 3.0,
         cSec,
-        perAttemptFluencyGrade(r.isCorrect, cSec, targetSpeed),
+        attemptGrade,
         JSON.stringify(r.misconceptionTags || []),
         now,
         onlineSessionId
       ]);
+      // #55: per-attempt XP from the shared engine rules (online path —
+      // every call is a fresh session, so no dedupe collisions).
+      rewardTotals.xp += await awardAttemptXp(client, {
+        studentId,
+        sessionType: "TOPIC_PRACTICE",
+        sessionId: onlineSessionId,
+        unitId,
+        topicId,
+        isCorrect: Boolean(r.isCorrect),
+        fluencyGrade: attemptGrade,
+        awardedAtIso: now,
+        dedupeKey: `att:${onlineSessionId}:${attemptIndex}`
+      });
+      attemptIndex += 1;
     }
 
     await client.query(TOPIC_PROGRESS_UPSERT_SQL, [
@@ -1115,10 +1146,26 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
       1
     ]);
 
-    if (passedTopic) {
-      const rewardCoins = 15 + crowns * 5;
-      await client.query("UPDATE students SET star_coins = star_coins + $1, last_active_at = $2 WHERE student_id = $3", [rewardCoins, now, studentId]);
-    }
+    // #55 (D9): outcome XP + coins via the shared engine formulas (the
+    // pre-#55 inline topic coin award is now engine-owned in
+    // rewards.mjs — identical amounts, one source), the streak day
+    // transition, and badge evaluation — all inside the same transaction
+    // (attempts, progress, and rewards commit atomically).
+    const outcome = await awardTopicOutcomeRewards(client, {
+      studentId,
+      sessionType: "TOPIC_PRACTICE",
+      sessionId: onlineSessionId,
+      unitId,
+      topicId,
+      passed: passedTopic,
+      crowns,
+      awardedAtIso: now,
+      dedupeKey: `out:${onlineSessionId}:${topicId}`
+    });
+    await applyStreakForSession(client, { studentId, sessionMs: Date.now() });
+    await evaluateAndAwardBadges(client, { studentId });
+    rewardTotals.xp += outcome.xp;
+    rewardTotals.coins += outcome.coins;
   });
 
   const totalTopicsInUnit = (await db.get("SELECT COUNT(*)::int AS c FROM skill_topics WHERE unit_id = $1", [unitId])).c;
@@ -1137,7 +1184,9 @@ app.post("/api/practice/topic/complete", { schema: practiceCompleteSchema }, asy
     bossGateUnlocked: allTopicsDone,
     spacedRepetition: srUpdate,
     student: state.student,
-    summary: state.summary
+    summary: state.summary,
+    xpAwarded: rewardTotals.xp,
+    coinsAwarded: rewardTotals.coins
   };
 });
 
@@ -1196,10 +1245,14 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
   // online path now feeds the same session-granular attempt ledger the
   // offline sync uploads into).
   const onlineSessionId = `online-${crypto.randomUUID()}`;
+  // #55: engine-derived reward totals for the response (additive fields).
+  const rewardTotals = { xp: 0, coins: 0 };
 
   await db.withTransaction(async (client) => {
+    let attemptIndex = 0;
     for (const r of payload.responses || []) {
       const cSec = computeCognitiveTimeSec(r.rawTimeSec || 3.0, motorSec, r.audioDurationSec || 0);
+      const attemptGrade = perAttemptFluencyGrade(r.isCorrect, cSec, unitRow.gate_max_speed_sec);
       await client.query(`
         INSERT INTO student_question_attempts (
           student_id, session_type, unit_id, topic_id, question_id,
@@ -1215,11 +1268,24 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
         r.isCorrect ? 1 : 0,
         r.rawTimeSec || 3.0,
         cSec,
-        perAttemptFluencyGrade(r.isCorrect, cSec, unitRow.gate_max_speed_sec),
+        attemptGrade,
         now,
         r.audioDurationSec || 0,
         onlineSessionId
       ]);
+      // #55: per-attempt XP from the shared engine rules (online path).
+      rewardTotals.xp += await awardAttemptXp(client, {
+        studentId,
+        sessionType: "GATE",
+        sessionId: onlineSessionId,
+        unitId,
+        topicId: `${unitId}-${r.topicCode}`,
+        isCorrect: Boolean(r.isCorrect),
+        fluencyGrade: attemptGrade,
+        awardedAtIso: now,
+        dedupeKey: `att:${onlineSessionId}:${attemptIndex}`
+      });
+      attemptIndex += 1;
     }
 
     await client.query(UNIT_PROGRESS_UPSERT_SQL, [
@@ -1241,9 +1307,23 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
       1
     ]);
 
-    if (evalResult.passed) {
-      await client.query("UPDATE students SET star_coins = star_coins + 50, last_active_at = $1 WHERE student_id = $2", [now, studentId]);
-    }
+    // #55 (D9): gate outcome XP + the historical 50-coin award via the
+    // shared engine formulas (the pre-#55 literal is now engine-owned in
+    // rewards.mjs — identical amounts, one source), the streak day
+    // transition, and badge evaluation — same transaction as the
+    // attempts and the unit progress.
+    const outcome = await awardGateOutcomeRewards(client, {
+      studentId,
+      sessionId: onlineSessionId,
+      unitId,
+      passed: evalResult.passed,
+      awardedAtIso: now,
+      dedupeKey: `out:${onlineSessionId}:${unitId}`
+    });
+    await applyStreakForSession(client, { studentId, sessionMs: Date.now() });
+    await evaluateAndAwardBadges(client, { studentId });
+    rewardTotals.xp += outcome.xp;
+    rewardTotals.coins += outcome.coins;
   });
 
   const state = await getStudentFullState(studentId);
@@ -1251,7 +1331,9 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
     student: state.student,
     summary: state.summary,
     evaluation: { ...evalResult, keyAwarded: nextKeyState },
-    spacedRepetition: srUpdate
+    spacedRepetition: srUpdate,
+    xpAwarded: rewardTotals.xp,
+    coinsAwarded: rewardTotals.coins
   };
 });
 

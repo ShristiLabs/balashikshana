@@ -181,6 +181,7 @@ describe("gold-check budget", () => {
         upgraded: true,
         keyState: "GOLD_KEY",
         reason: "upgraded",
+        xpAwarded: 20,
       },
     });
     expect(done.phase).toBe("verification-result");

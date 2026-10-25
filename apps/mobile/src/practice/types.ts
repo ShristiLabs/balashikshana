@@ -271,4 +271,12 @@ export interface PracticeDeps {
    * caller-provided -> this value -> 0.42 default.
    */
   motorBaselineSec?: number;
+  /**
+   * #55 (D9) gamification seam — OPTIONAL so pre-#55 wiring keeps
+   * working: when present, session completions project the optimistic
+   * local reward ledger through the shared engine rules (rewards are
+   * still computed and returned in every summary either way; only the
+   * persisted local state needs this seam).
+   */
+  gamificationStorage?: import("../gamification/storage").GamificationStorage;
 }

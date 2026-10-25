@@ -86,7 +86,13 @@ describe("lifecycle DB migrations on real SQLite", () => {
         name: string;
       }[]
     ).map((r) => r.name);
-    for (const table of ["pack_meta", "attempt_log", "topic_progress", "unit_progress"]) {
+    for (const table of [
+      "pack_meta",
+      "attempt_log",
+      "topic_progress",
+      "unit_progress",
+      "gamification_state",
+    ]) {
       expect(tables).toContain(table);
     }
 
@@ -260,9 +266,9 @@ describe("lifecycle DB migrations on real SQLite", () => {
 
     runMigrations(db); // the #52 app version opens the same device
     const latest = CONTENT_DB_MIGRATIONS[CONTENT_DB_MIGRATIONS.length - 1]!.version;
-    expect(latest).toBe(4);
+    expect(latest).toBe(5);
     expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      4,
+      5,
     );
     // The pre-game row survived and backfilled to the documented
     // defaults: empty provenance string (NOT NULL ''), zero target,
