@@ -112,5 +112,85 @@ export const api = {
       token,
       body
     });
+  },
+  /**
+   * Download the child's COPPA data export as a JSON attachment. Uses a
+   * raw fetch (not call<T>): the response is a Blob to hand to the
+   * browser's download flow, and Content-Disposition names the file.
+   */
+  async exportChildData(token: string, studentId: string): Promise<Blob> {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/api/portal/children/${encodeURIComponent(studentId)}/export`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch {
+      throw new ApiError(0, "Network error", "Could not reach the server. Check your connection and try again.");
+    }
+    if (res.status === 401) throw new UnauthorizedError();
+    if (!res.ok) {
+      let problem: Record<string, unknown> = {};
+      try {
+        problem = (await res.json()) as Record<string, unknown>;
+      } catch {
+        // Non-JSON error body — fall through with defaults.
+      }
+      throw new ApiError(
+        res.status,
+        typeof problem.title === "string" ? problem.title : `Error ${res.status}`,
+        typeof problem.detail === "string" ? problem.detail : `Request failed (${res.status}).`
+      );
+    }
+    return res.blob();
+  },
+  /**
+   * Delete a child's data (password re-authentication). Deliberately NOT
+   * call<T>: the route's 401 re-auth-required (wrong password) must surface
+   * as a readable ApiError, not be conflated with the session-expired 401
+   * that logs the parent out — only a plain 401 (no re-auth problem type)
+   * raises UnauthorizedError.
+   */
+  async deleteChild(token: string, studentId: string, password: string): Promise<import("./types").DeletionSummary> {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/api/portal/children/${encodeURIComponent(studentId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password })
+      });
+    } catch {
+      throw new ApiError(0, "Network error", "Could not reach the server. Check your connection and try again.");
+    }
+    if (res.status === 401) {
+      let problem: Record<string, unknown> = {};
+      try {
+        problem = (await res.json()) as Record<string, unknown>;
+      } catch {
+        // Non-JSON body — treat as a session failure.
+      }
+      if (typeof problem.type === "string" && problem.type.endsWith("/re-auth-required")) {
+        throw new ApiError(
+          401,
+          typeof problem.title === "string" ? problem.title : "Re-authentication failed",
+          typeof problem.detail === "string" ? problem.detail : "Deleting your child's data requires your account password.",
+          problem.type
+        );
+      }
+      throw new UnauthorizedError();
+    }
+    if (!res.ok) {
+      let problem: Record<string, unknown> = {};
+      try {
+        problem = (await res.json()) as Record<string, unknown>;
+      } catch {
+        // Non-JSON error body — fall through with defaults.
+      }
+      throw new ApiError(
+        res.status,
+        typeof problem.title === "string" ? problem.title : `Error ${res.status}`,
+        typeof problem.detail === "string" ? problem.detail : `Request failed (${res.status}).`
+      );
+    }
+    return (await res.json()) as import("./types").DeletionSummary;
   }
 };

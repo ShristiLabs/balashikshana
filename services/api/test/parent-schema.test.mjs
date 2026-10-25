@@ -511,12 +511,12 @@ describe("migration 002 reversibility", () => {
   // profiles/device sessions, 006 (issue #48) layers the sync attempt
   // ledger, 007 (issue #55) layers the gamification ledger, and 008
   // (issue #56) layers the hearts session outcomes, 009 (issue #60) layers
-  // the placement records, and 010 (issue #61) layers the portal child
-  // settings, so the rollback
-  // removes all nine post-001 migrations (in order) and the up
+  // the placement records, 010 (issue #61) layers the portal child
+  // settings, and 011 (issue #62) layers the deletion audit ledger, so the
+  // rollback removes all ten post-001 migrations (in order) and the up
   // restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..010 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 9 });
+  test("down removes exactly the 002..011 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 10 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -580,7 +580,8 @@ describe("migration 002 reversibility", () => {
         "007_gamification_ledger",
         "008_hearts_session_outcomes",
         "009_placement_records",
-        "010_portal_child_settings"
+        "010_portal_child_settings",
+        "011_deletion_audit"
       ],
       "up must re-apply 002 through 010"
     );

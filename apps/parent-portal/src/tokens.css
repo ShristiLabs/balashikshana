@@ -175,6 +175,21 @@ h1:focus {
   background: #f2efe6;
 }
 
+/* Destructive action (the #62 data-rights deletion): the coral family,
+   reserved for irreversible actions. Hover stays in the AA range
+   (#c22c2c on white text = 5.7:1) — the bright coral fails contrast for
+   the 16px/600 label. */
+.btn-danger {
+  background: var(--color-coral-ink);
+  color: #ffffff;
+  border-color: var(--color-coral-ink);
+  display: block;
+}
+
+.btn-danger:hover {
+  background: #c22c2c;
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
