@@ -274,6 +274,20 @@ describe("speak: outcomes", () => {
     expect(h.speech.utterances).toHaveLength(0);
   });
 
+  it("#59 defers the NEW registry line kinds too (SSML intro/hint/remediation never fight VoiceOver)", async () => {
+    const h = createHarness({ isScreenReaderActive: async () => true });
+    for (const line of ["intro", "hint", "remediation"] as const) {
+      const result = await h.coordinator.speak({
+        text: '<speak><prosody rate="110wpm">Hello</prosody></speak>',
+        grade: "pre-k",
+        topicId: "PK-M1-A",
+        line,
+      });
+      expect(result).toMatchObject({ outcome: "deferred-screen-reader", audioDurationSec: 0 });
+    }
+    expect(h.speech.utterances).toHaveLength(0);
+  });
+
   it("probes support once and caches the result", async () => {
     const h = createHarness();
     const probe = vi.fn(async () => true);
@@ -302,7 +316,48 @@ describe("speak: unsupported TTS and the Pre-K bundled fallback", () => {
     expect(h.speech.utterances).toHaveLength(0);
   });
 
-  it("reports unsupported when bundled audio is absent (until #59)", async () => {
+  it("#59 exercises the fallback across ALL line kinds (Pre-K instruction is the AC-named case)", async () => {
+    const bundled = createBundledNarration({ played: true, durationSec: 1.5 });
+    const h = createHarness({ bundledNarration: bundled });
+    h.speech.supported = false;
+    for (const line of ["instruction", "intro", "hint", "remediation", "celebration"] as const) {
+      const result = await h.coordinator.speak({
+        text: "line",
+        grade: "pre-k",
+        topicId: "PK-M1-A",
+        line,
+      });
+      expect(result).toEqual({ outcome: "fallback-bundled", audioDurationSec: 1.5 });
+    }
+    expect(bundled.calls.map((call) => call.line)).toEqual([
+      "instruction",
+      "intro",
+      "hint",
+      "remediation",
+      "celebration",
+    ]);
+  });
+
+  it("hands the platform engine the SSML pitch multiplier (default 1 when absent)", async () => {
+    const h = createHarness();
+    const withPitch = await enqueue(h, {
+      text: '<speak><prosody rate="110wpm" pitch="+5%">Hi</prosody></speak>',
+      grade: "pre-k",
+    });
+    expect(h.speech.last().pitch).toBeCloseTo(1.05, 3);
+    h.speech.last().onDone?.();
+    await withPitch.promise;
+
+    const labeled = await enqueue(h, {
+      text: '<speak><prosody rate="130wpm" pitch="default">Hi</prosody></speak>',
+      grade: "grade-1",
+    });
+    expect(h.speech.last().pitch).toBe(1);
+    h.speech.last().onDone?.();
+    await labeled.promise;
+  });
+
+  it("reports unsupported when bundled audio is absent (silent skip, never a crash)", async () => {
     const h = createHarness();
     h.speech.supported = false;
     const result = await h.coordinator.speak({

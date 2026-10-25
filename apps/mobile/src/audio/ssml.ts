@@ -21,6 +21,13 @@ export interface AdaptedNarration {
   rateWpm: number | null;
   /** Total explicit <break time="..."/> duration in milliseconds. */
   breakMs: number;
+  /**
+   * Platform pitch multiplier extracted from prosody pitch="+5%"
+   * (1.05), when present and representable. Non-percent pitches
+   * (labels like "x-low") and absent attributes degrade to null —
+   * the caller then uses the platform default (1.0), never a guess.
+   */
+  pitchMultiplier: number | null;
 }
 
 const SPEAK_OPEN = /^\s*<speak\b/i;
@@ -29,7 +36,22 @@ const ANY_TAG = /<\/?[a-zA-Z][^>]*>/g;
 /** Unterminated tag fragment at end of malformed input. */
 const DANGLING_TAG = /<[^>]*$/;
 const PROSODY_RATE = /<prosody\b[^>]*\brate="(\d+(?:\.\d+)?)\s*wpm"/i;
+const PROSODY_PITCH = /<prosody\b[^>]*\bpitch="([+-]?\d+(?:\.\d+)?)\s*%"/i;
 const BREAK_TIME = /<break\b[^>]*\btime="(\d+(?:\.\d+)?)\s*(ms|s)"/gi;
+
+/** expo-speech documents the useful pitch range as [0.5, 2.0]. */
+export const PITCH_MULT_MIN = 0.5;
+export const PITCH_MULT_MAX = 2;
+
+function prosodyPitch(text: string): number | null {
+  const match = PROSODY_PITCH.exec(text);
+  if (!match) return null;
+  const pct = Number.parseFloat(match[1] ?? "");
+  if (!Number.isFinite(pct)) return null;
+  const multiplier = 1 + pct / 100;
+  if (!Number.isFinite(multiplier)) return null;
+  return Math.min(PITCH_MULT_MAX, Math.max(PITCH_MULT_MIN, multiplier));
+}
 
 function decodeEntities(text: string): string {
   return text
@@ -52,7 +74,12 @@ export function isSsml(text: string): boolean {
 
 export function adaptNarration(text: string): AdaptedNarration {
   if (!isSsml(text)) {
-    return { plainText: collapseWhitespace(decodeEntities(text)), rateWpm: null, breakMs: 0 };
+    return {
+      plainText: collapseWhitespace(decodeEntities(text)),
+      rateWpm: null,
+      breakMs: 0,
+      pitchMultiplier: null,
+    };
   }
 
   let breakMs = 0;
@@ -79,5 +106,6 @@ export function adaptNarration(text: string): AdaptedNarration {
     plainText,
     rateWpm: rateWpm !== null && Number.isFinite(rateWpm) ? rateWpm : null,
     breakMs: Math.round(breakMs),
+    pitchMultiplier: prosodyPitch(text),
   };
 }

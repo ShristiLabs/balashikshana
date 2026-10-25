@@ -161,7 +161,7 @@ export class AudioCoordinator {
         this.deps.speech.speak({
           text: adapted.plainText,
           rate: wpmToRate(wpm),
-          pitch: 1,
+          pitch: adapted.pitchMultiplier ?? 1,
           volume: NARRATION_VOLUME,
           language: "en-US",
           onStart: () => {
