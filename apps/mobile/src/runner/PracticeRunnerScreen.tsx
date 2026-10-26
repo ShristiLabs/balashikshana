@@ -19,6 +19,8 @@ import React, { useCallback, useEffect, useReducer, useRef, useState } from "rea
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import { badgeById } from "@balashikshana/core-engine";
+import { announceForAccessibility } from "../a11y/nativeAnnounce";
+import { practiceFeedbackMessage, questionTransitionMessage } from "../a11y/announceMessages";
 import type { AudioCoordinator } from "../audio/coordinator";
 import { adaptNarration } from "../audio/ssml";
 import {
@@ -117,6 +119,36 @@ export function PracticeRunnerScreen({
    *  diverge (review finding 3: narration fell back to asGradeId(null)
    *  when the journey param was absent, sessions to identity.gradeId). */
   const effectiveGradeRef = useRef<string | null>(null);
+
+  // #67: screen-reader announcements. Feedback appearance and question
+  // transitions render visually only — VoiceOver/TalkBack speak focus
+  // moves, not DOM changes, so a reader child would learn nothing
+  // happened after CHECK. Progressive enhancement: announceForAccessibility
+  // is a no-op without an active reader, and the message text parallels
+  // the visible FeedbackBar information-for-information (the spoken
+  // "Correct!" headline is deliberately more literal than the visual
+  // "Awesome!" — clarity over flair for non-visual contexts).
+  const announcedQuestionRef = useRef("");
+  useEffect(() => {
+    if (state.phase !== "question" || !state.sessionId) return;
+    const key = `${state.index}:${currentQuestion(state)?.questionId ?? ""}`;
+    if (key === announcedQuestionRef.current) return;
+    announcedQuestionRef.current = key;
+    announceForAccessibility(questionTransitionMessage(state.index, state.schedule.items.length));
+  });
+  useEffect(() => {
+    if (!state.checked) return;
+    announceForAccessibility(
+      practiceFeedbackMessage(
+        {
+          isCorrect: state.checked.isCorrect,
+          correctAnswer: state.checked.correctAnswer,
+          cognitiveTimeSec: state.checked.cognitiveTimeSec,
+        },
+        state.targetSpeedSec ?? 0,
+      ),
+    );
+  }, [state.checked, state.targetSpeedSec]);
 
   // ------------------------------------------------------------------
   // Mount: identity + pack read (offline-first; no network anywhere).
