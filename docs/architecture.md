@@ -30,7 +30,7 @@
 │                         Backend Services & CDN                             │
 │                                                                            │
 │  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  │
-│  │  Sync & Mastery API  │  │  PostgreSQL + Redis  │  │  OTA Asset CDN   │  │
+│  │  Sync & Mastery API  │  │  PostgreSQL           │  │  OTA Asset CDN   │  │
 │  │  (Auth, Profiles,    │  │  (Learner Telemetry, │  │  (Unit Audio,    │  │
 │  │   Parent Analytics)  │  │   Skill Heatmaps)    │  │   Vector Sprites)│  │
 │  └──────────────────────┘  └──────────────────────┘  └──────────────────┘  │
@@ -270,3 +270,13 @@ One email per eligible parent summarizing each linked child's completed week —
 - **Child Profiles & Device Sessions (roadmap D4):** children are profiles owned by a parent account — creation writes the student row, the `parent_children` binding, the devices row, and a student-scoped consent row in one transaction, so no new standalone student can appear. Legacy standalone students (migration 005's status flag) are claimed by exactly one parent — legacy-status-only eligibility, username + PIN proof-of-knowledge, an atomic row-mutex backed by a partial unique index (second claimant rejected) — or archived (removed from the login-screen listing, every session revoked, all student-scoped routes frozen). Child device tokens — the third bearer kind beside student and parent sessions — are minted by an authenticated parent per (child, device), stored hashed at rest, expire after 30 days, and are revoked parent-side with immediate effect (see `services/api/children.mjs` and migration 005).
 - **Data Minimization:** Child profiles store only a first-name nickname, grade level, and learning telemetry tied to the parent's authenticated account.
 - **Parental Data Rights (roadmap E11, issue #62):** parents can export everything held for a child as one JSON document (data portability; numbers identical to the portal by construction) and delete a child's data through the portal behind password re-authentication + hold-to-confirm, executed as one audited transaction. Consent evidence is retained for COPPA record-keeping with its child linkage severed — the opaque linkage survives only in the append-only `deletion_audit` ledger (see architecture sec 3.5 and migration 011).
+
+---
+
+## 5. Deployment & Operations (M6, issue #64)
+
+- **Topology:** `infra/` holds validate-only Terraform for AWS — dev/staging/prod provision from byte-identical environment roots over five shared modules (`network`, `postgres` RDS 16, `api_service` ECS Fargate + ALB + TLS, `static_site` S3 + CloudFront for the portal, `packs_store`). Environments differ only by `terraform.tfvars` (test-enforced). Full runbook, provider decision record, and the environment matrix: `docs/deployment.md`.
+- **Doctrine:** CI runs `terraform fmt` + `validate` only (pinned 1.5.7, no cloud credentials, no state); `plan`/`apply` are human steps under the standing manual-deploy preference. Secrets live in SSM Parameter Store under `/balashikshana/<env>/*` and are injected into tasks by ARN — never committed (scan- and gitignore-enforced).
+- **Migrations on deploy:** a one-off ECS task runs `npm run migrate` (node-pg-migrate) BEFORE the new version takes traffic, gated on exit code; boot-time idempotent migration in `db.mjs` remains the backstop. The post-deploy smoke (`scripts/post-deploy-smoke.mjs`) fails any deploy where health (6,140-question seed), curriculum, practice, the content-pack index, or the portal origin misbehaves.
+- **Single-instance decision (roadmap D2, revisited):** the API runs one task per environment by default. The retention sweep and weekly digest hold `pg_try_advisory_lock`, so scheduled work is already second-instance-safe; what is NOT is the per-process rate-limit buckets — Redis (or an equivalent shared store) re-enters the stack exactly when scaling out, not before. The unused compose Redis service was removed in #64 (nothing ever read `REDIS_URL`). Rationale and the multi-instance path: `docs/deployment.md` "Single instance vs multi-instance".
+- **Edge slot for the gateway (roadmap D10, issue #65):** `gateway.<env>.<zone>` is reserved via a placeholder record so Dwara can front the public API without a second migration of DNS or runbooks.

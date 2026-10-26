@@ -22,6 +22,18 @@ build/
 *.pem
 *.key
 
+# Terraform (issue #64): state, provider caches, and secret var files are
+# NEVER committed. *.auto.tfvars carries per-env overrides that may include
+# credentials — this ignore rule + the infra secret-scan test are the two
+# enforced layers (docs/deployment.md "Secrets").
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.auto.tfvars
+*.auto.tfvars.json
+crash.log
+
 # Logs & OS
 npm-debug.log*
 yarn-debug.log*
