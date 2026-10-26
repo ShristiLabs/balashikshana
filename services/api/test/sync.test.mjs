@@ -681,11 +681,11 @@ describe("deterministic convergence across batch splits (Risk-3 mitigation)", ()
     };
   }
 
-  function seededSessions(seed) {
+  function seededSessions(seed, nowMs = Date.now() - 48 * 3_600_000) {
     const rand = prng(seed);
     const sessions = [];
     let seq = 0;
-    let t = Date.now() - 48 * 3_600_000;
+    let t = nowMs;
     const sessionCount = 3 + Math.floor(rand() * 3); // 3-5 sessions
     for (let s = 0; s < sessionCount; s += 1) {
       const kind = rand() < 0.6 ? "TOPIC_PRACTICE" : "GATE";
@@ -791,8 +791,12 @@ describe("deterministic convergence across batch splits (Risk-3 mitigation)", ()
   });
 
   test("different seeds produce deterministic (reproducible) streams", async () => {
-    const a = seededSessions(21);
-    const b = seededSessions(21);
+    // Fixed clock base: the SEED must be the only variable. A live
+    // Date.now() base made this a same-millisecond lottery under CI load
+    // (surfaced by #64's added test files) — the flake, not the PRNG,
+    // differed between runs.
+    const a = seededSessions(21, 1_700_000_000_000);
+    const b = seededSessions(21, 1_700_000_000_000);
     assert.deepEqual(a, b, "same seed must produce the identical stream");
   });
 });
