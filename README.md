@@ -332,6 +332,16 @@ The M6 edge layer (roadmap D10): the in-house Dwara Rust API gateway fronts the 
 - **Verification:** `deploy/dwara/verify-edge.sh` scripts the issue ACs (edge health, key-but-no-session still 401 from the origin, synthetic burst -> 429 with Retry-After, admin rejected without a client cert); `scripts/post-deploy-smoke.mjs --edge-url ...` adds an optional edge path check. Full runbook: `docs/gateway.md`.
 
 
+### 26. Observability: First-Party Metrics, Alerting, Error Tracking (issue #66)
+The M6 telemetry layer (roadmap D5: first-party only — no third-party analytics/error SDK ever): a **zero-dependency metrics registry** (hand-rolled counters/gauges/histograms + Prometheus text exposition, ~1 file instead of the OTel SDK tree) with **bounded label cardinality by construction** — route classes ARE the Fastify route inventory (never raw URLs), enums for methods/outcomes, validator + hard-cap rejection counted on `metrics_observations_rejected_total` — served on a **separate internal listener** (`METRICS_PORT`, loopback by default, optional bearer token, SG-restricted in TF, never public/child-facing, never edge-routed).
+
+- **Metric set:** p95 latency per route class (`http_request_duration_seconds` histogram; `histogram_quantile` interpolation documented + matrix-tested), request/error rates (`http_requests_total`), gate pass rates (`gate_evaluate_total{outcome}` — the ENGINE verdict, not HTTP status), sync success (`sync_requests_total{endpoint,outcome}` — 4xx auth/validation failures count as errors by design), db pool gauges, error-capture outcomes.
+- **Alerting as code:** `deploy/observability/alert-rules.yml` (six rules, threshold rationale as annotations) + `alert-tests.yml` (promtool unit tests — the staging synthetic trigger; `promtool test rules`); CI validates structure, metric-name cross-consistency vs the registry, and fire/quiet thresholds.
+- **Error tracking (first-party, server-side only):** migration `013_error_events` in the existing Postgres — redacted-at-capture message/stack, fingerprint grouping, 10-per-minute-per-fingerprint flood cap, 30-day retention on the existing sweep; ADR: Postgres over GlitchTip (zero new services; GlitchTip documented as the upgrade path).
+- **PII scrubbing at the logging seam (D5, build-failing test):** query strings never logged, unmatched paths never logged verbatim, client IPs truncated (never full — exact shapes pinned in the runbook redaction policy), emails/tokens/phones scrubbed from all free text, request bodies never captured; the documented opaque-UUID exemption keeps `studentId`/`parentId`/`requestId` as correlation keys. `test/observability-pii.test.mjs` plants child name/email/phone/tokens and asserts zero leakage into logs, exposition, and error rows.
+- **Correlation:** inbound `X-Request-Id` honored when strictly UUID (else fresh), echoed on every reply header AND in the problem+json envelope (`requestId` extension member — additive OpenAPI change per D11); survives client -> edge -> origin.
+- **Dashboards:** `deploy/observability/dashboards/api-overview.json` (Grafana OSS schema, committed, panel exprs cross-checked against exported metrics in CI). Full runbook — SLOs, alert first-response, operator Prometheus/Grafana/Alertmanager wiring, redaction policy, ADRs: `docs/observability.md`.
+
 ---
 
 ## Repository Structure & Documentation
@@ -372,6 +382,7 @@ balashikshana/
 │   ├── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
 │   ├── database-migrations.md                # PostgreSQL migration ledger & runner guide (served datastore)
 │   ├── deployment.md                         # Deploy runbook: Terraform environments, secrets, migrations-on-deploy, smoke gate, rollback (issue #64)
+│   ├── observability.md                      # Observability runbook: metrics, SLOs, alerting, error tracking, redaction policy (issue #66)
 │   ├── gateway.md                            # Dwara edge runbook: consumers + credentials ADR, rate-limit layering, TLS/mTLS ops, staged rollout (issue #65)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)

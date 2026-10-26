@@ -10,7 +10,9 @@
 #
 # Error contract: every error response is RFC 9457 application/problem+json
 # (type, title, status, detail, instance; validation failures add `errors`
-# with per-instance AJV details; 429 adds a Retry-After header).
+# with per-instance AJV details; 429 adds a Retry-After header). Since #66
+# every problem envelope also carries the `requestId` extension member
+# (correlation id; see components.schemas.Problem).
 
 openapi: 3.1.0
 info:
@@ -2159,6 +2161,14 @@ components:
             RFC 9457 extension member present on consent problems
             (consent-required, policy-version-mismatch): the active consent
             policy version the parent must accept.
+        requestId:
+          type: string
+          description: |
+            RFC 9457 extension member (issue #66): the request correlation
+            id (also on the X-Request-Id reply header). A client-supplied
+            X-Request-Id header that is a well-formed UUID is honored
+            end-to-end (client -> edge -> origin); anything else gets a
+            server-generated UUID.
 
     HealthResponse:
       type: object

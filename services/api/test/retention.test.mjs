@@ -153,7 +153,13 @@ describe("runRetentionSweep", () => {
 
     // AC: running it twice yields the identical end state (zero second pass).
     const counts2 = await runRetentionSweep(facade(pg), { now });
-    assert.deepEqual(counts2, { studentSessions: 0, parentSessions: 0, childDeviceSessions: 0, parentTokens: 0 });
+    assert.deepEqual(counts2, {
+      studentSessions: 0,
+      parentSessions: 0,
+      childDeviceSessions: 0,
+      parentTokens: 0,
+      errorEvents: 0
+    });
     for (const [table, col, val] of [
       ["student_sessions", "token", "ss-alive"],
       ["parent_sessions", "token_hash", "ps-alive"],
@@ -194,7 +200,15 @@ describe("runRetentionSweep", () => {
 
   test("pristine tables sweep to all zeros without error", async () => {
     const counts = await runRetentionSweep(facade(pg), { now: new Date() });
-    assert.deepEqual(counts, { studentSessions: 0, parentSessions: 0, childDeviceSessions: 0, parentTokens: 0 });
+    // #66: error_events (the 30d first-party error window) joins the
+    // sweep's purged tables.
+    assert.deepEqual(counts, {
+      studentSessions: 0,
+      parentSessions: 0,
+      childDeviceSessions: 0,
+      parentTokens: 0,
+      errorEvents: 0
+    });
   });
 
   test("startRetentionSweep with RETENTION_SWEEP_INTERVAL_MS=0 disables scheduling (no boot pass, returns null)", async () => {

@@ -160,7 +160,11 @@ describe("login", () => {
     assert.equal(res.status, 401);
     const wrong = await login({ username: "nopinfield" }, "9999");
     assert.equal(wrong.status, 401);
-    assert.deepEqual(res.json, wrong.json, "absent-PIN and wrong-PIN must be indistinguishable");
+    // #66: requestId is per-request correlation (unique by design); the
+    // anti-enumeration contract is over the enumerable problem fields.
+    const { requestId: _r1, ...absentPin } = res.json;
+    const { requestId: _r2, ...wrongPin } = wrong.json;
+    assert.deepEqual(absentPin, wrongPin, "absent-PIN and wrong-PIN must be indistinguishable");
   });
 
   test("unknown user and wrong PIN return identical 401 bodies (no enumeration)", async () => {
@@ -169,7 +173,9 @@ describe("login", () => {
     const wrong = await login({ username: "enumcheck" }, "9999");
     assert.equal(unknown.status, 401);
     assert.equal(wrong.status, 401);
-    assert.deepEqual(unknown.json, wrong.json);
+    const { requestId: _r3, ...unknownBody } = unknown.json;
+    const { requestId: _r4, ...wrongBody } = wrong.json;
+    assert.deepEqual(unknownBody, wrongBody);
   });
 
   test("correct PIN returns 200 with token for that student", async () => {

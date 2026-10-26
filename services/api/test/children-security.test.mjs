@@ -373,8 +373,11 @@ describe("claim anti-hijack (the security core)", () => {
       assert.equal(res.status, 403);
       assert.equal(res.json.type, `${P}/claim-rejected`);
     }
-    assert.equal(JSON.stringify(unknown.json), JSON.stringify(wrongPin.json));
-    assert.equal(JSON.stringify(unknown.json), JSON.stringify(archivedAttempt.json));
+    // #66: requestId is the per-request correlation id (unique by
+    // design); uniformity is over the enumerable problem fields.
+    const strip = (b) => { const c = { ...b }; delete c.requestId; return JSON.stringify(c); };
+    assert.equal(strip(unknown.json), strip(wrongPin.json));
+    assert.equal(strip(unknown.json), strip(archivedAttempt.json));
   });
 
   test("exactly-once: a second parent claiming the same student is rejected 409 with no binding written", async () => {

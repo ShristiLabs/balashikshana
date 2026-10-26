@@ -512,12 +512,13 @@ describe("migration 002 reversibility", () => {
   // ledger, 007 (issue #55) layers the gamification ledger, and 008
   // (issue #56) layers the hearts session outcomes, 009 (issue #60) layers
   // the placement records, 010 (issue #61) layers the portal child
-  // settings, 011 (issue #62) layers the deletion audit ledger, and 012
+  // settings, 011 (issue #62) layers the deletion audit ledger, 012
   // (issue #63) layers the weekly digest sent-ledger + parent opt-out
-  // column, so the rollback removes all eleven post-001 migrations (in
+  // column, and 013 (issue #66) layers the first-party error_events
+  // store, so the rollback removes all twelve post-001 migrations (in
   // order) and the up restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..012 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 11 });
+  test("down removes exactly the 002..013 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 12 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -591,9 +592,10 @@ describe("migration 002 reversibility", () => {
         "009_placement_records",
         "010_portal_child_settings",
         "011_deletion_audit",
-        "012_weekly_digest"
+        "012_weekly_digest",
+        "013_error_events"
       ],
-      "up must re-apply 002 through 012"
+      "up must re-apply 002 through 013"
     );
 
     const back = (

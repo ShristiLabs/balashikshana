@@ -1,0 +1,174 @@
+# promtool unit tests for alert-rules.yml (issue #66).
+#
+# This is the SYNTHETIC TRIGGER the issue's acceptance criterion asks
+# for, in the OSS-standard format: `promtool test rules alert-tests.yml`
+# (run from deploy/observability/) evaluates every rule's full PromQL
+# semantics against synthetic series and asserts the fired/not-fired
+# outcomes. CI cross-checks structurally (vitest alert-rules test); the
+# promtool run is the operator-side staging exercise documented in
+# docs/observability.md. Labels are asserted; annotations (long
+# rationale text) are structurally validated by the vitest suite.
+#
+# Series conventions: interval 1m; counter values are cumulative and
+# increase by N per minute (rate over [5m] = N/min).
+
+rule_files:
+  - alert-rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # --- ApiP95LatencyHigh: fires when the p95 tail lands past 0.8s -------
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{le="0.8",route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+0x19"
+      - series: 'http_request_duration_seconds_bucket{le="1.5",route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+10x19"
+      - series: 'http_request_duration_seconds_bucket{le="+Inf",route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+10x19"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ApiP95LatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              route_class: /api/health
+      - eval_time: 16m
+        alertname: ApiP95LatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              route_class: /api/health
+
+  # --- ApiP95LatencyHigh: quiet when everything lands in the 0.4s bucket
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{le="0.4",route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+10x19"
+      - series: 'http_request_duration_seconds_bucket{le="+Inf",route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+10x19"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ApiP95LatencyHigh
+        exp_alerts: []
+
+  # --- ApiErrorRateHigh: fires at 16.7% 5xx -----------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+10x19"
+      - series: 'http_requests_total{route_class="/api/health",method="GET",status_class="5xx"}'
+        values: "0+2x19"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ApiErrorRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+
+  # --- ApiErrorRateHigh: quiet with zero 5xx ----------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route_class="/api/health",method="GET",status_class="2xx"}'
+        values: "0+10x19"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ApiErrorRateHigh
+        exp_alerts: []
+
+  # --- SyncFailureSpike: fires at 9% error outcomes ----------------------
+  - interval: 1m
+    input_series:
+      - series: 'sync_requests_total{endpoint="attempts",outcome="success"}'
+        values: "0+100x19"
+      - series: 'sync_requests_total{endpoint="attempts",outcome="error"}'
+        values: "0+10x19"
+    alert_rule_test:
+      - eval_time: 21m
+        alertname: SyncFailureSpike
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+
+  # --- SyncFailureSpike: quiet at 1.9% -----------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'sync_requests_total{endpoint="attempts",outcome="success"}'
+        values: "0+100x19"
+      - series: 'sync_requests_total{endpoint="attempts",outcome="error"}'
+        values: "0+2x19"
+    alert_rule_test:
+      - eval_time: 21m
+        alertname: SyncFailureSpike
+        exp_alerts: []
+
+  # --- GateEvaluationAnomaly: fires on 0% pass at volume -----------------
+  - interval: 1m
+    input_series:
+      - series: 'gate_evaluate_total{outcome="pass"}'
+        values: "0+0x19"
+      - series: 'gate_evaluate_total{outcome="fail"}'
+        values: "0+20x19"
+    alert_rule_test:
+      - eval_time: 41m
+        alertname: GateEvaluationAnomaly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+
+  # --- GateEvaluationAnomaly: volume guard keeps it quiet when idle ------
+  - interval: 1m
+    input_series:
+      - series: 'gate_evaluate_total{outcome="pass"}'
+        values: "0+0x19"
+      - series: 'gate_evaluate_total{outcome="fail"}'
+        values: "0+0.5x19"
+    alert_rule_test:
+      - eval_time: 41m
+        alertname: GateEvaluationAnomaly
+        exp_alerts: []
+
+  # --- ErrorEventFlood: fires at 1 captured/s ----------------------------
+  - interval: 1m
+    input_series:
+      - series: 'error_events_total{outcome="captured"}'
+        values: "0+60x19"
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ErrorEventFlood
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+
+  # --- ErrorEventFlood: quiet at 0.17/s -----------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'error_events_total{outcome="captured"}'
+        values: "0+10x19"
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ErrorEventFlood
+        exp_alerts: []
+
+  # --- DbPoolSaturation: fires with sustained waiting --------------------
+  - interval: 1m
+    input_series:
+      - series: "db_pool_waiting"
+        values: "6+0x19"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DbPoolSaturation
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+
+  # --- DbPoolSaturation: quiet at 2 waiting -------------------------------
+  - interval: 1m
+    input_series:
+      - series: "db_pool_waiting"
+        values: "2+0x19"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DbPoolSaturation
+        exp_alerts: []

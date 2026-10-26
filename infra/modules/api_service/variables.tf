@@ -258,6 +258,33 @@ variable "health_check_grace_period_seconds" {
   default     = 60
 }
 
+# --- First-party observability (issue #66, D5) -------------------------------
+# The metrics listener is a SEPARATE internal port on the same container
+# (Prometheus text exposition; never the public app port, never routed at
+# the Dwara edge). Scrape ingress is opt-in: with an empty
+# metrics_scrape_cidrs list no ingress rule exists at all, and the SG is
+# the enforcement point — the listener bind is 0.0.0.0 inside the task
+# only because Fargate networking requires it; nothing outside the
+# listed CIDRs can reach the port.
+
+variable "metrics_port" {
+  description = "METRICS_PORT for the internal Prometheus exposition listener (#66). 0 disables the listener entirely (no port mapping, no env)."
+  type        = number
+  default     = 9101
+}
+
+variable "metrics_host" {
+  description = "METRICS_HOST bind inside the container (needs 0.0.0.0 for Fargate task networking; the task SG restricts who can connect)"
+  type        = string
+  default     = "0.0.0.0"
+}
+
+variable "metrics_scrape_cidrs" {
+  description = "CIDRs allowed to scrape the internal metrics port (self-hosted Prometheus hosts). Empty default = no ingress rule = unreachable; NEVER add 0.0.0.0/0 (the exposition is internal-only by D5)."
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Tags applied to all resources"
   type        = map(string)

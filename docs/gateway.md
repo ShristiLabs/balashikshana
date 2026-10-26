@@ -207,9 +207,13 @@ validates the config against the same JSON Schema the gateway's own
 - `auth_required` is stage-1 false (see the ADR above).
 - Per-IP edge limits are household-sized; re-size for school NATs at the
   B2B seam (#70).
-- Analytics/observability blocks are OFF at the edge; #66 (observability)
-  turns on first-party edge metrics — Dwara's analytics surface feeds it
-  (no child PII at the edge, D5).
+- Analytics/observability blocks are OFF at the edge (operator toggle).
+  #66 shipped the ORIGIN's first-party telemetry (internal metrics
+  listener, docs/observability.md); enabling the edge analytics block
+  later adds consumer-class/429 edge metrics alongside it — no child PII
+  at the edge either way (D5). The edge forwards request headers by
+  default, so origin correlation (`X-Request-Id`) passes through
+  untouched (the `X-Consumer-*` strips never touch it).
 
 ## 9. ADR — credential-type choices per client class
 

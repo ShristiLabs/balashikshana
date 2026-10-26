@@ -1179,6 +1179,29 @@ export const syncPlugin = fp(async (app, options) => {
   const db = options.db;
   const logger = options.logger ?? app.log;
   const packsDir = path.resolve(String(options.packsDir));
+  // #66 sync success-rate metric, declared by server.mjs (single
+  // registry owner) and passed in; optional so unit harnesses that
+  // register the plugin without metrics keep working.
+  const syncRequestsTotal = options.metrics?.syncRequestsTotal ?? null;
+
+  // Scoped onResponse (issue #66): plugin-scoped hooks apply only to
+  // this plugin's routes, so the sync metric derives from the FINAL
+  // HTTP outcome of each sync endpoint — auth failures (401/403),
+  // validation rejects (400), daily-cap refusals (429) and real 5xx all
+  // count as errors, only 2xx counts as success. Labels are 2-value
+  // enums; cardinality is fixed.
+  if (syncRequestsTotal) {
+    app.addHook("onResponse", (req, reply, done) => {
+      const pattern = req.routeOptions?.url || "";
+      if (pattern === "/api/sync/attempts" || pattern === "/api/sync/progress") {
+        syncRequestsTotal.inc({
+          endpoint: pattern === "/api/sync/attempts" ? "attempts" : "progress",
+          outcome: reply.statusCode >= 200 && reply.statusCode < 300 ? "success" : "error"
+        });
+      }
+      done();
+    });
+  }
 
   async function requireChildDeviceSession(req, reply) {
     const auth = await resolveBearerAuth(db, req.headers.authorization);
