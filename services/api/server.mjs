@@ -488,11 +488,26 @@ const topicQuerySchema = {
 
 // --- Fastify app ---------------------------------------------------------------
 
+// TRUST_PROXY_CIDRS (comma-separated CIDRs, default empty = OFF): when the
+// origin sits behind the Dwara edge (#65, D10) — or any L7 proxy whose
+// hop lies inside the listed ranges — X-Forwarded-For is honored so the
+// per-IP rate-limit buckets key on the TRUE client IP instead of the
+// proxy peer. Peer-checked semantics: XFF is only trusted when the
+// socket peer itself is inside the listed range, so a client hitting the
+// origin directly cannot spoof XFF (its peer address is its own). Empty
+// (local dev, CI, direct-ALB deployments without the edge) keeps the
+// exact pre-#65 behavior. Auth is untouched either way (D10).
+const TRUST_PROXY_CIDRS = (process.env.TRUST_PROXY_CIDRS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const app = Fastify({
   logger: false,
   disableRequestLogging: true,
   genReqId: () => crypto.randomUUID(),
   bodyLimit: BODY_LIMIT_BYTES,
+  trustProxy: TRUST_PROXY_CIDRS.length > 0 ? TRUST_PROXY_CIDRS : false,
   // Keep the schemas closed: unknown body fields are a 400 validation
   // error (the additionalProperties: false declarations), not silently
   // stripped by Ajv's default removeAdditional behavior.

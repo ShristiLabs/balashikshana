@@ -13,7 +13,14 @@ allowed_origins     = "https://portal.staging.balashikshana.example"
 
 api_hostname     = "api"
 portal_hostname  = "portal"
-create_edge_slot = true # reserve gateway.staging.<zone> for Dwara (#65)
+create_edge_slot = true # placeholder only while the gateway is disabled; the gateway module owns the record when enabled (#65)
+
+# Dwara edge gateway (#65, D10) — staging is the end-to-end verification
+# environment per the issue AC (deploy/dwara/verify-edge.sh). Secrets are
+# SSM SecureStrings under /balashikshana/staging (docs/gateway.md).
+enable_gateway              = true
+gateway_image_uri           = "000000000000.dkr.ecr.us-east-1.amazonaws.com/balashikshana-staging/gateway:latest"
+gateway_admin_ingress_cidrs = ["10.0.0.0/8"] # replace with the real ops VPN/bastion ranges (never 0.0.0.0/0)
 
 # Staging mirrors prod mechanics at minimum size, but keeps final snapshots
 # (staging data is still COPPA-relevant) and no demo seeding.

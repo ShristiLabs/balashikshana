@@ -16,6 +16,10 @@ api_hostname     = "api"
 portal_hostname  = "portal"
 create_edge_slot = false
 
+# No cloud gateway in dev: local fronting runs the gateway directly
+# against startup.sh via deploy/dwara/envs/dev.yaml (docs/gateway.md).
+enable_gateway = false
+
 # Cost-lean dev: smallest instances, no standby, snapshots skippable,
 # demo students seeded, tasks replaceable (min healthy 0).
 db_instance_class        = "db.t4g.micro"

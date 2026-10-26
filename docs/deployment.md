@@ -26,11 +26,15 @@ Terraform root over the same shared modules:
                         │
         ┌───────────────┼───────────────────┐
         │               │                   │
-   api.<env>.<zone>  portal.<env>.<zone>  gateway.<env>.<zone>   (edge slot, #65)
+   api.<env>.<zone>  portal.<env>.<zone>  gateway.<env>.<zone>   (Dwara edge, #65)
         │               │                   │
-     ALB (TLS)     CloudFront ── S3 portal dist (private, OAC)
-        │  health /api/health
-     ECS Fargate service — docker/Dockerfile.api image (1 task, D2)
+     ALB (TLS)     CloudFront ── S3     NLB (TCP passthrough, 443)
+        │  health /api/health       portal dist (private, OAC)
+     ECS Fargate service —                    │ TLS terminates HERE
+     docker/Dockerfile.api image (1 task, D2) │  consumers + edge rate limits
+        ▲                                    ECS Fargate gateway — deploy/dwara
+        │ HTTPS (edge -> origin)             │  admin :2019 mTLS, ops-CIDR SG only
+        └────────────────────────────────────┘
         │
    RDS PostgreSQL 16 (private subnets, :5432 from the task SG only)
 
@@ -38,9 +42,14 @@ Terraform root over the same shared modules:
    SSM Parameter Store /balashikshana/<env>/* (secrets)
 ```
 
-Dwara (#65, roadmap D10) will occupy `gateway.<env>.<zone>` — the name is
-reserved via `create_edge_slot` (a placeholder CNAME to the ALB until the
-gateway exists). No gateway infrastructure is invented by this issue.
+`gateway.<env>.<zone>` is the Dwara edge (roadmap D10, issue #65): when
+`enable_gateway = true` the `infra/modules/gateway` module owns the DNS
+record (NLB TCP passthrough -> gateway terminating TLS -> origin ALB over
+HTTPS) and `create_edge_slot`'s placeholder CNAME is suppressed
+automatically. The origin KEEPS its own auth; the gateway adds consumer
+keys, quotas, and TLS at the edge. Gateway runbook (credentials,
+rate-limit layering, mTLS admin, verification):
+**`docs/gateway.md`**.
 
 ### Why AWS (decision record)
 
@@ -65,6 +74,8 @@ infra/
     postgres/      RDS PostgreSQL 16, encrypted, private-only, SG-scoped
     api_service/   ECR, ECS Fargate service, task def (env + SSM secrets),
                    ALB + TLS listeners, DNS records, edge slot, autoscaling (off)
+    gateway/       Dwara edge (issue #65): NLB TCP passthrough, gateway ECS
+                   service, SSM secret injection, mTLS admin SG (ops CIDRs only)
     static_site/   S3 + CloudFront (OAC) for the parent-portal dist
     packs_store/   S3 bucket for compiled content packs (versioned, lifecycle)
   environments/

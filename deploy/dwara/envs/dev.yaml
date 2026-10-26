@@ -1,0 +1,312 @@
+# balashikshana edge gateway — DEV environment (issue #65, roadmap D10).
+# Local fronting target: pairs with startup.sh (Fastify origin on
+# 127.0.0.1:4000) and gen-dev-certs.sh material in deploy/dwara/certs/.
+#
+# D10 DOCTRINE (binding): the Fastify origin KEEPS its own auth (scrypt
+# credentials, the M2 dual-token doctrine — parent session vs child device
+# token, IDOR-safe session middleware, CORS allowlist). This gateway ADDS
+# edge concerns on top: per-class consumer credentials, coarse volumetric
+# rate limits, TLS termination, and an mTLS-only admin surface. Nothing
+# here replaces or weakens an origin check.
+#
+# ENV PARITY: dev/staging/prod differ ONLY in the origin upstream triple
+# (address / port / protocol) — enforced by services/api/test/dwara-config.test.mjs.
+# staging and prod are byte-identical (the origin hostname placeholder follows
+# the infra/environments/*/terraform.tfvars convention: replace with the
+# environment's real Route53 zone at deploy time).
+#
+# AUTHORIZATION CHAIN (frozen precedence, documented per the issue AC):
+#   consumer > route > service > listener > global  (deny-anywhere wins).
+# This config places: consumer quotas at the CONSUMER link; per-class and
+# per-IP rate policies at the ROUTE link; the all-traffic per-IP floor at
+# the LISTENER link. Service and global links are unused (no need yet).
+#
+# CREDENTIAL MODEL (ADR — see docs/gateway.md for the full record):
+#   - parent-app / child-device: API-key CLASS keys embedded in the mobile
+#     app. They classify traffic for budgets, they are NOT secrets and NOT
+#     identity — the origin's session/device tokens remain the auth.
+#   - portal: API-key CLASS key embedded in the SPA build. A browser cannot
+#     hold a secret; the key is public BY DESIGN (same classing purpose).
+#   - HMAC request signing is the documented upgrade path for child-device
+#     once apps/mobile can ship a signer (#71 touches mobile next).
+#   - Admin access is NOT a data-plane consumer: the admin API (below) has
+#     its own mTLS-only listener — the client certificate IS the auth.
+#
+# ROUTES ARE auth_required: false TODAY (staged rollout): the deployed
+# clients (mobile builds in the field, portal SPA) do not yet send edge
+# keys. Flipping /api/* routes to auth_required: true is the stage-2
+# change gated on client releases that present the class keys; the edge
+# still rate-limits anonymous traffic per-IP (selector `credential`
+# falls back to `ip` until a key identifies the consumer).
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# Listeners — one public TLS-terminating listener. The NLB (Terraform
+# infra/modules/gateway) passes TCP through untouched, so TLS terminates
+# HERE at Dwara (issue AC) and the gateway sees the true client IP.
+# ---------------------------------------------------------------------------
+
+listeners:
+  - name: public-https
+    address: 0.0.0.0
+    port: 8443
+    protocol: https
+    tls:
+      mode: terminate
+      cert_file: /etc/dwara/certs/server.crt
+      key_file: /etc/dwara/certs/server.key
+    # LISTENER link of the chain: coarse per-IP floor for EVERY request the
+    # listener accepts, including paths no route matches (pre-404).
+    policies:
+      - edge-default
+
+# ---------------------------------------------------------------------------
+# Routes — all proxy to the Fastify origin AS-IS (no path rewrite: the
+# origin serves the same /api/* paths it serves today). Regex routes beat
+# the /api/ prefix catch-all deterministically (exact > regex > prefix is
+# fixed regardless of declaration order).
+#
+# transforms.request.headers.remove strips the gateway-injected consumer
+# identity headers toward the origin (D10 hardening): the origin must never
+# see, let alone act on, edge identity — its own session/device-token auth
+# is the only identity it consults.
+# ---------------------------------------------------------------------------
+
+routes:
+  # Anonymous liveness probe: cheap, public, scrapeable — capped tight.
+  - name: api-health
+    service: origin-api
+    match:
+      path:
+        type: regex
+        value: "^/api/health$"
+    action:
+      type: proxy
+    auth_required: false
+    policies: [edge-health]
+    transforms:
+      request:
+        headers:
+          remove: [X-Consumer-Name, X-Consumer-Type]
+
+  # Credential-attack surface: login / signup / verify / refresh / password
+  # reset. The origin enforces tight semantic per-route buckets (login
+  # 10/min/IP, signup 5/min/IP, reset 5/min/IP — services/api server.mjs).
+  # The edge adds the per-TRUE-client-IP minute bound (sized ABOVE the
+  # origin's tightest semantic limit so legit users always trip the origin
+  # first, never the edge) plus an hour-scale bound that catches slow-drip
+  # credential stuffing per-minute limits cannot see.
+  - name: api-auth-sensitive
+    service: origin-api
+    match:
+      path:
+        type: regex
+        value: "^/api/(auth/login|parents/(login|signup|verify-email|refresh|password-reset/(request|confirm)))$"
+    action:
+      type: proxy
+    auth_required: false
+    policies: [edge-auth-sensitive]
+    transforms:
+      request:
+        headers:
+          remove: [X-Consumer-Name, X-Consumer-Type]
+
+  # Child-device sync: bursty, device-driven. The origin keeps the real
+  # per-DEVICE cap (RATE_LIMIT_SYNC_PER_TOKEN_MIN, default 30/min per
+  # device token). The edge bounds the child-device CLASS (per-credential)
+  # and each client IP (per-IP; households today — re-size for school NAT
+  # aggregation when B2B licensing lands, roadmap #70).
+  - name: api-sync
+    service: origin-api
+    match:
+      path:
+        type: regex
+        value: "^/api/sync/(attempts|progress)$"
+    action:
+      type: proxy
+    auth_required: false
+    policies: [edge-sync]
+    transforms:
+      request:
+        headers:
+          remove: [X-Consumer-Name, X-Consumer-Type]
+
+  # Everything else under /api/*: the general per-class budget.
+  - name: api-general
+    service: origin-api
+    match:
+      path:
+        type: prefix
+        value: /api/
+    action:
+      type: proxy
+    auth_required: false
+    policies: [edge-general]
+    transforms:
+      request:
+        headers:
+          remove: [X-Consumer-Name, X-Consumer-Type]
+
+# ---------------------------------------------------------------------------
+# Service + upstream — the Fastify origin behind its ALB, reached over TLS
+# (edge -> origin traffic never crosses the network in plaintext).
+# ---------------------------------------------------------------------------
+
+services:
+  - name: origin-api
+    upstream: origin-alb
+
+upstreams:
+  - name: origin-alb
+    load_balancer: round_robin
+    protocol: http1
+    endpoints:
+      # PER-ENV VALUE: local fronting against startup.sh (plain HTTP on
+      # loopback only — dev never crosses the network in plaintext).
+      - address: 127.0.0.1
+        port: 4000
+
+# ---------------------------------------------------------------------------
+# Consumers — the three client audiences (issue AC), one credential each,
+# distinct keys, distinct daily quotas. Credential VALUES are environment
+# references resolved at config-compile time (Dwara DW-045): the real keys
+# live in SSM Parameter Store and are injected as task env by Terraform —
+# no key material in this repo (enforced by the dwara-config test suite).
+# Quotas need DWARA_STATE_DB (set in the Terraform task definition).
+# ---------------------------------------------------------------------------
+
+consumers:
+  # Parent flows in the mobile app (login, children management, consent,
+  # portal-adjacent parent API calls).
+  - name: parent-app
+    credentials:
+      - type: api_key
+        key: ${BALASHIKSHANA_EDGE_KEY_PARENT}
+    quotas:
+      daily_requests: 200000
+      monthly_requests: 5000000
+
+  # Child-device sync traffic (attempts, progress) from the app's child mode.
+  - name: child-device
+    credentials:
+      - type: api_key
+        key: ${BALASHIKSHANA_EDGE_KEY_CHILD_DEVICE}
+    quotas:
+      daily_requests: 500000
+      monthly_requests: 10000000
+
+  # The parent-portal SPA (apps/parent-portal). Browser-served: the key is
+  # embedded in the static build and is PUBLIC BY DESIGN — it classifies
+  # traffic for budgeting, it cannot and does not authenticate anyone.
+  - name: portal
+    credentials:
+      - type: api_key
+        key: ${BALASHIKSHANA_EDGE_KEY_PORTAL}
+    quotas:
+      daily_requests: 200000
+      monthly_requests: 5000000
+
+# ---------------------------------------------------------------------------
+# Policies — the rate-limit budget table. All rules are stacked GCRA
+# (a request must satisfy EVERY window of EVERY applicable rule). Sizes
+# are documented against the origin's semantic limits in docs/gateway.md:
+# the edge is the OUTER volumetric cap; the origin keeps the tighter
+# per-user/per-device SEMANTIC caps. `credential` keys by the resolved
+# consumer (per class here — one key per audience) and falls back to the
+# client IP until a key is presented.
+# ---------------------------------------------------------------------------
+
+policies:
+  # Listener floor: every request on the public listener, routed or not.
+  # 600/min/IP and 10k/hour/IP sit far above the origin's general 120/min/IP
+  # semantic limit so the edge never preempts a legitimate power user; it
+  # exists to shed volumetric floods before they cost TLS and proxy work.
+  - name: edge-default
+    rate_limits:
+      - name: floor-per-ip
+        selector: [ip]
+        requests_per:
+          minute: 600
+          hour: 10000
+        burst: 200
+
+  # Health probe: pollers need a few per minute; scrapers get nothing more.
+  - name: edge-health
+    rate_limits:
+      - name: health-per-ip
+        selector: [ip]
+        requests_per:
+          minute: 30
+          hour: 300
+        burst: 10
+
+  # Credential-attack surface (see route comment). per-credential rule
+  # applies once a class key is presented; the per-IP rule governs the
+  # anonymous and pre-key reality.
+  - name: edge-auth-sensitive
+    rate_limits:
+      - name: auth-per-ip
+        selector: [ip]
+        requests_per:
+          minute: 30
+          hour: 300
+        burst: 15
+      - name: auth-per-credential
+        selector: [credential]
+        requests_per:
+          minute: 60
+          hour: 600
+
+  # Sync class budget (see route comment).
+  - name: edge-sync
+    rate_limits:
+      - name: sync-per-class
+        selector: [credential]
+        requests_per:
+          minute: 600
+          hour: 50000
+        burst: 300
+      - name: sync-per-ip
+        selector: [ip]
+        requests_per:
+          minute: 120
+          hour: 2000
+        burst: 60
+
+  # General /api/* traffic per class.
+  - name: edge-general
+    rate_limits:
+      - name: general-per-class
+        selector: [credential]
+        requests_per:
+          minute: 1200
+          hour: 20000
+        burst: 300
+
+# ---------------------------------------------------------------------------
+# Security headers baseline: the edge is the source of truth for transport
+# hardening on every response it emits (including its own 401/429
+# short-circuits). HSTS one year + includeSubDomains, nosniff. The origin's
+# helmet layer stays as defense in depth for direct-origin traffic.
+# ---------------------------------------------------------------------------
+
+default_security_headers:
+  hsts_max_age_secs: 31536000
+  hsts_include_subdomains: true
+  nosniff: true
+
+# ---------------------------------------------------------------------------
+# Admin API — mTLS-ONLY management surface (issue AC "Admin API reachable
+# only over mTLS"). Bound on its own port; the client certificate chained
+# to client-ca.crt IS the authentication. The Terraform security group
+# exposes this port to internal ops CIDRs only — never the public
+# listener, never 0.0.0.0/0 (structurally asserted by the test suite).
+# ---------------------------------------------------------------------------
+
+admin:
+  bind: 0.0.0.0:2019
+  tls:
+    cert_file: /etc/dwara/certs/server.crt
+    key_file: /etc/dwara/certs/server.key
+    client_ca_file: /etc/dwara/certs/client-ca.crt

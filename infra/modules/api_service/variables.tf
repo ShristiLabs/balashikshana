@@ -133,6 +133,12 @@ variable "rate_limits" {
   }
 }
 
+variable "trust_proxy_cidrs" {
+  description = "TRUST_PROXY_CIDRS for the origin (#65): comma-separated CIDRs whose X-Forwarded-For the per-IP buckets honor (peer-checked; empty = off, pre-#65 behavior). Set to the VPC CIDR when the Dwara edge fronts the API."
+  type        = string
+  default     = ""
+}
+
 variable "content_packs_dir" {
   description = "BALASHIKSHANA_CONTENT_PACKS_DIR inside the container (image layout; packs sync strategy in docs/deployment.md)"
   type        = string

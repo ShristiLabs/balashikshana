@@ -3,6 +3,11 @@ output "vpc_id" {
   value       = aws_vpc.this.id
 }
 
+output "vpc_cidr_block" {
+  description = "VPC CIDR block (origin TRUST_PROXY_CIDRS when the edge fronts it, #65)"
+  value       = aws_vpc.this.cidr_block
+}
+
 output "public_subnet_ids" {
   description = "Public subnet IDs (ALB placement)"
   value       = aws_subnet.public[*].id

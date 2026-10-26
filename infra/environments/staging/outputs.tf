@@ -51,3 +51,13 @@ output "database_endpoint" {
   description = "RDS endpoint (host:port)"
   value       = module.postgres.endpoint
 }
+
+output "gateway_edge_url" {
+  description = "Dwara edge base URL clients hit when the gateway is enabled (empty otherwise)"
+  value       = var.enable_gateway ? module.gateway[0].edge_url : ""
+}
+
+output "gateway_ecr_repository_url" {
+  description = "ECR repository for the gateway image (empty when the gateway is disabled)"
+  value       = var.enable_gateway ? module.gateway[0].ecr_repository_url : ""
+}

@@ -1,8 +1,9 @@
-# infra/ — Terraform IaC (issue #64)
+# infra/ — Terraform IaC (issues #64-#65)
 
 AWS, validate-only in CI (`fmt` + `init -backend=false` + `validate`,
 pinned Terraform 1.5.7). `plan`/`apply` are human steps — the runbook and
-all decisions live in **docs/deployment.md** (read that first).
+all decisions live in **docs/deployment.md** (read that first); the
+Dwara edge gateway runbook is **docs/gateway.md**.
 
 ```
 modules/
@@ -11,6 +12,10 @@ modules/
   api_service/   ECR + ECS Fargate service (docker/Dockerfile.api), ALB + TLS,
                  SSM-injected secrets, DNS aliases, Dwara edge slot (#65),
                  autoscaling OFF by default (single-instance doctrine, D2)
+  gateway/       Dwara edge (#65, D10): ECR + ECS Fargate gateway service,
+                 NLB TCP passthrough (TLS terminates at Dwara), gateway DNS
+                 record, SSM-injected keys + TLS material, admin mTLS port
+                 SG-restricted to ops CIDRs (0.0.0.0/0 rejected)
   static_site/   S3 + CloudFront (OAC) hosting apps/parent-portal dist/
   packs_store/   S3 bucket for compiled content packs (versioned + lifecycle)
 environments/

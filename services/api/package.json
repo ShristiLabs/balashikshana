@@ -20,7 +20,9 @@
     "pino": "^9.14.0"
   },
   "devDependencies": {
-    "vitest": "^4.1.12"
+    "ajv": "^8.20.0",
+    "vitest": "^4.1.12",
+    "yaml": "^2.9.1"
   },
   "overrides": {
     "glob": "^11.1.0"
