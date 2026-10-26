@@ -1,6 +1,7 @@
-// Mailer seam (issue #63, M5 — the shipperdog SMTP seam pattern).
+// Mailer seam (issue #63, M5 — the shipperdog SMTP seam pattern; #69 adds
+// the file-capture transport and routes parent-auth mail through it).
 //
-// ONE transport interface, THREE implementations, zero provider lock-in:
+// ONE transport interface, FOUR implementations, zero provider lock-in:
 //
 //   send({ from, to, subject, text, html }) -> Promise<{ ok, messageId?, error? }>
 //
@@ -78,13 +79,38 @@ export function smtpConfigured(env = process.env) {
   return Boolean(String(env.SMTP_HOST || "").trim());
 }
 
+// File-capture transport (issue #69): records every envelope as a JSON
+// line in a file, cross-process observable — the transport the
+// verification/reset mail tests boot the real server against (tests spawn
+// server.mjs as a child process, so an in-memory capture transport in the
+// test process sees nothing). TEST/DEBUG ONLY: a capture file contains
+// the delivered codes (credentials-in-mail by definition), so NO
+// deployment environment may ever set MAIL_CAPTURE_FILE — the deployment
+// env templates never mention it and the store review pack documents it
+// as forbidden in production. Selected with the highest precedence so a
+// test boot never needs SMTP knobs at all.
+export function createFileCaptureTransport(filePath) {
+  return {
+    async send(envelope) {
+      // Appends are line-atomic for our sizes on POSIX; tests read after
+      // the response arrives, which is after the awaited send() resolves.
+      const { appendFileSync } = await import("node:fs");
+      appendFileSync(filePath, `${JSON.stringify({ ...envelope, sentAt: new Date().toISOString() })}\n`);
+      return { ok: true, messageId: null };
+    }
+  };
+}
+
 /**
- * The transport the server boots with: SMTP when SMTP_HOST is set (the
- * nodemailer module loads lazily right here — the only place that can),
- * null otherwise. Tests and callers that need determinism inject their
- * own transport explicitly and never call this.
+ * The transport the server boots with: file-capture when
+ * MAIL_CAPTURE_FILE is set (tests/debug only — see that transport),
+ * SMTP when SMTP_HOST is set (the nodemailer module loads lazily right
+ * here — the only place that can), null otherwise. Tests and callers
+ * that need determinism inject their own transport explicitly and never
+ * call this.
  */
 export async function defaultTransport(logger, env = process.env) {
+  if (String(env.MAIL_CAPTURE_FILE || "").trim()) return createFileCaptureTransport(String(env.MAIL_CAPTURE_FILE).trim());
   if (!smtpConfigured(env)) return createNullTransport(logger);
   const { createSmtpTransport } = await import("./smtp-transport.mjs");
   return createSmtpTransport({

@@ -96,12 +96,13 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 | `RETENTION_SWEEP_INTERVAL_MS` | `21600000` | Retention sweep interval in milliseconds (issue #62 — one boot pass then every interval; purges expired student/parent/device sessions and single-use tokens; `0` disables scheduling, the sweep function stays importable for scripts) |
 | `WEEKLY_DIGEST_ENABLED` | (unset) | Opt-in master switch for the weekly parent email digest scheduler (issue #63 — accepts `1`/`true`/`yes`; default OFF so a bare dev boot never sends mail; enabling it without `SMTP_HOST` refuses to start with a loud error) |
 | `WEEKLY_DIGEST_INTERVAL_MS` | `3600000` | Weekly digest scheduler tick in milliseconds (issue #63 — one boot pass then every interval; the `(parent, ISO week)` sent-ledger makes extra ticks no-ops, so the tick bounds worst-case send latency, never duplication; `0` disables scheduling) |
-| `SMTP_HOST` | (unset) | Mail transport selection (issue #63 seam): set -> SMTP transport (nodemailer, lazily imported only then); unset -> null transport (mail dropped with an honest `ok:false`, never a crash, never a phantom "sent") |
+| `SMTP_HOST` | (unset) | Mail transport selection (issue #63 seam): set -> SMTP transport (nodemailer, lazily imported only then); unset -> null transport (mail dropped with an honest `ok:false`, never a crash, never a phantom "sent"). Since the #69 mailer flip this also carries parent verification/reset mail — a production boot without it logs a loud error (parents cannot verify) |
 | `SMTP_PORT` | `587` | SMTP port (587 = STARTTLS; use 465 with `SMTP_SECURE=true`) |
 | `SMTP_SECURE` | (unset) | `true` or `1` selects implicit TLS; any other value keeps STARTTLS |
 | `SMTP_USER` | (unset) | SMTP username (credentials live only in env — never in code or logs) |
 | `SMTP_PASS` | (unset) | SMTP password (credentials live only in env — never in code or logs) |
-| `SMTP_FROM` | `Balashikshana <no-reply@balashikshana.local>` | Envelope From for the weekly digest |
+| `SMTP_FROM` | `Balashikshana <no-reply@balashikshana.local>` | Envelope From for the weekly digest and parent-auth transactional mail |
+| `MAIL_CAPTURE_FILE` | (unset) | TEST/DEBUG ONLY (issue #69): file-capture transport (every envelope as a JSON line) with precedence over SMTP. Never set in any deployment environment — the capture file contains the delivered auth codes; a test scans infra/deploy for it |
 | `SYNC_MAX_ATTEMPTS_PER_BATCH` | `200` | Hard cap on attempts per sync batch (OpenAPI `maxItems`; the mobile engine clamps its drain window to the same cap) |
 | `SYNC_FUTURE_CLOCK_TOLERANCE_MS` | `300000` | Client-clock future tolerance before an attempt timestamp is clamped to server receive time (issue #48 clock policy; past timestamps are accepted as-is) |
 | `BALASHIKSHANA_CONTENT_PACKS_DIR` | `services/api/content-packs` | Directory the content-pack routes serve the compiled manifest index + signed artifacts from (gitignored compiler output; the routes 503 with problem+json until a build is published) |
@@ -357,6 +358,13 @@ The legal-critical M6 gate: a whole-system external-style security review (`docs
 - **Families/Kids self-check, evidence-first:** `docs/families-kids-self-check.md` — the SDK scan (exact per-manifest runtime-dependency COPPA allowlist + vendor blocklist, `apps/mobile/tests/coppa-invariants.test.ts`), the link audit (zero external-link escape hatches in shipped mobile source; zero remote-push surfaces), the parental-gate bypass matrix (every parent-content render sits behind the hold-to-confirm gate), and age-appropriate design checks. Nothing is assertion-only.
 - **Data-flow inventory:** `docs/data-flow-inventory.md` — every personal-information class with storage, purpose, flows out (SMTP provider + app stores only), and retention; cross-checked against the #62 export and #66 telemetry. This is the source of truth for #69's store Data Safety forms.
 
+### 29. Store Submissions Pack (issue #69)
+The strictest launch gate: Apple Kids Category + Google Play Families listings with Data Safety forms that MATCH reality. The submissions themselves are console operations (user-side, tracked in `docs/store/README.md`'s pre-filing checklist); this issue shipped the complete ready-to-paste pack plus the engineering that makes the pack honest.
+
+- **Mailer flip (the #68-pinned blocker, closed):** verification and password-reset tokens are delivered BY EMAIL through the #63 SMTP seam (`services/api/auth-emails.mjs` + `parent-auth.mjs`). Production response bodies NEVER carry tokens (byte-level NODE_ENV=production tests, the SR-1 pattern); the mailed credential is a plain-text, link-free, copyable code — full entropy retained over a 6-digit code (guess space) and no link (anti-phishing; consistent with D5). Sends are scheduled post-response so the anti-enumeration 202 is uniform in TIME as well as bytes (review finding, source-pinned). A production boot without `SMTP_HOST` logs a loud error; the test-only `MAIL_CAPTURE_FILE` transport is deployment-hygiene-scanned.
+- **Traceable store forms:** `docs/store/data-safety-traceability.md` maps every Apple Privacy Nutrition and Play Data Safety answer to a `docs/data-flow-inventory.md` row and the enforcing code — test-enforced (`services/api/test/store-pack.test.mjs` fails CI on dangling references or evidence-less rows). Play "sharing = No" carries the service-provider analysis and a user-side re-verification note; at-rest encryption is honestly not claimed.
+- **Native config made true:** the expo-audio plugin defaults (mic/record, background audio, overlay + storage permissions) were config drift against the playback-only runtime — stripped and prebuild-verified (Android active: INTERNET, MODIFY_AUDIO_SETTINGS, VIBRATE; iOS: zero usage descriptions, no background modes). `apps/mobile/tests/store-config.test.ts` pins the plugin config, the blocked set, and the single-endpoint disclosure (every egress in shipped src goes through `EXPO_PUBLIC_API_BASE`).
+
 ---
 
 ## Repository Structure & Documentation
@@ -404,6 +412,7 @@ balashikshana/
 │   ├── families-kids-self-check.md           # Apple Kids + Play Families self-check: SDK scan, link audit, parental-gate bypass matrix — evidence-cited (issue #68)
 │   ├── data-flow-inventory.md                # Every personal-info class: storage, purpose, flows out, retention; source of truth for #69 store forms (issue #68)
 │   ├── legal/                                # COPPA legal pack: versioned privacy policy + terms mirrors, consent statement, publishing/re-consent runbook (issue #68)
+│   ├── store/                                # Store submissions pack: traceability matrix, Apple Kids + Play Families listings, age ratings, review notes, pre-filing checklist (issue #69)
 │   ├── gateway.md                            # Dwara edge runbook: consumers + credentials ADR, rate-limit layering, TLS/mTLS ops, staged rollout (issue #65)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)

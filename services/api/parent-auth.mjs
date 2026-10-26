@@ -32,6 +32,7 @@
 import crypto from "node:crypto";
 import { hashPinScrypt, verifyPin, createSessionToken } from "./db.mjs";
 import { sendProblem, PROBLEM_BASE } from "./problem.mjs";
+import { verificationMail, passwordResetMail } from "./auth-emails.mjs";
 
 // Session/token lifetimes (constants, not env — same convention as the M1
 // SESSION_TTL_MS; rate limits are the env-tunable knob, lifetimes are
@@ -172,23 +173,75 @@ function parentPublic(row) {
   };
 }
 
-// Email delivery seam: production must never see the token; dev/test get
-// it in the response body and (parent-id-keyed, never the email) in the
-// log. Since #63 the mail TRANSPORT seam exists (mailer.mjs: capture /
-// null / SMTP-behind-env), but verification and password-reset mail is
-// still delivered through this dev seam — routing those tokens through
-// real email is deliberately out of scope for #63 (the issue adds the
-// weekly digest only); a future issue flips these calls to the mailer.
+// Email delivery (issue #69 — the #68-pinned mailer flip): verification
+// and password-reset tokens are DELIVERED BY MAIL through the #63 mailer
+// seam (mailer.mjs), exactly as the privacy policy (sections 2a/7)
+// promises. In production the response body NEVER carries the token —
+// the parent receives it at their verified address as a plain-text,
+// link-free code (auth-emails.mjs documents the no-link decision) and
+// pastes it into the app/portal they already have open. In dev and test
+// the response-body seam below REMAINS (NODE_ENV-gated) so local flows
+// and the test harness keep working without a mailbox; dev boots ALSO
+// dispatch the mail when a transport is configured (MAIL_CAPTURE_FILE /
+// SMTP_HOST), so the delivery path itself is exercised everywhere.
+//
+// A failed send is logged (parentId-keyed, never the address — the #62
+// PII-minimal logging doctrine) and does not fail the request: signup
+// still records the account and the response stays shape-stable. The
+// honest null transport (no SMTP_HOST) makes the failure observable in
+// ops logs; server.mjs logs a loud boot warning in that production case.
+//
+// TIMING DOCTRINE (review finding, fixed in-flow): the send is scheduled
+// with setImmediate and NEVER awaited in the handler. Password-reset
+// request is an anti-enumeration surface (uniform 202, byte-identical
+// body); awaiting an SMTP round trip ONLY on the known-email path would
+// leak account existence through response LATENCY (50-500ms of relay
+// time vs ~5ms of DB) even with identical bodies. Scheduling after the
+// response keeps both paths DB-latency-only; tests poll the capture
+// file instead of assuming the line landed before the response.
+async function deliverTokenMail(mailer, logger, { kind, to, parentId, token, expiresAt }) {
+  if (!mailer) return;
+  const from = process.env.SMTP_FROM || "Balashikshana <no-reply@balashikshana.local>";
+  const envelope =
+    kind === "verification"
+      ? verificationMail({ to, code: token, expiresAt, from })
+      : passwordResetMail({ to, code: token, expiresAt, from });
+  const result = await mailer.send(envelope);
+  if (!result?.ok) {
+    logger?.warn?.({ parentId, kind, subject: envelope.subject, error: result?.error }, "parent auth token mail FAILED (account created; parent cannot verify until mail flows — check SMTP_HOST)");
+  } else {
+    logger?.info?.({ parentId, kind, subject: envelope.subject }, "parent auth token mail dispatched");
+  }
+}
+
+// Fire-and-forget wrapper: schedules the send off the request path and
+// guarantees no unhandled rejection can take the process down (a send
+// that throws is logged defensively; deliverTokenMail itself resolves
+// for all transport results).
+function scheduleTokenMail(mailer, logger, payload) {
+  setImmediate(() => {
+    deliverTokenMail(mailer, logger, payload).catch((err) => {
+      logger?.warn?.({ kind: payload?.kind }, "parent auth token mail scheduling failed unexpectedly");
+      void err;
+    });
+  });
+}
+
+// Development/test response seam (the documented non-production
+// exception): dev and test boots additionally return the token in the
+// response body and log it parent-id-keyed. Production returns {} — the
+// byte-level production suppression is pinned by test (NODE_ENV=
+// production server + MAIL_CAPTURE_FILE transport), the SR-1 pattern.
 function devDeliveryFields(logger, isProduction, label, parentId, token, expiresAt) {
   if (isProduction) return {};
-  logger?.info?.({ parentId, kind: label, expiresAt, devDeliveryToken: token }, "parent auth token issued (dev seam; not routed through the mailer)");
+  logger?.info?.({ parentId, kind: label, expiresAt, devDeliveryToken: token }, "parent auth token issued (dev seam; mail dispatch runs in parallel)");
   return { [`${label}Token`]: token, [`${label}TokenExpiresAt`]: expiresAt };
 }
 
 // --- Fastify plugin ------------------------------------------------------------
 
 export const parentAuthPlugin = async function parentAuthPlugin(app, opts) {
-  const { db, rateLimits, isProduction, logger } = opts;
+  const { db, rateLimits, isProduction, logger, mailer } = opts;
 
   const emailField = { type: "string", minLength: 3, maxLength: EMAIL_MAX_LENGTH, pattern: EMAIL_PATTERN };
   const passwordField = {
@@ -251,6 +304,11 @@ export const parentAuthPlugin = async function parentAuthPlugin(app, opts) {
           return token;
         });
         const dev = devDeliveryFields(logger, isProduction, "verification", parentId, issued, expiresAt);
+        // The #69 flip: the token ALWAYS goes to the mail seam (production
+        // parents verify via email; dev boots also dispatch so the delivery
+        // path is exercised). Scheduled, never awaited (timing doctrine in
+        // deliverTokenMail's header); failures never fail signup.
+        scheduleTokenMail(mailer, logger, { kind: "verification", to: email, parentId, token: issued, expiresAt });
         return reply.code(201).send({ parentId, email, emailVerified: false, ...dev });
       } catch (err) {
         // Concurrent signup race on the LOWER(email) unique index.
@@ -403,6 +461,7 @@ export const parentAuthPlugin = async function parentAuthPlugin(app, opts) {
       const email = normalizeEmail(req.body.email);
       const row = await db.get("SELECT parent_id FROM parents WHERE LOWER(email) = $1", [email]);
       let dev = {};
+      let resetMail = null;
       if (row) {
         const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString();
         const issued = await db.withTransaction(async (client) => {
@@ -418,11 +477,16 @@ export const parentAuthPlugin = async function parentAuthPlugin(app, opts) {
           return token;
         });
         dev = devDeliveryFields(logger, isProduction, "reset", row.parent_id, issued, expiresAt);
+        // The #69 flip: reset codes go to the mail seam for the account's
+        // address — SCHEDULED after the response (never awaited), so the
+        // known-email path carries no extra SMTP latency: the uniform 202
+        // is uniform in TIME as well as bytes.
+        resetMail = { kind: "reset", to: email, parentId: row.parent_id, token: issued, expiresAt };
       }
-      // Byte-identical base body either way (dev-only seam fields are the
-      // documented non-production exception; production replies are
-      // identical for known and unknown emails).
-      return reply.code(202).send({ ok: true, message: "If an account exists for this email, a password reset has been sent.", ...dev });
+      const response = reply.code(202).send({ ok: true, message: "If an account exists for this email, a password reset has been sent.", ...dev });
+
+      if (resetMail) scheduleTokenMail(mailer, logger, resetMail);
+      return response;
     }
   );
 
