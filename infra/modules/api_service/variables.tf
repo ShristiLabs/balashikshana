@@ -94,7 +94,7 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "allowed_origins" {
-  description = "ALLOWED_ORIGINS for the API CORS allowlist (portal origin per environment)"
+  description = "ALLOWED_ORIGINS for the API CORS allowlist (portal + #71 web-client origin per environment)"
   type        = string
 }
 

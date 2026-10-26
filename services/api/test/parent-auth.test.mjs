@@ -237,7 +237,12 @@ describe("email verification", () => {
     const signup = await signupP(uniqueEmail());
     const res = await verifyEmailP(signup.json.verificationToken);
     assert.equal(res.status, 200);
-    assert.deepEqual(res.json, { ok: true, emailVerified: true });
+    // #71 additive mint: {ok, emailVerified} plus the session mirror
+    // (token + parent) — deep-asserted in the #71 tests below.
+    assert.equal(res.json.ok, true);
+    assert.equal(res.json.emailVerified, true);
+    assert.ok(typeof res.json.token === "string");
+    assert.equal(res.json.parent.parentId, signup.json.parentId);
 
     const row = (await db.query("SELECT email_verified_at, password_hash FROM parents WHERE parent_id = $1", [
       signup.json.parentId
@@ -309,6 +314,48 @@ describe("email verification", () => {
     const after = await loginP(signup.json.email);
     assert.equal(after.json.parent.emailVerified, true);
     assert.ok(after.json.parent.emailVerifiedAt);
+  });
+
+  // #71: verification mints the parent session (the signup path
+  // reaches the Bearer-gated consent-capture call with it; the client
+  // never persists passwords, so there is no login fallback on device).
+  test("#71 verification mints a working parent session mirroring the login reply", async () => {
+    const signup = await signupP(uniqueEmail());
+    const verify = await verifyEmailP(signup.json.verificationToken);
+    assert.equal(verify.status, 200);
+    assert.equal(verify.json.ok, true);
+    assert.equal(verify.json.emailVerified, true);
+    assert.ok(typeof verify.json.token === "string" && verify.json.token.length > 0, "minted session token present");
+    assert.equal(verify.json.parent.parentId, signup.json.parentId);
+    assert.equal(verify.json.parent.emailVerified, true);
+
+    // The minted token IS a parent session: it authenticates a
+    // Bearer-gated parent route...
+    const children = await api(API, "/api/parent/children", { method: "GET", token: verify.json.token });
+    assert.equal(children.status, 200);
+    // ...and revokes cleanly through logout like any session.
+    const out = await logoutP(verify.json.token);
+    assert.equal(out.status, 200);
+    const revoked = await api(API, "/api/parent/children", { method: "GET", token: verify.json.token });
+    assert.equal(revoked.status, 401);
+  });
+
+  test("#71 the minted session row follows the login TTL doctrine (hashed at rest, 7d/30d)", async () => {
+    const signup = await signupP(uniqueEmail());
+    const verify = await verifyEmailP(signup.json.verificationToken);
+    const row = (
+      await db.query(
+        "SELECT token_hash, expires_at, refreshable_until, revoked_at FROM parent_sessions WHERE token_hash = $1",
+        [sha256Hex(verify.json.token)]
+      )
+    ).rows[0];
+    assert.ok(row, "minted session stored");
+    assert.equal(row.token_hash, sha256Hex(verify.json.token), "hashed, never plaintext");
+    assert.equal(row.revoked_at, null);
+    const ttl = new Date(row.expires_at).getTime() - Date.now();
+    const window = new Date(row.refreshable_until).getTime() - Date.now();
+    assert.ok(ttl > 0 && ttl <= 7 * 24 * 3600 * 1000 + 60_000, "7-day session TTL");
+    assert.ok(window > 6 * 24 * 3600 * 1000 && window <= 30 * 24 * 3600 * 1000 + 60_000, "30-day refresh window");
   });
 });
 

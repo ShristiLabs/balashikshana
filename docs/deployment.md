@@ -270,6 +270,35 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 Portal deploys never touch the API. `ALLOWED_ORIGINS` on the API must list
 the portal origin of the same environment (tfvars `allowed_origins`).
 
+### Web edition deploys (#71)
+
+The Chromebook/PWA edition is the same Expo app exported for the
+browser (`npx expo export --platform web`) and served as a static
+bundle through the Dwara edge's `web-static` route
+(`deploy/dwara/envs/*.yaml`; dev = loopback :4200 via `server.mjs`,
+staging/prod = the environment's static hosting endpoint). Full
+adapter/offline/hosting record: docs/web-export.md.
+
+```
+cd apps/mobile
+EXPO_PUBLIC_API_BASE=https://api.<env>.<zone> npx expo export --platform web
+# then sync apps/mobile/dist/ to the environment's static hosting, per the web-static upstream
+```
+
+LAUNCH-BLOCKING VERIFICATION before any production web deploy: the
+content-trust dev switch must NEVER be baked into a production bundle —
+
+```
+grep -r "EXPO_PUBLIC_CONTENT_TRUST_DEV" apps/mobile/dist/   # must output NOTHING
+```
+
+`EXPO_PUBLIC_CONTENT_TRUST_DEV=true` is legal ONLY for dev/staging
+serving surfaces (their packs are dev-signed by construction); a
+production bundle carrying it would trust dev-signed packs
+(docs/web-export.md §1, `contentTrustIsDev()` in
+`apps/mobile/src/content/keys.ts`). The API `ALLOWED_ORIGINS` of the
+environment must list the web client origin, exactly as for the portal.
+
 ## Single instance vs multi-instance (roadmap D2, revisited — decision)
 
 **Decision: stay single-instance; remove the unused Redis; document the

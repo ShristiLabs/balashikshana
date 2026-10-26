@@ -17,10 +17,10 @@
  *   projector owns the GREATEST/LEAST merge semantics; the app is a
  *   single JS-thread writer, so read-merge-write is sequential).
  */
-import * as SQLite from "expo-sqlite";
+import * as SQLite from "../platform/sqlite";
+import { openPackArtifact } from "../platform/packdb";
 import { reminderSettingsProblem } from "@balashikshana/core-engine";
 import { CONTENT_DB_NAME, CONTENT_DB_MIGRATIONS } from "../content/schema";
-import { contentPackDirectory } from "../content/nativeContent";
 import type { AttemptLogRow, SyncStorage } from "../sync/types";
 import type { GamificationState } from "../gamification/types";
 import type { GamificationStorage } from "../gamification/storage";
@@ -702,8 +702,7 @@ export function getNativePlacementRecordStore(): PlacementRecordStore {
 const readerCache = new Map<string, Promise<PackContentReader>>();
 
 async function openPackReader(artifact: string): Promise<PackContentReader> {
-  const dir = contentPackDirectory();
-  const db = await SQLite.openDatabaseAsync(artifact, { useNewConnection: true }, dir.uri);
+  const db = await openPackArtifact(artifact);
   await db.execAsync("PRAGMA query_only = ON");
   return {
     async gradePolicy(gradeId): Promise<GradeSrPolicy | null> {

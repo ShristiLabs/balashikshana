@@ -148,6 +148,32 @@ routes:
         headers:
           remove: [X-Consumer-Name, X-Consumer-Type]
 
+  # WEB CLIENT STATIC BUNDLE (#71): the Expo web export of the app,
+  # served from static hosting BEHIND this edge. Longest-prefix-wins:
+  # every /api/* path matches the longer /api/ prefix (and the regex
+  # routes) first, so this catch-all receives exactly the non-API paths
+  # (/, /_expo/static/**, /assets/**, /vendor/**, /icons/**,
+  # /manifest.webmanifest, /sw.js — the exported bundle). Same listener,
+  # same TLS, same edge floor policy; no consumer key (a browser fetches
+  # a public static bundle anonymously — classification has no meaning
+  # for cacheable static content).
+  - name: web-static
+    service: web-static-host-service
+    match:
+      path:
+        type: prefix
+        value: /
+    action:
+      type: proxy
+    auth_required: false
+    # D10 hardening applies to EVERY proxy route, static host included
+    # (defense in depth: the static origin must never act on edge
+    # identity either).
+    transforms:
+      request:
+        headers:
+          remove: [X-Consumer-Name, X-Consumer-Type]
+
 # ---------------------------------------------------------------------------
 # Service + upstream — the Fastify origin behind its ALB, reached over TLS
 # (edge -> origin traffic never crosses the network in plaintext).
@@ -156,6 +182,9 @@ routes:
 services:
   - name: origin-api
     upstream: origin-alb
+  # #71: the static web-export host (S3/CloudFront-style static origin).
+  - name: web-static-host-service
+    upstream: web-static-host
 
 upstreams:
   - name: origin-alb
@@ -165,6 +194,16 @@ upstreams:
       # PER-ENV VALUE (terraform.tfvars convention: replace the zone):
       # dev = 127.0.0.1:4000 http1 (local fronting), prod = same as staging.
       - address: api.balashikshana.example
+        port: 443
+  # #71 web client static origin. PER-ENV VALUE like the API origin
+  # triple: dev = apps/mobile server.mjs on loopback (the exported
+  # bundle), staging/prod = the environment's static-hosting endpoint
+  # (same Route53 zone convention: replace the zone at deploy time).
+  - name: web-static-host
+    load_balancer: round_robin
+    protocol: https
+    endpoints:
+      - address: app.balashikshana.example
         port: 443
 
 # ---------------------------------------------------------------------------

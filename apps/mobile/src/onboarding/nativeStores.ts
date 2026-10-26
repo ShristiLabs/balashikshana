@@ -1,25 +1,34 @@
 /**
  * React-native persistence bindings for the onboarding flow (issue #44).
  *
- * This is the ONLY module in the onboarding tree that imports native
- * modules (expo-sqlite, expo-secure-store); every pure module above stays
- * node-testable. The screen layer calls createNativeDependencies() once
- * and passes the results down as the storage seams from storage.ts.
+ * This is the ONLY module in the onboarding tree that touches native
+ * seams; every pure module above stays node-testable. Since #71 the
+ * native modules route through platform-suffixed twins
+ * (../platform/sqlite, ../platform/securekv) so the SAME seam code runs
+ * on web with browser-storage adapters. The screen layer calls
+ * createNativeDependencies() once and passes the results down as the
+ * storage seams from storage.ts.
  *
- * - Tokens/credentials: expo-secure-store (encrypted on-device storage;
- *   the issue body mandates it - never AsyncStorage, never SQLite).
+ * - Tokens/credentials: the secure key-value seam (expo-secure-store on
+ *   native; browser-storage backed store on web — see
+ *   platform/securekv.web.ts for the honest limits).
  * - Onboarding snapshot: a one-row JSON document in a minimal SQLite
- *   table. #46 (content packs) owns the real on-device schema; this tiny
- *   table is deliberately self-contained so the migration story stays
- *   trivial (drop + recreate loses nothing but resumability progress).
+ *   table (expo-sqlite on native; sql.js on web). #46 (content packs)
+ *   owns the real on-device schema; this tiny table is deliberately
+ *   self-contained so the migration story stays trivial (drop + recreate
+ *   loses nothing but resumability progress).
  */
 
-import * as SecureStore from "expo-secure-store";
-import * as SQLite from "expo-sqlite";
+import * as SQLite from "../platform/sqlite";
+import { secureKeyValue } from "../platform/securekv";
 import { getContentPackService } from "../content/nativeContent";
 import type { EnsureResult } from "../content/types";
 import type { OnboardingStore, SecureKeyValue } from "./storage";
 import { parseSnapshot } from "./storage";
+
+// Re-exported for the sync + gamification token seams (#48/#55 import
+// path unchanged; the platform twin resolves per OS).
+export { secureKeyValue };
 
 const SNAPSHOT_DB = "balashikshana_onboarding.db";
 const SNAPSHOT_TABLE = `
@@ -29,18 +38,6 @@ const SNAPSHOT_TABLE = `
     updated_at TEXT NOT NULL
   );
 `;
-
-export const secureKeyValue: SecureKeyValue = {
-  async get(key) {
-    return SecureStore.getItemAsync(key);
-  },
-  async set(key, value) {
-    await SecureStore.setItemAsync(key, value);
-  },
-  async delete(key) {
-    await SecureStore.deleteItemAsync(key);
-  },
-};
 
 export interface NativeDependencies {
   onboardingStore: OnboardingStore;

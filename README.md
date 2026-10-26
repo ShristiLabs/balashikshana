@@ -135,7 +135,7 @@ cd apps/mobile
 npm ci --workspaces=false          # per-workspace install (the repo convention; uses apps/mobile/package-lock.json)
 npm run ios                        # Expo dev server for an iOS simulator/device
 npm run android                    # Expo dev server for an Android emulator/device
-npm run web                        # DEV HARNESS ONLY: serves the static web client on :4200 (server.mjs)
+npm run web                        # serves the WEB EXPORT on :4200 (server.mjs; run `npx expo export --platform web` first — see section 31)
 npm run lint && npm run format:check && npm run typecheck && npm test
 npx expo-doctor                    # SDK health check (18 checks)
 npx expo export --platform ios --platform android   # prove the bundles build
@@ -154,7 +154,7 @@ npx expo export --platform ios --platform android   # prove the bundles build
   - **Content-pack trigger (#46):** onboarding chains the grade's content-pack download after the completion step lands — strictly fire-and-forget (onboarding has already completed, so a slow or failed download can never strand the flow); the completion screen surfaces a one-line pack status note, and the launch-time provider retries.
 - **Audio services (issue #45):** `src/audio/` ships the narration / SFX / haptics infrastructure behind an `AudioCoordinator` facade, bootstrapped at the root layout via `getAudioService()` and fully dependency-injected (the Expo adapters live in one RN-only module, everything else is node-testable). Speaking rates are registry-calibrated per grade and clamped to 110–150 WPM; SFX duck to a 0.3 multiplier while narration speaks (count-based, synchronous restore on cancel); narration defers under an active screen reader and never ducks itself. The 16 feedback WAVs are catalog-driven from the repo-root `assets/sounds/sounds-manifest.json` (compile-time pinned and test-pinned against manifest and disk); since #46, each grade's content pack carries the per-topic SFX slice (`topic_sounds`) and narration slice (`topic_narration`) that feed `{moment, topicId}` resolution on-device. Audio settings (sound / narration / haptics / music toggles) persist through the non-secret SQLite seam.
 - **Tooling:** ESLint (flat config, `eslint-config-expo`) + Prettier + `tsc --noEmit` (strict) + vitest, all wired into the CI gate above.
-- **Repo-level notes:** the root `package-lock.json` is advisory only — it exists so workspace-aware tooling (`expo-doctor`) finds a lockfile at the monorepo root; regenerate it with `npm install --package-lock-only` after changing any workspace manifest. CI installs per-workspace and is unaffected. `apps/mobile/.npmrc` sets `legacy-peer-deps` because the Expo SDK 58 peer tree conflicts with npm's strict resolution under per-workspace installs; the committed lockfile records the resolved set. The static web client (`apps/mobile/public/index.html`) remains untouched and served as the dev harness + web fallback until native parity (D1).
+- **Repo-level notes:** the root `package-lock.json` is advisory only — it exists so workspace-aware tooling (`expo-doctor`) finds a lockfile at the monorepo root; regenerate it with `npm install --package-lock-only` after changing any workspace manifest. CI installs per-workspace and is unaffected. `apps/mobile/.npmrc` sets `legacy-peer-deps` because the Expo SDK 58 peer tree conflicts with npm's strict resolution under per-workspace installs; the committed lockfile records the resolved set. The M2-era single-HTML dev harness (`apps/mobile/public/index.html`) was RETIRED in #71 — superseded by the real app's web export (section 31); the retirement record is `docs/journey-harness-parity.md`.
 
 ### 7. Content Packs — Signed Per-Grade Content Pipeline (`tools/content-pipeline`)
 - **Compiler:** the `@balashikshana/content-pipeline` workspace (zero runtime deps: `node:sqlite` + `node:crypto`) compiles `docs/us-curriculum-registry.json` into one deterministic, Ed25519-signed SQLite pack per grade — `pack-<gradeId>-v<contentVersion>.sqlite`. Determinism comes from canonical sorted-key JSON, fixed SQLite pragmas, one write transaction with pre-sorted inserts, `VACUUM`, and no timestamps; the tests build twice (including across separate CLI processes) and compare bytes. Questions come from the same core-engine generator the API seed uses (130 units / 614 topics / 6,140 questions total), so pack content and the served PostgreSQL content agree by construction; `packages/core-engine` itself is imported read-only and never modified.
@@ -375,6 +375,22 @@ Roadmap D10's "seam, not a product": school/district seat-license validation sta
 - **Seat model + roster stub:** migration 015 (`organizations` one-per-parent-owner, `organization_licenses` globally-unique append-only activation evidence with one ACTIVE license per org and local revocation, `organization_seats` opaque per-org subjects). Seat claims re-validate expiry at write time; concurrent activations are race-safe (ON CONFLICT + honest 409s; race-pin tested). `POST /api/b2b/roster/validate` is a validation-only dry run (CSV or JSON, per-row reasons + seat projection) with ZERO writes — row-count-delta-test-enforced — and counts-only logging (roster names/emails never reach logs).
 - **FERPA/DPA posture, honestly scoped:** `docs/legal/ferpa-dpa-posture.md` maps the school-official exception onto TODAY's data model (no school channel exists; the only child-data path remains the parent-consented COPPA flow), carries a DPA-ready checklist with honest partials + placeholders, and claims nothing beyond the engineering posture — counsel banner throughout. Architecture + the licensing-core integration path: `docs/b2b/licensing-seam.md`.
 
+### 31. Web Edition — Chromebook/PWA Reach (issue #71)
+The SAME Expo app exported for the browser (`npx expo export --platform web`, react-native-web rendering) — Chromebook/managed-device reach without a second codebase (roadmap D1 rejects a web fork). Full adapter, keyboard-parity, offline/capability, and hosting matrices: [`docs/web-export.md`](./docs/web-export.md); architecture record: `docs/architecture.md` section 2.17.
+
+```bash
+cd apps/mobile
+npx expo export --platform web    # -> dist/
+npm run web                       # serve on :4200 (server.mjs, SPA fallback)
+node scripts/measure-bundle-sizes.mjs --check   # web shares the 5.5 MiB budget doctrine
+```
+
+- **Platform twins, no forks:** every native seam has a web twin resolved by metro (SQL via sql.js wasm + IndexedDB persistence; securekv as IndexedDB strings — a documented honest weakening; pack downloads verify the same Ed25519 signatures in pure JS; notifications honestly unavailable on web — the twin keeps all notification code out of the web bundle).
+- **Keyboard/mouse parity:** every interaction completable keyboard-only AND mouse-only (tap-only design = no drag/hover anywhere); hold-to-confirm gate maps to hold-Enter/Space; visible focus ring. Source-pinned by `tests/keyboard-parity-pins.test.ts`.
+- **Offline + honest degradation:** app-shell service worker (precache-only; NEVER caches API responses or child data — COPPA) + IndexedDB packs/attempt queue with sync convergence on reconnect; when browser storage is blocked (managed Chromebooks) the app runs an in-memory session behind a clear notice — it never breaks, it tells the truth.
+- **Basic PWA:** `manifest.webmanifest` + committed PNG icons (zero-dependency generator `scripts/gen-pwa-icons.mjs`); polish beyond basic offline is out of scope.
+- **Hosting:** static bundle behind the Dwara edge `web-static` route; API CORS allowlists carry the web origin per environment. Production exports must never set `EXPO_PUBLIC_CONTENT_TRUST_DEV` (launch-blocking grep over `dist/` in the deploy runbook).
+
 ---
 
 ## Repository Structure & Documentation
@@ -398,7 +414,7 @@ balashikshana/
 │       ├── migrations/                       # node-pg-migrate migrations (served datastore, PostgreSQL)
 │       └── sqlite/                           # On-device SQLite schema reference (offline store, roadmap D2)
 ├── apps/
-│   ├── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router, offline practice core) + static web dev harness (public/)
+│   ├── mobile/                               # Expo SDK 58 app shell (design system, theming, onboarding flow, expo-router, offline practice core) + web export (platform-twin adapters; public/ carries the PWA shell: sw.js, manifest, icons, vendor wasm)
 │   └── parent-portal/                        # Parent portal SPA (Vite + React 19 + TS): login, children overview, quadrant/weekly analytics, server-enforced parental controls (issue #61), COPPA data export + deletion self-serve (issue #62), weekly email toggle (issue #63)
 ├── tools/
 │   └── content-pipeline/                     # Signed per-grade content-pack compiler (node:sqlite + node:crypto, zero runtime deps)
@@ -454,3 +470,4 @@ balashikshana/
 10. **[Database Migration Ledger (`docs/database-migrations.md`)](./docs/database-migrations.md)** — PostgreSQL migration history, runner usage, and the rules every schema change follows.
 11. **[OpenAPI API Contract (`docs/openapi/baseline.yaml`)](./docs/openapi/baseline.yaml)** — OpenAPI 3.1 baseline for all 44 API operations including the RFC 9457 problem+json error shapes; CI blocks breaking changes via oasdiff.
 12. **[Game Archetype Coverage Checklist (`docs/games-coverage.md`)](./docs/games-coverage.md)** — Which of the registry's 11 game archetypes have installed renderers vs. practice fallback (pack A — block-builder + market-cashier — issue #53; pack B — bubble-pop-blitz + monster-phoneme-feeder — issue #54), the fallback semantics, the guided/fluency stage model, and the data-derived per-pack coverage footprint (data-enforced by the games-registry catalog test).
+13. **[Web Edition (`docs/web-export.md`)](./docs/web-export.md)** — The Chromebook/PWA web export of the SAME app (issue #71): platform-adapter matrix, keyboard/mouse parity matrix, offline + storage-blocked degradation matrix, hosting/origins, PWA surface, cache policy, and known limits.

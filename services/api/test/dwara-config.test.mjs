@@ -313,7 +313,11 @@ describe("dwara config: environment parity (DRY)", () => {
     );
   });
 
-  // The ONLY sanctioned per-env delta: the origin upstream triple.
+  // The ONLY sanctioned per-env deltas: the two upstream triples — the
+  // origin API (upstreams.0) and the #71 web-client static host
+  // (upstreams.1; dev serves the export from loopback :4200, staged
+  // envs point at the static-hosting endpoint). Everything else must
+  // stay byte-identical across environments.
   const ALLOWED_DELTA_PATHS = new Set([
     "upstreams",
     "upstreams.0",
@@ -322,6 +326,12 @@ describe("dwara config: environment parity (DRY)", () => {
     "upstreams.0.endpoints.0",
     "upstreams.0.endpoints.0.address",
     "upstreams.0.endpoints.0.port",
+    "upstreams.1",
+    "upstreams.1.protocol",
+    "upstreams.1.endpoints",
+    "upstreams.1.endpoints.0",
+    "upstreams.1.endpoints.0.address",
+    "upstreams.1.endpoints.0.port",
   ]);
 
   function diffKeys(a, b, prefix = "", out = []) {

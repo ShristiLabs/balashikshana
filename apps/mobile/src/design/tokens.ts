@@ -8,10 +8,11 @@
  * the accessibility invariants (>=48pt touch targets, contrast floors)
  * directly against these values.
  *
- * The palette carries over the visual language already validated by the
- * static web dev harness (apps/mobile/public/index.html): bright tactile
- * fills over a light surface, chunky rounded corners, and dark ink used
- * on bright yellow fills (the gold-button precedent).
+ * The palette carries over the visual language first validated by the
+ * M2-era dev harness and now shipped by the web edition's PWA shell
+ * (apps/mobile/public/index.html): bright tactile fills over a light
+ * surface, chunky rounded corners, and dark ink used on bright yellow
+ * fills (the gold-button precedent).
  *
  * Contrast policy (encoded in tests/tokens.test.ts):
  * - Body/reading text pairs must reach >= 4.5:1 in EVERY theme.

@@ -3,7 +3,8 @@
  * expo-router stack. Header colors come from semantic tokens; the
  * background comes from the active theme, never a hardcoded value.
  */
-import React from "react";
+import React, { useEffect } from "react";
+import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AudioServiceProvider } from "../src/audio/AudioServiceProvider";
@@ -13,6 +14,27 @@ import { PracticeWarmup } from "../src/practice/PracticeWarmup";
 import { SyncBootstrap } from "../src/sync/SyncBootstrap";
 import { ThemeProvider, useTheme } from "../src/design/theme";
 import { MotionProvider } from "../src/design/useMotion";
+import { WebStorageNotice } from "../src/platform/WebStorageNotice";
+
+/**
+ * Web edition (#71): register the app-shell service worker. Production
+ * exports only (never the dev server), secure contexts only (the SW
+ * spec requires https or localhost). The worker's policy is
+ * conservative: static shell caching, NEVER API responses (COPPA) —
+ * see public/sw.js.
+ */
+function ServiceWorkerBootstrap(): null {
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (typeof __DEV__ !== "undefined" && __DEV__) return;
+    const nav = navigator as Navigator & { serviceWorker?: ServiceWorkerContainer };
+    if (!nav.serviceWorker) return;
+    nav.serviceWorker.register("/sw.js").catch(() => {
+      // Progressive enhancement: offline support degrades, app unaffected.
+    });
+  }, []);
+  return null;
+}
 
 function RootStack() {
   const { colors } = useTheme();
@@ -48,7 +70,11 @@ export default function RootLayout() {
               <PracticeWarmup />
               <SyncBootstrap />
               <ReminderBootstrap />
-              <RootStack />
+              <ServiceWorkerBootstrap />
+              <View style={{ flex: 1 }}>
+                <WebStorageNotice />
+                <RootStack />
+              </View>
             </ContentPackProvider>
           </AudioServiceProvider>
         </MotionProvider>

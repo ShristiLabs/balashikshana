@@ -334,6 +334,15 @@ export const parentAuthPlugin = async function parentAuthPlugin(app, opts) {
   // no re-issue route until #44). Every failure (unknown, replayed,
   // expired, wrong kind) is the same problem — no oracle. Sibling
   // outstanding verification tokens are consumed too.
+  //
+  // #71 fix (additive): a SUCCESSFUL verification now also mints the
+  // parent session token (same row shape and TTLs as login). The caller
+  // just proved control of the signup email — identity established — and
+  // the client never persists passwords (doctrine), so without a minted
+  // session the signup path had no way to reach the consent-capture call
+  // (which is Bearer-gated). Response gains {token, parent} alongside
+  // the existing {ok, emailVerified}; login's reply shape is mirrored
+  // exactly.
   app.post(
     "/api/parents/verify-email",
     { schema: verifyEmailSchema, config: { rateLimit: rateLimits.token } },
@@ -364,7 +373,16 @@ export const parentAuthPlugin = async function parentAuthPlugin(app, opts) {
           detail: "Email verification token is invalid or expired."
         });
       }
-      return { ok: true, emailVerified: true };
+      const parent = await db.get("SELECT * FROM parents WHERE parent_id = $1", [consumed]);
+      const issuedAt = Date.now();
+      const token = createSessionToken();
+      await db.run(
+        `INSERT INTO parent_sessions (token_hash, parent_id, expires_at, refreshable_until)
+         VALUES ($1, $2, $3, $4)`,
+        [sha256Hex(token), consumed, new Date(issuedAt + PARENT_SESSION_TTL_MS).toISOString(), new Date(issuedAt + PARENT_REFRESH_WINDOW_MS).toISOString()]
+      );
+      req._balashiParentId = consumed;
+      return { ok: true, emailVerified: true, token, parent: parentPublic(parent) };
     }
   );
 

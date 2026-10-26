@@ -37,6 +37,8 @@ C = child learner, S = server operational.
 | 22 | B2B organizations (school/district account + owner binding) | P | parent activates a license (#70 seam) | `organizations` (one per parent owner) | B2B seat licensing seam | none | life of the owning parent account (cascade) |
 | 23 | B2B license records (claims + activation evidence incl. signature, status) | P | license activation (#70) | `organization_licenses` (append-only; supersede/revoked states) | seat validation + audit evidence | none | life of the org; retained as activation evidence |
 | 24 | B2B seat assignments (opaque subject labels) | P | parent claims seats (#70) | `organization_seats` (unique per org+subject) | seat accounting | none | life of the license/org (cascade) |
+| 25 | Web app-shell service-worker cache (#71) | - | browser fetches static build assets | device-local CacheStorage (`balashikshana-shell-v1`) | offline app shell (COPPA: STATIC BUILD ASSETS ONLY — the worker's fetch handler never stores API responses, cross-origin, or non-GET requests; policy test-pinned) | none (same-origin static assets; no third party) | replaced on deploy (cache version bump) |
+| 26 | Web edition browser storage (#71) | P/C | web export runtime | IndexedDB (origin-partitioned): signed pack bytes, sql.js DB images (attempt queue + progress mirrors of classes 8-11), onboarding snapshot, parent/child session tokens (PLAIN strings — no hardware keystore on the web platform; documented weakening in docs/web-export.md) | operate the same offline-first flows as native | never (no new flows OUT; API calls only) | browser site-data lifecycle (wiped with site data; storage-blocked browsers run an in-memory session with an explicit notice) |
 
 ## Cross-checks performed (#68)
 
