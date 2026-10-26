@@ -39,3 +39,21 @@ export function trustedKeysForEnvironment(isDev: boolean): Map<string, string> {
   if (RELEASE_KEY !== null) keys.push(RELEASE_KEY);
   return new Map(keys.map((k) => [k.keyId, k.publicKeyHex]));
 }
+
+/**
+ * Content-trust mode for a build (#71 web export).
+ *
+ * Dev/staging deployments serve packs signed with the dev-local key, but
+ * a web export is a PRODUCTION bundle (__DEV__ === false) — without this
+ * switch those builds would trust no keys and refuse every pack, which
+ * is the correct fail-closed default for release engineering but makes
+ * the dev/staging serving surfaces (issue AC) impossible to run.
+ *
+ * EXPO_PUBLIC_CONTENT_TRUST_DEV=true is baked at EXPORT time, ONLY for
+ * dev/staging builds whose packs are dev-signed by construction.
+ * Production builds never set it and keep the full doctrine: trust only
+ * the (future) release key; an empty trust list installs nothing.
+ */
+export function contentTrustIsDev(runtimeDev: boolean): boolean {
+  return runtimeDev || process.env.EXPO_PUBLIC_CONTENT_TRUST_DEV === "true";
+}

@@ -34,6 +34,17 @@ import {
   type ReminderPermissionStatus,
 } from "@balashikshana/core-engine";
 
+/**
+ * WEB EDITION (#71): reminders are NOT available on the web — browser
+ * push is out (local-only doctrine + the issue excludes it), and web
+ * notification surfaces would prompt permissions a kid-safe build must
+ * never trigger. Web exports resolve to the localReminders.web.ts TWIN
+ * (no expo-notifications in the web bundle at all); the guards below
+ * stay as defense in depth. The parent settings section surfaces this
+ * honestly (remindersUnavailableOnWeb).
+ */
+export const remindersUnavailableOnWeb = Platform.OS === "web";
+
 /** Static, PII-free copy: constants by construction (never templated
  *  with any child's data — the source pin asserts the literals). */
 export const REMINDER_TITLE = "Time to practice!";
@@ -51,6 +62,7 @@ let handlerInitialized = false;
  * a live session. Called once from the root layout (ReminderBootstrap).
  */
 export function initializeLocalReminders(): void {
+  if (remindersUnavailableOnWeb) return;
   if (handlerInitialized) return;
   handlerInitialized = true;
   Notifications.setNotificationHandler({
@@ -71,6 +83,7 @@ function mapPermission(status: Notifications.PermissionStatus): ReminderPermissi
 
 /** The CURRENT OS permission state without ever prompting. */
 export async function getReminderPermissionStatus(): Promise<ReminderPermissionStatus> {
+  if (remindersUnavailableOnWeb) return "denied";
   const { status } = await Notifications.getPermissionsAsync();
   return mapPermission(status);
 }
@@ -81,6 +94,7 @@ export async function getReminderPermissionStatus(): Promise<ReminderPermissionS
  * (test-pinned); a child surface must never import this.
  */
 export async function requestReminderPermissionFromParentSurface(): Promise<ReminderPermissionStatus> {
+  if (remindersUnavailableOnWeb) return "denied";
   const { status } = await Notifications.requestPermissionsAsync();
   return mapPermission(status);
 }
@@ -104,6 +118,7 @@ async function ensureAndroidChannel(): Promise<void> {
  * - "none": no-op (permission hold — the parent surface explains).
  */
 export async function applyReminderPlan(plan: ReminderPlan): Promise<void> {
+  if (remindersUnavailableOnWeb) return;
   if (plan.action === "none") return;
   // Replacing first keeps the single-reminder invariant even if a stale
   // schedule exists under the identifier.

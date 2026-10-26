@@ -29,7 +29,7 @@ variable "api_image_uri" {
 }
 
 variable "allowed_origins" {
-  description = "CORS ALLOWED_ORIGINS for the API (comma-separated; must include the portal URL of THIS environment)"
+  description = "CORS ALLOWED_ORIGINS for the API (comma-separated; must include the portal URL AND the web-client origin (#71 web export, app hostname of THIS environment; dev also carries http://localhost:4200 for the local export server))"
   type        = string
 }
 

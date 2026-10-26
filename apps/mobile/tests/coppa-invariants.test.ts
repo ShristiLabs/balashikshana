@@ -69,7 +69,17 @@ const COPPA_RUNTIME_ALLOWLIST: Record<string, string[]> = {
     "expo-splash-screen",
     "expo-sqlite",
     "react",
+    // #71 web export additions — all first-party/established-OSS with
+    // ZERO network/ad/tracking surface: react-dom (React's official DOM
+    // renderer, required by react-native-web), react-native-web (the
+    // React Native -> DOM renderer, same codebase renders on Chromebooks),
+    // sql.js (SQLite compiled to WebAssembly, Apache-2.0; the web SQL
+    // seam — packs/lifecycle DB stay real SQLite, same as native). The
+    // wasm binary ships SAME-ORIGIN from public/vendor (no CDN fetch).
+    "react-dom",
     "react-native",
+    "react-native-web",
+    "sql.js",
     "react-native-reanimated",
     "react-native-safe-area-context",
     "react-native-svg",

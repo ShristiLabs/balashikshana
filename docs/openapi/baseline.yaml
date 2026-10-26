@@ -364,7 +364,13 @@ paths:
               $ref: "#/components/schemas/ParentTokenRequest"
       responses:
         "200":
-          description: Email verified
+          description: >
+            Email verified. Since #71 a successful verification also mints
+            the parent session (the caller just proved control of the
+            signup email; the client never persists passwords, so without
+            a minted session the signup path could not reach the
+            Bearer-gated consent-capture call). token + parent mirror the
+            login reply shape; both are additive to the original response.
           content:
             application/json:
               schema:
@@ -377,6 +383,11 @@ paths:
                   emailVerified:
                     type: boolean
                     const: true
+                  token:
+                    type: string
+                    description: Fresh parent session token (7-day TTL, 30-day refresh window).
+                  parent:
+                    $ref: "#/components/schemas/ParentAccount"
         "400":
           $ref: "#/components/responses/Validation"
         "413":

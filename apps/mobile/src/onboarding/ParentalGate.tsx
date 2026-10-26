@@ -16,7 +16,7 @@
  * gate conventions Apple and Google publish for kids apps.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, Text, View, type ViewStyle } from "react-native";
+import { Platform, Pressable, Text, View, type ViewStyle } from "react-native";
 import { ProgressBar } from "../design/primitives";
 import { useTheme } from "../design/theme";
 import { controlHeights, radius, spacing, tactile, typeRamp } from "../design/tokens";
@@ -87,6 +87,40 @@ export function ParentalGate({
     setProgress(0);
   }, [applyHold]);
 
+  // KEYBOARD PARITY (#71): react-native-web renders this Pressable as a
+  // native <button>, where Enter/Space fire a click (onPress) on key UP
+  // but never produce the pressIn/pressOut pair the hold gesture needs.
+  // The gate therefore attaches NATIVE DOM keyboard listeners on web
+  // (via ref — empirically the reliable path through RNW's composed
+  // event props): key DOWN begins the hold, key UP releases it —
+  // identical timing model, identical gateTimer, single shared
+  // implementation. Auto-repeat keydowns are filtered (repeat); Space
+  // is default-prevented so it cannot scroll the page. Native platforms
+  // never attach the listener.
+  const gateRef = useRef<React.ComponentRef<typeof Pressable> | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const el = gateRef.current as unknown as HTMLElement | null;
+    if (el === null || typeof el.addEventListener !== "function") return;
+    const isHoldKey = (key: string) => key === "Enter" || key === " ";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isHoldKey(event.key)) return;
+      event.preventDefault();
+      if (!event.repeat) onPressIn();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!isHoldKey(event.key)) return;
+      event.preventDefault();
+      onPressOut();
+    };
+    el.addEventListener("keydown", onKeyDown);
+    el.addEventListener("keyup", onKeyUp);
+    return () => {
+      el.removeEventListener("keydown", onKeyDown);
+      el.removeEventListener("keyup", onKeyUp);
+    };
+  }, [onPressIn, onPressOut]);
+
   return (
     <View style={{ gap: spacing.lg }} testID={testID ? `${testID}.root` : undefined}>
       <View style={{ gap: spacing.xs }}>
@@ -97,9 +131,14 @@ export function ParentalGate({
       </View>
 
       <Pressable
+        ref={gateRef}
         accessibilityRole="button"
         accessibilityLabel="Hold to confirm you are a grown-up"
-        accessibilityHint={`Press and hold for ${PARENTAL_GATE_HOLD_MS / 1000} seconds without lifting your finger`}
+        accessibilityHint={
+          Platform.OS === "web"
+            ? `Hold the Enter or Space key for ${PARENTAL_GATE_HOLD_MS / 1000} seconds without releasing`
+            : `Press and hold for ${PARENTAL_GATE_HOLD_MS / 1000} seconds without lifting your finger`
+        }
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         testID={testID}

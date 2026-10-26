@@ -22,7 +22,8 @@ export interface VerifyEmailStepProps {
   email: string;
   /** The dev-seam token stashed at signup, when present. */
   devToken: string | null;
-  onVerified: () => void;
+  /** #71: carries the server-minted parent session token, when present. */
+  onVerified: (mintedSessionToken?: string) => void;
   /** Escape hatch when the code never arrives: back to sign-in. */
   onBackToAccount?: () => void;
 }
@@ -45,8 +46,8 @@ export function VerifyEmailStep({
     setError(null);
     setBusy(true);
     try {
-      await api.verifyEmail(token.trim());
-      onVerified();
+      const result = await api.verifyEmail(token.trim());
+      onVerified(result.token);
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError("unknown", "Unexpected error"));
     } finally {

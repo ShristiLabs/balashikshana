@@ -27,7 +27,7 @@ import { AccessibilityInfo } from "react-native";
 import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
-import * as SQLite from "expo-sqlite";
+import * as SQLite from "../platform/sqlite";
 import { SFX_ASSETS, SFX_ASSET_KEYS } from "./assetModules";
 import { AudioCoordinator } from "./coordinator";
 import { SFX_BASE_VOLUME, warnOnce, type AudioDependencies } from "./coordinator";

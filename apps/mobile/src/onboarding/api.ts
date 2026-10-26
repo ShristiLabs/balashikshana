@@ -4,9 +4,9 @@
  * PURE module: no react-native imports; `fetchImpl` is injectable so the
  * vitest suite drives every error path with a mock.
  *
- * Error doctrine (this client fixes the dev-harness res.ok debt - the web
- * reference client in apps/mobile/public/index.html skips these checks;
- * that omission is deliberately NOT copied):
+ * Error doctrine (this client fixed the res.ok debt of the retired
+ * M2-era dev-harness reference client - that client skipped these
+ * checks; the omission was deliberately NOT copied):
  * - EVERY response is checked with res.ok BEFORE the body is consumed as
  *   success data.
  * - Error bodies are parsed as RFC 9457 problem+json documents
@@ -254,7 +254,18 @@ export interface DeviceSessionResult {
 
 export interface ApiClient {
   signup(email: string, password: string): Promise<SignupResult>;
-  verifyEmail(token: string): Promise<{ ok: boolean; emailVerified: boolean }>;
+  /**
+   * #71: a successful verification mints the parent session server-side
+   * (the email was just proven); token + parent mirror login's reply.
+   * Older servers without the mint return only {ok, emailVerified} and
+   * the caller falls back to the login path.
+   */
+  verifyEmail(token: string): Promise<{
+    ok: boolean;
+    emailVerified: boolean;
+    token?: string;
+    parent?: ParentPublicInfo;
+  }>;
   login(email: string, password: string): Promise<LoginResult>;
   refresh(token: string): Promise<{ token: string }>;
   parentLogout(token: string): Promise<{ ok: boolean }>;
@@ -295,9 +306,12 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       );
     },
     async verifyEmail(token) {
-      return expectResult<{ ok: boolean; emailVerified: boolean }>(
-        await call({ method: "POST", path: "/api/parents/verify-email", body: { token } }),
-      );
+      return expectResult<{
+        ok: boolean;
+        emailVerified: boolean;
+        token?: string;
+        parent?: ParentPublicInfo;
+      }>(await call({ method: "POST", path: "/api/parents/verify-email", body: { token } }));
     },
     async login(email, password) {
       return expectResult<LoginResult>(

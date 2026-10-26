@@ -57,3 +57,19 @@ per-unit guidebook modal, and the gamification crowns ledger (#55).
 Recommendation: the D1 retirement preconditions named in #49/#50 are
 now met; the decision itself belongs to the user (it gates the web
 fallback story for D1). No harness code changed in #49, #50, or #51.
+
+## RETIRED (#71, 2026-10-26) — the web export supersedes the harness
+
+Decision executed in #71 (final M6 issue): the dev harness is RETIRED.
+
+- WHAT WAS REMOVED: `apps/mobile/public/index.html` (the single-HTML
+  harness). Retirement was a BUILD REQUIREMENT, not just cleanup: the
+  web export copies `public/` verbatim into `dist/`, so the harness
+  index.html collided with the export's generated document shell.
+- WHAT REPLACES IT: the Expo web export of the REAL app
+  (`npx expo export --platform web`), served on the SAME origin+port
+  (:4200) by the repurposed `apps/mobile/server.mjs` — the harness's
+  one remaining unique value (browser dev interaction) is now the
+  actual product in a browser, with strictly better guarantees (signed
+  packs, offline storage, sync convergence — see docs/web-export.md).
+- The parity tables above are retained as the historical D1 record.

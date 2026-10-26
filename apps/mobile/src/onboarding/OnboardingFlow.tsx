@@ -87,16 +87,20 @@ export function OnboardingFlow() {
     [setSnapshotBoth],
   );
 
-  // Fire-and-forget transition persistence (UI steps; the mutation
-  // sequence awaits persist() itself where ordering is load-bearing).
-  const applyAndPersist = useCallback(
-    (event: Parameters<typeof applyEvent>[1]) => {
-      const current = snapshotRef.current;
-      if (!current) return;
-      void persist(applyEvent(current, event, Date.now()));
-    },
-    [persist],
-  );
+  // Gate completion (#71 fix, applies to BOTH platforms): the gate-passed
+  // event must advance the RENDERED step, not only the persisted snapshot
+  // — every other transition handler pairs setStep with its event, but
+  // the pre-#71 gate path persisted the event WITHOUT setStep, leaving
+  // the flow stuck on the (completed) gate. Same pattern as
+  // handleSignedUp.
+  const handleGatePassed = useCallback(() => {
+    const current = snapshotRef.current ?? initialSnapshot(Date.now());
+    const next = applyEvent(current, { type: "gate-passed" }, Date.now());
+    void (async () => {
+      await persist(next);
+      setStep(next.step);
+    })();
+  }, [persist]);
 
   // --- Bootstrap + reconcile --------------------------------------------------
   useEffect(() => {
@@ -282,19 +286,29 @@ export function OnboardingFlow() {
     [persist],
   );
 
-  const handleVerified = useCallback(async () => {
-    const flowDeps = depsRef.current;
-    if (!flowDeps) return;
-    await flowDeps.tokens.clearPendingVerificationToken();
-    setDevToken(null);
-    const next = applyEvent(
-      snapshotRef.current ?? initialSnapshot(Date.now()),
-      { type: "email-verified" },
-      Date.now(),
-    );
-    await persist(next);
-    setStep("consent");
-  }, [persist]);
+  const handleVerified = useCallback(
+    async (mintedSessionToken?: string) => {
+      const flowDeps = depsRef.current;
+      if (!flowDeps) return;
+      // #71 fix (both platforms): the server mints the parent session at
+      // verification time; persist it here so the consent-capture call
+      // (Bearer-gated) succeeds. Without it the flow bounced back to the
+      // account step after accepting consent.
+      if (mintedSessionToken) {
+        await flowDeps.tokens.setParentSessionToken(mintedSessionToken);
+      }
+      await flowDeps.tokens.clearPendingVerificationToken();
+      setDevToken(null);
+      const next = applyEvent(
+        snapshotRef.current ?? initialSnapshot(Date.now()),
+        { type: "email-verified" },
+        Date.now(),
+      );
+      await persist(next);
+      setStep("consent");
+    },
+    [persist],
+  );
 
   const handleAcceptConsent = useCallback(
     async (policyVersion: string) => {
@@ -518,7 +532,7 @@ export function OnboardingFlow() {
 
   switch (step) {
     case "gate":
-      return <GateStep onPassed={() => applyAndPersist({ type: "gate-passed" })} />;
+      return <GateStep onPassed={handleGatePassed} />;
     case "account":
       return (
         <AccountStep
@@ -534,7 +548,7 @@ export function OnboardingFlow() {
           api={api}
           email={snapshot.email ?? ""}
           devToken={devToken}
-          onVerified={() => void handleVerified()}
+          onVerified={(minted) => void handleVerified(minted)}
           onBackToAccount={() => setStep("account")}
         />
       );
@@ -569,6 +583,6 @@ export function OnboardingFlow() {
         />
       );
     default:
-      return <GateStep onPassed={() => applyAndPersist({ type: "gate-passed" })} />;
+      return <GateStep onPassed={handleGatePassed} />;
   }
 }

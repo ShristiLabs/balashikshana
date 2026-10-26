@@ -34,6 +34,7 @@ import { getNativeReminderSettingsStorage } from "../practice/nativePractice";
 import {
   applyReminderPlan,
   getReminderPermissionStatus,
+  remindersUnavailableOnWeb,
   requestReminderPermissionFromParentSurface,
 } from "./localReminders";
 
@@ -162,6 +163,26 @@ export function ReminderSettingsSection(): React.JSX.Element {
   );
 
   const blockedByPermission = loaded && settings.enabled && permission !== "granted";
+
+  // WEB EDITION (#71): browser push/notifications are out of doctrine
+  // (local-only reminders + kid-safe no-permission-prompt surface), so
+  // the toggle and steppers are replaced by an honest explanation. The
+  // saved choice (if any) is preserved untouched for native devices.
+  if (remindersUnavailableOnWeb) {
+    return (
+      <View style={{ gap: spacing.md }} accessibilityLabel="Daily practice reminder settings">
+        <Text style={{ ...typeRamp.h3, color: colors.text }}>Daily practice reminder</Text>
+        <Text
+          style={{ ...typeRamp.body, color: colors.text }}
+          testID="parent.reminders.web-unavailable"
+        >
+          Practice reminders are not available in the web edition. Browser notification permissions
+          are never requested here. Use the installed app on a phone or tablet to set a daily
+          reminder.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ gap: spacing.md }} accessibilityLabel="Daily practice reminder settings">
