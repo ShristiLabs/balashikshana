@@ -13,6 +13,7 @@ legal text.
 | Terms of Service (v1) | migration 014 seed (`legal_documents`, kind `terms-of-service`) | same three surfaces |
 | Consent statement (v2) | migration 014 seed (`consent_policy_versions` version `2`) | mobile onboarding consent screen (the text the parent accepts) |
 | Readable copies | `docs/legal/privacy-policy.md`, `docs/legal/terms-of-service.md`, the v2 statement quoted in this README | repo readability only |
+| FERPA/DPA posture notes | `docs/legal/ferpa-dpa-posture.md` (issue #70) | repo/engineering review — NOT rendered in-app; the B2B seam has no user-facing surface today |
 
 The **database rows are canonical** (the apps render from
 `GET /api/legal/:kind/latest` and `GET /api/consent/policy/latest`); the

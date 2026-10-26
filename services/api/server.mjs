@@ -27,6 +27,8 @@ import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
 import { placementPlugin } from "./placement.mjs";
 import { portalPlugin } from "./portal.mjs";
 import { dataRightsPlugin } from "./data-rights.mjs";
+import { b2bPlugin } from "./b2b.mjs";
+import { resolveLicenseVerifier, PUBLIC_KEY_ENV_VAR } from "./license-verifier.mjs";
 import { startRetentionSweep } from "./retention.mjs";
 import { startWeeklyDigestScheduler } from "./weekly-digest.mjs";
 import { defaultTransport, smtpConfigured } from "./mailer.mjs";
@@ -87,6 +89,11 @@ import { startMetricsListener } from "./observability/metrics-listener.mjs";
 // RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN  child-claim attempts/minute per IP (default 10; the
 //                                     claim route verifies student PINs, so it gets the
 //                                     M1 login-bucket doctrine)
+// RATE_LIMIT_B2B_ACTIVATE_PER_IP_MIN  license activations/minute per IP (default 10; #70)
+// RATE_LIMIT_B2B_ROSTER_PER_IP_MIN    roster dry-run validations/minute per IP (default 10; #70)
+// BALASHIKSHANA_LICENSE_PUBLIC_KEY    base64 32-byte Ed25519 public key for licensing-core
+//                                     license verification (#70; absent => PUBLIC dev key +
+//                                     loud production boot error; invalid => fail-closed 503)
 // RATE_LIMIT_SYNC_PER_TOKEN_MIN       sync requests/minute per device token (default 30;
 //                                     #48 — sized for batch traffic, env-tunable)
 // SYNC_MAX_ATTEMPTS_PER_BATCH         max attempts per sync batch (default 200)
@@ -160,6 +167,11 @@ const RATE_LIMIT_PARENT_CLAIM_PER_IP_MIN = Number(process.env.RATE_LIMIT_PARENT_
 // #62: the password re-authentication on child-data deletion (the
 // login-bucket doctrine for a password surface).
 const RATE_LIMIT_DELETE_PER_IP_MIN = Number(process.env.RATE_LIMIT_DELETE_PER_IP_MIN || 5);
+// #70: B2B seam body-heavy surfaces (license activation + roster dry-run
+// validation) — the login-bucket doctrine for parent-token surfaces that
+// parse untrusted structured input.
+const RATE_LIMIT_B2B_ACTIVATE_PER_IP_MIN = Number(process.env.RATE_LIMIT_B2B_ACTIVATE_PER_IP_MIN || 10);
+const RATE_LIMIT_B2B_ROSTER_PER_IP_MIN = Number(process.env.RATE_LIMIT_B2B_ROSTER_PER_IP_MIN || 10);
 const URL_LENGTH_LIMIT = 2048;
 const SESSION_TTL_MS = 30 * 86400000;
 
@@ -843,6 +855,29 @@ await app.register(dataRightsPlugin, {
   db,
   rateLimits: {
     delete: { max: RATE_LIMIT_DELETE_PER_IP_MIN, timeWindow: "1 minute" }
+  }
+});
+
+// B2B licensing seam (issue #70, roadmap D10): license activation, seat
+// validation, and the roster-import STUB under /api/b2b/* — all gated by
+// the #40 parent-session token (the activating parent IS the org admin
+// for the seam's lifetime; no teacher token kind exists yet). License
+// verification is OFFLINE against licensing-core semantics
+// (license-verifier.mjs). Key posture mirrors the SMTP flip precedent:
+// BALASHIKSHANA_LICENSE_PUBLIC_KEY absent in production = LOUD boot error,
+// no throw (dev/staging ECS run NODE_ENV=production with empty config;
+// the dev-key fallback cannot verify real licenses); an INVALID
+// configured key DISABLES verification (fail closed, 503 on activation).
+const b2bLicenseKey = resolveLicenseVerifier(process.env, { isProduction: IS_PRODUCTION });
+if (b2bLicenseKey.bootError) {
+  logger?.error?.(b2bLicenseKey.bootError);
+}
+await app.register(b2bPlugin, {
+  db,
+  verifier: b2bLicenseKey.verifier,
+  rateLimits: {
+    activate: { max: RATE_LIMIT_B2B_ACTIVATE_PER_IP_MIN, timeWindow: "1 minute" },
+    roster: { max: RATE_LIMIT_B2B_ROSTER_PER_IP_MIN, timeWindow: "1 minute" }
   }
 });
 

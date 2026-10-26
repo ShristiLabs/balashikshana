@@ -96,7 +96,8 @@ describe("migration tracking", () => {
         "011_deletion_audit",
         "012_weekly_digest",
         "013_error_events",
-        "014_legal_documents"
+        "014_legal_documents",
+        "015_b2b_licensing"
       ]
     );
   });

@@ -76,10 +76,16 @@ const COPPA_RUNTIME_ALLOWLIST: Record<string, string[]> = {
     "react-native-worklets",
   ],
   "apps/parent-portal/package.json": ["react", "react-dom"],
+  // @noble/ed25519 + @noble/hashes added by #70: pure audited cryptography
+  // (offline licensing-core seat-license verification) — the same libs the
+  // mobile app itself allowlists above for signed content packs; zero
+  // network/ad/tracking surface, zero transitive dependencies.
   "services/api/package.json": [
     "@fastify/cors",
     "@fastify/helmet",
     "@fastify/rate-limit",
+    "@noble/ed25519",
+    "@noble/hashes",
     "fastify",
     "node-pg-migrate",
     "nodemailer",

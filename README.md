@@ -103,6 +103,9 @@ All configuration is environment-driven (defaults in `services/api/server.mjs`):
 | `SMTP_PASS` | (unset) | SMTP password (credentials live only in env — never in code or logs) |
 | `SMTP_FROM` | `Balashikshana <no-reply@balashikshana.local>` | Envelope From for the weekly digest and parent-auth transactional mail |
 | `MAIL_CAPTURE_FILE` | (unset) | TEST/DEBUG ONLY (issue #69): file-capture transport (every envelope as a JSON line) with precedence over SMTP. Never set in any deployment environment — the capture file contains the delivered auth codes; a test scans infra/deploy for it |
+| `BALASHIKSHANA_LICENSE_PUBLIC_KEY` | (unset) | Base64 32-byte Ed25519 public key for licensing-core seat-license verification (issue #70 B2B seam). Unset + `NODE_ENV=production` -> loud boot error + the PUBLIC licensing-core dev key (cannot verify real licenses); set but invalid -> verification DISABLED fail-closed (activations 503 until fixed); never a silent fallback |
+| `RATE_LIMIT_B2B_ACTIVATE_PER_IP_MIN` | `10` | B2B license activations per minute per IP (issue #70) |
+| `RATE_LIMIT_B2B_ROSTER_PER_IP_MIN` | `10` | B2B roster dry-run validations per minute per IP (issue #70) |
 | `SYNC_MAX_ATTEMPTS_PER_BATCH` | `200` | Hard cap on attempts per sync batch (OpenAPI `maxItems`; the mobile engine clamps its drain window to the same cap) |
 | `SYNC_FUTURE_CLOCK_TOLERANCE_MS` | `300000` | Client-clock future tolerance before an attempt timestamp is clamped to server receive time (issue #48 clock policy; past timestamps are accepted as-is) |
 | `BALASHIKSHANA_CONTENT_PACKS_DIR` | `services/api/content-packs` | Directory the content-pack routes serve the compiled manifest index + signed artifacts from (gitignored compiler output; the routes 503 with problem+json until a build is published) |
@@ -365,6 +368,13 @@ The strictest launch gate: Apple Kids Category + Google Play Families listings w
 - **Traceable store forms:** `docs/store/data-safety-traceability.md` maps every Apple Privacy Nutrition and Play Data Safety answer to a `docs/data-flow-inventory.md` row and the enforcing code — test-enforced (`services/api/test/store-pack.test.mjs` fails CI on dangling references or evidence-less rows). Play "sharing = No" carries the service-provider analysis and a user-side re-verification note; at-rest encryption is honestly not claimed.
 - **Native config made true:** the expo-audio plugin defaults (mic/record, background audio, overlay + storage permissions) were config drift against the playback-only runtime — stripped and prebuild-verified (Android active: INTERNET, MODIFY_AUDIO_SETTINGS, VIBRATE; iOS: zero usage descriptions, no background modes). `apps/mobile/tests/store-config.test.ts` pins the plugin config, the blocked set, and the single-endpoint disclosure (every egress in shipped src goes through `EXPO_PUBLIC_API_BASE`).
 
+### 30. B2B Licensing Seam (issue #70)
+Roadmap D10's "seam, not a product": school/district seat-license validation standing on ShristiLabs licensing-core, plus a roster-import STUB and FERPA/DPA posture notes. The future schools platform (teacher UX, classes, billing) builds ON this; nothing here is a school admin surface, and the licensing platform keeps issuance/billing.
+
+- **Real offline verification, not a stub:** `services/api/license-verifier.mjs` implements licensing-core's exact wire contract in JS — canonical JSON (recursively key-sorted, compact), detached Ed25519 via the audited `@noble/ed25519` (the mobile content-pack pattern), expiry-then-pin ordering, and a `balashikshana` product pin. A pinned GOLDEN VECTOR test proves format compatibility with the Rust implementation (Ed25519 is RFC 8032-deterministic); serde parity (unknown fields ignored) is pinned too. Products embed ONLY the public key: `BALASHIKSHANA_LICENSE_PUBLIC_KEY` in production (loud boot error if absent, fail-closed 503 if malformed — never a silent dev-key fallback); the dev fallback is licensing-core's PUBLIC dev keypair, derived at runtime.
+- **Seat model + roster stub:** migration 015 (`organizations` one-per-parent-owner, `organization_licenses` globally-unique append-only activation evidence with one ACTIVE license per org and local revocation, `organization_seats` opaque per-org subjects). Seat claims re-validate expiry at write time; concurrent activations are race-safe (ON CONFLICT + honest 409s; race-pin tested). `POST /api/b2b/roster/validate` is a validation-only dry run (CSV or JSON, per-row reasons + seat projection) with ZERO writes — row-count-delta-test-enforced — and counts-only logging (roster names/emails never reach logs).
+- **FERPA/DPA posture, honestly scoped:** `docs/legal/ferpa-dpa-posture.md` maps the school-official exception onto TODAY's data model (no school channel exists; the only child-data path remains the parent-consented COPPA flow), carries a DPA-ready checklist with honest partials + placeholders, and claims nothing beyond the engineering posture — counsel banner throughout. Architecture + the licensing-core integration path: `docs/b2b/licensing-seam.md`.
+
 ---
 
 ## Repository Structure & Documentation
@@ -411,8 +421,9 @@ balashikshana/
 │   ├── security-review.md                    # Whole-system external-style security review: severity-triaged findings fixed-vs-debt, verified-good surfaces w/ evidence (issue #68)
 │   ├── families-kids-self-check.md           # Apple Kids + Play Families self-check: SDK scan, link audit, parental-gate bypass matrix — evidence-cited (issue #68)
 │   ├── data-flow-inventory.md                # Every personal-info class: storage, purpose, flows out, retention; source of truth for #69 store forms (issue #68)
-│   ├── legal/                                # COPPA legal pack: versioned privacy policy + terms mirrors, consent statement, publishing/re-consent runbook (issue #68)
+│   ├── legal/                                # COPPA legal pack: versioned privacy policy + terms mirrors, consent statement, FERPA/DPA posture notes, publishing/re-consent runbook (issues #68, #70)
 │   ├── store/                                # Store submissions pack: traceability matrix, Apple Kids + Play Families listings, age ratings, review notes, pre-filing checklist (issue #69)
+│   ├── b2b/                                  # B2B licensing seam architecture: claim verification path, seat model, roster stub, licensing-core integration path (issue #70)
 │   ├── gateway.md                            # Dwara edge runbook: consumers + credentials ADR, rate-limit layering, TLS/mTLS ops, staged rollout (issue #65)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)

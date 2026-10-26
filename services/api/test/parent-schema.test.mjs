@@ -519,12 +519,13 @@ describe("migration 002 reversibility", () => {
   // settings, 011 (issue #62) layers the deletion audit ledger, 012
   // (issue #63) layers the weekly digest sent-ledger + parent opt-out
   // column, 013 (issue #66) layers the first-party error_events store,
-  // and 014 (issue #68) layers the legal_documents catalog + the consent
-  // policy v2 bump, so the rollback removes all thirteen post-001
-  // migrations (in order) and the up restores them; the reversibility
-  // contract is unchanged.
-  test("down removes exactly the 002..014 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 13 });
+  // 014 (issue #68) layers the legal_documents catalog + the consent
+  // policy v2 bump, and 015 (issue #70) layers the B2B licensing seam
+  // (organizations + organization_licenses + organization_seats), so the
+  // rollback removes all fourteen post-001 migrations (in order) and the
+  // up restores them; the reversibility contract is unchanged.
+  test("down removes exactly the 002..015 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 14 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -548,7 +549,10 @@ describe("migration 002 reversibility", () => {
            to_regclass('student_placement_records') AS student_placement_records,
            to_regclass('portal_child_settings') AS portal_child_settings,
            to_regclass('weekly_digest_sent') AS weekly_digest_sent,
-           to_regclass('legal_documents') AS legal_documents`
+           to_regclass('legal_documents') AS legal_documents,
+           to_regclass('organizations') AS organizations,
+           to_regclass('organization_licenses') AS organization_licenses,
+           to_regclass('organization_seats') AS organization_seats`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -568,7 +572,10 @@ describe("migration 002 reversibility", () => {
       student_placement_records: null,
       portal_child_settings: null,
       weekly_digest_sent: null,
-      legal_documents: null
+      legal_documents: null,
+      organizations: null,
+      organization_licenses: null,
+      organization_seats: null
     });
 
     // 012's parents.weekly_email_enabled column is gone with the rollback.
@@ -602,9 +609,10 @@ describe("migration 002 reversibility", () => {
         "011_deletion_audit",
         "012_weekly_digest",
         "013_error_events",
-        "014_legal_documents"
+        "014_legal_documents",
+        "015_b2b_licensing"
       ],
-      "up must re-apply 002 through 014"
+      "up must re-apply 002 through 015"
     );
 
     const back = (
@@ -619,7 +627,10 @@ describe("migration 002 reversibility", () => {
            to_regclass('parent_tokens') AS parent_tokens,
            to_regclass('consent_policy_versions') AS consent_policy_versions,
            to_regclass('child_device_sessions') AS child_device_sessions,
-           to_regclass('legal_documents') AS legal_documents`
+           to_regclass('legal_documents') AS legal_documents,
+           to_regclass('organizations') AS organizations,
+           to_regclass('organization_licenses') AS organization_licenses,
+           to_regclass('organization_seats') AS organization_seats`
       )
     ).rows[0];
     for (const [object, regclass] of Object.entries(back)) {
