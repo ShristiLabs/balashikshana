@@ -87,7 +87,7 @@ async function consentedParentWithStudent() {
 
 // The ops policy bump (see migration 004 notes): deactivate the current
 // active row, insert a fresh active one. Each call mints a unique version
-// so repeated bumps in one suite never collide; the v1 seed is restored in
+// so repeated bumps in one suite never collide; the v2 baseline is restored in
 // afterEach. Policy rows are append-only — nothing is deleted here.
 async function bumpPolicy() {
   const version = `t2${++seq}`;
@@ -148,8 +148,8 @@ afterEach(async () => {
   // order its siblings ran in. Deactivate-others first — the partial unique
   // index allows exactly one active row per locale.
   try {
-    await db.query("UPDATE consent_policy_versions SET active = false WHERE version <> '1'");
-    await db.query("UPDATE consent_policy_versions SET active = true WHERE version = '1' AND active = false");
+    await db.query("UPDATE consent_policy_versions SET active = false WHERE version <> '2'");
+    await db.query("UPDATE consent_policy_versions SET active = true WHERE version = '2' AND active = false");
   } catch {
     // never mask a test failure with cleanup noise
   }
@@ -308,7 +308,7 @@ describe("fail-closed policy resolution (no active policy)", () => {
     await db.query("UPDATE consent_policy_versions SET active = false WHERE active");
     const before = await counts();
 
-    const capture = await captureConsent(parent.token, "1");
+    const capture = await captureConsent(parent.token, "2");
     assert.equal(capture.status, 500, "capture must fail closed when there is nothing to consent to");
     assert.equal(capture.json.type, "https://balashikshana.dev/problems/internal");
 

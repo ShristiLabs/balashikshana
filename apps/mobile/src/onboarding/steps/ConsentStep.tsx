@@ -14,6 +14,7 @@ import { Badge, Button, ProgressBar } from "../../design/primitives";
 import { useTheme } from "../../design/theme";
 import { spacing, typeRamp } from "../../design/tokens";
 import { ApiError, type ApiClient } from "../api";
+import { LegalDocuments } from "../LegalDocuments";
 import { ErrorBanner, StepHeading, StepScroll } from "./shared";
 
 export interface ConsentStepProps {
@@ -103,6 +104,10 @@ export function ConsentStep({ api, onAccept, isReconsent }: ConsentStepProps) {
             >
               <Text style={{ ...typeRamp.bodyMuted, color: colors.text }}>{policy.policyText}</Text>
             </View>
+            {/* Legal pack (issue #68): the Privacy Policy and Terms of
+                Service are reachable BEFORE the accept button — the parent
+                reads what they are agreeing to (COPPA good practice). */}
+            <LegalDocuments api={api} testID="onboarding.consent.legal" />
             <Button
               label="I agree"
               onPress={() => void accept()}

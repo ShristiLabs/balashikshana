@@ -64,7 +64,7 @@ paths:
     get:
       tags: [students]
       operationId: listStudents
-      summary: Public profile cards for the login screen
+      summary: Profile cards for the login screen
       description: |
         Returns public profile fields only. With a valid session token the
         response additionally carries `ownSummary` (the caller's own
@@ -72,6 +72,12 @@ paths:
         included. Archived child profiles are excluded (#42: archived
         students disappear from the login-screen listing); student-session
         and child-device session tokens both receive their own summary.
+        PRODUCTION data minimization (#68 security review): when
+        NODE_ENV=production the route requires a student or child-device
+        session and returns ONLY the caller's own card (anonymous callers
+        get 401; parent tokens 403 wrong-token-type — parents use
+        /api/parent/children). The full anonymous listing is a dev-harness
+        convenience and never ships.
       parameters:
         - $ref: "#/components/parameters/SessionToken"
       responses:
@@ -89,6 +95,10 @@ paths:
                       $ref: "#/components/schemas/StudentPublic"
                   ownSummary:
                     $ref: "#/components/schemas/StudentSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -595,8 +605,12 @@ paths:
         Returns the single active row of the append-only
         `consent_policy_versions` catalog for the client to render before
         onboarding. Public by design (policy text is not personal data).
-        The seeded v1 text is a placeholder clearly marked NON-LEGAL; the
-        production text arrives with the M6 compliance pack.
+        Since migration 014 (#68) the active version is the production
+        consent statement (v2, referencing the in-app Privacy Policy and
+        Terms of Service); the v1 NON-LEGAL placeholder row is retained as
+        append-only evidence. A policy bump (new active row) makes every
+        older consent insufficient for NEW child-data creation until the
+        parent re-consents.
       responses:
         "200":
           description: Active policy version
@@ -604,6 +618,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ConsentPolicyResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/legal/privacy-policy/latest:
+    get:
+      tags: [legal]
+      operationId: getLatestPrivacyPolicy
+      summary: The active privacy policy version and text (public, #68)
+      description: |
+        Returns the active row of the append-only `legal_documents` catalog
+        for kind=privacy-policy. Public by nature (the text must be
+        reachable BEFORE consent capture — COPPA good practice); rendered
+        in-app on the onboarding consent screen, in the gated parent area,
+        and in the parent-portal footer. Legal document versions are
+        independent of the consent policy version: publishing a new
+        privacy-policy text does NOT trigger re-consent.
+      responses:
+        "200":
+          description: Active privacy policy version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDocumentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/legal/terms-of-service/latest:
+    get:
+      tags: [legal]
+      operationId: getLatestTermsOfService
+      summary: The active terms of service version and text (public, #68)
+      description: |
+        Returns the active row of the append-only `legal_documents` catalog
+        for kind=terms-of-service. Same public/reachability doctrine as
+        the privacy policy endpoint above.
+      responses:
+        "200":
+          description: Active terms of service version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDocumentResponse"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
@@ -2450,12 +2514,35 @@ components:
       properties:
         version:
           type: string
-          description: Active policy version (e.g. "1"); the value consent captures must reference
+          description: Active policy version (e.g. "2"); the value consent captures must reference
         locale:
           type: string
         policyText:
           type: string
-          description: Full policy text (v1 is a placeholder clearly marked NON-LEGAL until the M6 compliance pack)
+          description: Full consent-statement text (v2 production statement since migration 014; drafts carry the counsel-review banner)
+        createdAt:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+          const: true
+
+    LegalDocumentResponse:
+      type: object
+      required: [kind, version, locale, body, createdAt, active]
+      properties:
+        kind:
+          type: string
+          enum: [privacy-policy, terms-of-service]
+          description: Document kind; one row space per kind in the append-only legal_documents catalog
+        version:
+          type: string
+          description: Active document version (namespace is per-kind, independent of consent policy versions)
+        locale:
+          type: string
+        body:
+          type: string
+          description: Full document text (drafts carry the counsel-review banner; publishing a new version never triggers re-consent by itself)
         createdAt:
           type: string
           format: date-time

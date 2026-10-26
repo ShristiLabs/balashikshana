@@ -95,7 +95,8 @@ describe("migration tracking", () => {
         "010_portal_child_settings",
         "011_deletion_audit",
         "012_weekly_digest",
-        "013_error_events"
+        "013_error_events",
+        "014_legal_documents"
       ]
     );
   });

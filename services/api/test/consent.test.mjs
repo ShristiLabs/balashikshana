@@ -131,21 +131,25 @@ describe("pristine database posture", () => {
 });
 
 describe("GET /api/consent/policy/latest (public)", () => {
-  test("returns the active v1 placeholder marked NON-LEGAL", async () => {
+  test("returns the active v2 production consent statement (migration 014)", async () => {
     const res = await api("/api/consent/policy/latest");
     assert.equal(res.status, 200);
-    assert.equal(res.json.version, "1");
+    assert.equal(res.json.version, "2");
     assert.equal(res.json.locale, "en-US");
     assert.equal(res.json.active, true);
-    assert.match(res.json.policyText, /NOT LEGAL ADVICE/);
+    // The v2 statement is the real consent text (draft banner, references
+    // the legal pack) — the NON-LEGAL placeholder era ended with #68.
+    assert.match(res.json.policyText, /DRAFT/i);
+    assert.match(res.json.policyText, /Privacy Policy and Terms of Service/);
+    assert.doesNotMatch(res.json.policyText, /NOT LEGAL ADVICE/);
     assert.ok(res.json.createdAt);
   });
 
   test("with no active policy the route fails closed with 404 (restored after)", async () => {
-    await db.query("UPDATE consent_policy_versions SET active = false WHERE version = '1'");
+    await db.query("UPDATE consent_policy_versions SET active = false WHERE active");
     const res = await api("/api/consent/policy/latest");
     assert.equal(res.status, 404);
-    await db.query("UPDATE consent_policy_versions SET active = true WHERE version = '1'");
+    await db.query("UPDATE consent_policy_versions SET active = true WHERE version = '2'");
     const back = await api("/api/consent/policy/latest");
     assert.equal(back.status, 200);
   });
@@ -154,17 +158,17 @@ describe("GET /api/consent/policy/latest (public)", () => {
 describe("POST /api/consent/records (capture)", () => {
   test("no token -> 401; no row written", async () => {
     const before = (await counts()).consent;
-    const res = await captureConsent(null, "1");
+    const res = await captureConsent(null, "2");
     assert.equal(res.status, 401);
     assert.equal((await counts()).consent, before);
   });
 
   test("student token -> 403 wrong-token-type; no row written", async () => {
     const parent = await createVerifiedParent();
-    await captureConsent(parent.token, "1");
+    await captureConsent(parent.token, "2");
     const student = await registerGatedStudent(parent, { username: `capkind${++seq}`, nickname: "CapKind" });
     const before = (await counts()).consent;
-    const res = await captureConsent(student.token, "1");
+    const res = await captureConsent(student.token, "2");
     assert.equal(res.status, 403);
     assert.equal(res.json.type, "https://balashikshana.dev/problems/wrong-token-type");
     assert.equal((await counts()).consent, before);
@@ -179,7 +183,7 @@ describe("POST /api/consent/records (capture)", () => {
     assert.equal(login.json.parent.emailVerified, false);
 
     const before = (await counts()).consent;
-    const res = await captureConsent(login.json.token, "1");
+    const res = await captureConsent(login.json.token, "2");
     assert.equal(res.status, 403);
     assert.equal(res.json.type, "https://balashikshana.dev/problems/email-verification-required");
     assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
@@ -192,19 +196,19 @@ describe("POST /api/consent/records (capture)", () => {
     const res = await captureConsent(parent.token, "999");
     assert.equal(res.status, 409);
     assert.equal(res.json.type, "https://balashikshana.dev/problems/policy-version-mismatch");
-    assert.equal(res.json.currentPolicyVersion, "1");
+    assert.equal(res.json.currentPolicyVersion, "2");
     assert.equal((await counts()).consent, before);
   });
 
   test("first capture -> 201, server-stamped timestamps, method signup-form, append-only row", async () => {
     const parent = await createVerifiedParent();
     const beforeCapture = Date.now() - 5000;
-    const res = await captureConsent(parent.token, "1");
+    const res = await captureConsent(parent.token, "2");
     assert.equal(res.status, 201, JSON.stringify(res.json));
     assert.match(res.json.consentId, /^con-/);
     assert.equal(res.json.parentId, parent.parentId);
     assert.equal(res.json.studentId, null);
-    assert.equal(res.json.policyVersion, "1");
+    assert.equal(res.json.policyVersion, "2");
     assert.equal(res.json.method, "signup-form");
     assert.ok(new Date(res.json.capturedAt).getTime() >= beforeCapture, "capturedAt must be server-stamped now()");
 
@@ -217,7 +221,7 @@ describe("POST /api/consent/records (capture)", () => {
   test("client cannot assert a method, timestamp, or extra fields (closed schema 400)", async () => {
     const parent = await createVerifiedParent();
     for (const extra of [{ method: "carrier-pigeon" }, { capturedAt: "2020-01-01T00:00:00Z" }, { bogus: true }]) {
-      const res = await captureConsent(parent.token, "1", extra);
+      const res = await captureConsent(parent.token, "2", extra);
       assert.equal(res.status, 400, `extra fields must be rejected: ${JSON.stringify(extra)}`);
       assert.equal(res.json.title, "Validation failed");
     }
@@ -225,9 +229,9 @@ describe("POST /api/consent/records (capture)", () => {
 
   test("second capture by the same parent is derived as re-consent", async () => {
     const parent = await createVerifiedParent();
-    const first = await captureConsent(parent.token, "1");
+    const first = await captureConsent(parent.token, "2");
     assert.equal(first.json.method, "signup-form");
-    const second = await captureConsent(parent.token, "1");
+    const second = await captureConsent(parent.token, "2");
     assert.equal(second.status, 201);
     assert.equal(second.json.method, "re-consent");
     // Append-only: the first row is untouched by the second capture.
@@ -239,7 +243,7 @@ describe("POST /api/consent/records (capture)", () => {
 
   test("studentId without a parent_children binding -> 403 no-child-binding; with a binding -> 201 naming the student", async () => {
     const parent = await createVerifiedParent();
-    await captureConsent(parent.token, "1");
+    await captureConsent(parent.token, "2");
     const student = await registerGatedStudent(parent, { username: `bound${++seq}`, nickname: "Bound" });
 
     // Since #42, registration itself writes the binding, so an UNBOUND
@@ -251,7 +255,7 @@ describe("POST /api/consent/records (capture)", () => {
        VALUES ($1, $2, $3, 'Unbound', 'fox', 6, 'kindergarten', now(), now(), 'legacy')`,
       [unboundId, `unbound${unboundId}`, hashPinScrypt("4848")]
     );
-    const refused = await captureConsent(parent.token, "1", { studentId: unboundId });
+    const refused = await captureConsent(parent.token, "2", { studentId: unboundId });
     assert.equal(refused.status, 403);
     assert.equal(refused.json.type, "https://balashikshana.dev/problems/no-child-binding");
     // The unbound row is test scaffolding, not a route-created student:
@@ -267,7 +271,7 @@ describe("POST /api/consent/records (capture)", () => {
       ])
     ).rows[0];
     assert.ok(binding, "registration must write the parent_children binding since #42");
-    const ok = await captureConsent(parent.token, "1", { studentId: student.student.studentId });
+    const ok = await captureConsent(parent.token, "2", { studentId: student.student.studentId });
     assert.equal(ok.status, 201, JSON.stringify(ok.json));
     assert.equal(ok.json.studentId, student.student.studentId);
     const row = (await db.query("SELECT student_id FROM consent_records WHERE consent_id = $1", [ok.json.consentId])).rows[0];
@@ -285,18 +289,18 @@ describe("GET /api/consent/status", () => {
     const parent = await createVerifiedParent();
     const res = await api("/api/consent/status", { token: parent.token });
     assert.equal(res.status, 200);
-    assert.equal(res.json.currentPolicyVersion, "1");
+    assert.equal(res.json.currentPolicyVersion, "2");
     assert.equal(res.json.consentCurrent, false);
     assert.equal(res.json.latestConsent, null);
   });
 
   test("after capture: current true with the latest row surfaced", async () => {
     const parent = await createVerifiedParent();
-    await captureConsent(parent.token, "1");
+    await captureConsent(parent.token, "2");
     const res = await api("/api/consent/status", { token: parent.token });
     assert.equal(res.status, 200);
     assert.equal(res.json.consentCurrent, true);
-    assert.equal(res.json.latestConsent.policyVersion, "1");
+    assert.equal(res.json.latestConsent.policyVersion, "2");
     assert.equal(res.json.latestConsent.studentId, null);
   });
 });
@@ -322,21 +326,21 @@ describe("consent-required middleware: POST /api/students", () => {
     });
     assert.equal(res.status, 403);
     assert.equal(res.json.type, "https://balashikshana.dev/problems/consent-required");
-    assert.equal(res.json.currentPolicyVersion, "1");
+    assert.equal(res.json.currentPolicyVersion, "2");
     assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
     assert.deepEqual(await counts(), before, "a refused creation must write nothing");
   });
 
   test("consented parent -> 201 and the student-scoped binding consent row exists", async () => {
     const parent = await createVerifiedParent();
-    await captureConsent(parent.token, "1");
+    await captureConsent(parent.token, "2");
     const created = await registerGatedStudent(parent);
     const binding = (
       await db.query("SELECT * FROM consent_records WHERE student_id = $1", [created.student.studentId])
     ).rows[0];
     assert.ok(binding, "creation must insert the student-scoped binding consent row");
     assert.equal(binding.parent_id, parent.parentId);
-    assert.equal(binding.policy_version, "1");
+    assert.equal(binding.policy_version, "2");
     assert.ok(binding.captured_at, "binding row timestamps are server-side");
     // The 201 contract is unchanged: a student session token is issued.
     assert.ok(created.token);
@@ -350,7 +354,7 @@ describe("consent-required middleware: progress routes", () => {
 
   beforeAll(async () => {
     consentedParent = await createVerifiedParent();
-    const res = await captureConsent(consentedParent.token, "1");
+    const res = await captureConsent(consentedParent.token, "2");
     assert.equal(res.status, 201, JSON.stringify(res.json));
     consented = await registerGatedStudent(consentedParent, { username: `progress${++seq}`, nickname: "Progress" });
   });
@@ -402,7 +406,7 @@ describe("consent-required middleware: progress routes", () => {
     });
     assert.equal(practice.status, 403);
     assert.equal(practice.json.type, "https://balashikshana.dev/problems/consent-required");
-    assert.equal(practice.json.currentPolicyVersion, "1");
+    assert.equal(practice.json.currentPolicyVersion, "2");
 
     const gate = await api("/api/gate/evaluate", {
       method: "POST",
@@ -477,7 +481,7 @@ describe("re-consent on policy bump (end to end)", () => {
   test("bump -> stale consent fails everywhere -> re-consent restores access", async () => {
     // Parent consents at v1 and creates a child.
     const parent = await createVerifiedParent();
-    await captureConsent(parent.token, "1");
+    await captureConsent(parent.token, "2");
     const child = await registerGatedStudent(parent, { username: `reconsent${++seq}`, nickname: "ReConsent" });
 
     const practiceOk = await api("/api/practice/topic/complete", {
@@ -492,11 +496,13 @@ describe("re-consent on policy bump (end to end)", () => {
     });
     assert.equal(practiceOk.status, 200, JSON.stringify(practiceOk.json));
 
-    // --- The bump: flip v1 inactive, insert v2 active (ops flow, direct).
-    await db.query("UPDATE consent_policy_versions SET active = false WHERE version = '1'");
+    // --- The bump: flip v2 inactive, insert v3 active (ops flow, direct).
+    // (Baseline moved to v2 by migration 014 — the production consent
+    // statement — so this test bumps to v3.)
+    await db.query("UPDATE consent_policy_versions SET active = false WHERE version = '2'");
     await db.query(
-      "INSERT INTO consent_policy_versions (version, locale, policy_text, active) VALUES ('2', 'en-US', $1, true)",
-      ["v2 test policy — bumped text"]
+      "INSERT INTO consent_policy_versions (version, locale, policy_text, active) VALUES ('3', 'en-US', $1, true)",
+      ["v3 test policy — bumped text"]
     );
     // The partial unique index forbids a second active row per locale.
     await assert.rejects(
@@ -504,14 +510,14 @@ describe("re-consent on policy bump (end to end)", () => {
       (err) => err.code === "23505"
     );
 
-    // Policy surfacing picks up v2.
+    // Policy surfacing picks up v3.
     const latest = await api("/api/consent/policy/latest");
     assert.equal(latest.status, 200);
-    assert.equal(latest.json.version, "2");
+    assert.equal(latest.json.version, "3");
 
     const status = await api("/api/consent/status", { token: parent.token });
-    assert.equal(status.json.consentCurrent, false, "v1 consent must read as stale");
-    assert.equal(status.json.currentPolicyVersion, "2");
+    assert.equal(status.json.consentCurrent, false, "v2 consent must read as stale");
+    assert.equal(status.json.currentPolicyVersion, "3");
 
     // Stale consent refuses NEW child-data creation on every gated route.
     const before = await counts();
@@ -522,7 +528,7 @@ describe("re-consent on policy bump (end to end)", () => {
     });
     assert.equal(createStale.status, 403);
     assert.equal(createStale.json.type, "https://balashikshana.dev/problems/consent-required");
-    assert.equal(createStale.json.currentPolicyVersion, "2");
+    assert.equal(createStale.json.currentPolicyVersion, "3");
 
     const practiceStale = await api("/api/practice/topic/complete", {
       method: "POST",
@@ -535,19 +541,19 @@ describe("re-consent on policy bump (end to end)", () => {
       }
     });
     assert.equal(practiceStale.status, 403);
-    assert.equal(practiceStale.json.currentPolicyVersion, "2");
+    assert.equal(practiceStale.json.currentPolicyVersion, "3");
     assert.deepEqual(await counts(), before, "stale-consent attempts must write nothing");
 
     // Capturing at the OLD version is a mismatch; at the NEW version it is
     // a re-consent (method derived server-side).
-    const staleCapture = await captureConsent(parent.token, "1");
+    const staleCapture = await captureConsent(parent.token, "2");
     assert.equal(staleCapture.status, 409);
-    assert.equal(staleCapture.json.currentPolicyVersion, "2");
-    const recapture = await captureConsent(parent.token, "2");
+    assert.equal(staleCapture.json.currentPolicyVersion, "3");
+    const recapture = await captureConsent(parent.token, "3");
     assert.equal(recapture.status, 201, JSON.stringify(recapture.json));
     assert.equal(recapture.json.method, "re-consent");
 
-    // Re-consent RESTORES access end to end: the parent-level v2 row covers
+    // Re-consent RESTORES access end to end: the parent-level v3 row covers
     // the bound child through consent lineage, no re-binding needed.
     const statusAfter = await api("/api/consent/status", { token: parent.token });
     assert.equal(statusAfter.json.consentCurrent, true);
@@ -572,12 +578,12 @@ describe("re-consent on policy bump (end to end)", () => {
     assert.equal(gateRestored.status, 200, JSON.stringify(gateRestored.json));
 
     // New children can be created under the re-consented parent, and their
-    // binding rows cite v2.
+    // binding rows cite v3.
     const child2 = await registerGatedStudent(parent, { username: `reconsent2-${++seq}`, nickname: "ReConsent2" });
     const binding2 = (
       await db.query("SELECT policy_version FROM consent_records WHERE student_id = $1", [child2.student.studentId])
     ).rows[0];
-    assert.equal(binding2.policy_version, "2");
+    assert.equal(binding2.policy_version, "3");
   });
 });
 
@@ -612,9 +618,9 @@ describe("the consent invariant (roadmap M2 verification item)", () => {
     // re-consent ADDED rows, the API has no update path).
     const rows = (await db.query("SELECT policy_version, method FROM consent_records ORDER BY captured_at ASC")).rows;
     assert.ok(rows.length >= 8, "suite must have exercised multiple captures");
-    const v1Signup = rows.filter((r) => r.policy_version === "1" && r.method === "signup-form").length;
-    const v1Re = rows.filter((r) => r.policy_version === "1" && r.method === "re-consent").length;
+    const v2Signup = rows.filter((r) => r.policy_version === "2" && r.method === "signup-form").length;
     const v2Re = rows.filter((r) => r.policy_version === "2" && r.method === "re-consent").length;
-    assert.ok(v1Signup >= 1 && v1Re >= 1 && v2Re >= 1, `expected signup-form, v1 re-consent and v2 re-consent rows, got ${JSON.stringify(rows)}`);
+    const v3Re = rows.filter((r) => r.policy_version === "3" && r.method === "re-consent").length;
+    assert.ok(v2Signup >= 1 && v2Re >= 1 && v3Re >= 1, `expected signup-form, v2 re-consent and v3 re-consent rows, got ${JSON.stringify(rows)}`);
   });
 });

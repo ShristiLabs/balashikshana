@@ -177,8 +177,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   try {
-    await db.query("UPDATE consent_policy_versions SET active = false WHERE version <> '1'");
-    await db.query("UPDATE consent_policy_versions SET active = true WHERE version = '1' AND active = false");
+    await db.query("UPDATE consent_policy_versions SET active = false WHERE version <> '2'");
+    await db.query("UPDATE consent_policy_versions SET active = true WHERE version = '2' AND active = false");
   } catch {
     // never mask a test failure with cleanup noise
   }
@@ -225,7 +225,7 @@ describe("consent gates on the new creation paths", () => {
     });
     assert.equal(res.status, 403);
     assert.equal(res.json.type, `${P}/consent-required`);
-    assert.equal(res.json.currentPolicyVersion, "1");
+    assert.equal(res.json.currentPolicyVersion, "2");
     assert.deepEqual(await counts(), before, "a refused creation must write nothing");
   });
 

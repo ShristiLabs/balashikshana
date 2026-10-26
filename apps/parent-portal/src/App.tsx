@@ -11,6 +11,7 @@ import type { ParentPublic } from "./types";
 import { LoginPage } from "./components/LoginPage";
 import { ChildrenOverview } from "./components/ChildrenOverview";
 import { ChildDetail } from "./components/ChildDetail";
+import { LegalFooter } from "./components/LegalFooter";
 
 type View = { page: "login" } | { page: "children" } | { page: "child"; studentId: string };
 
@@ -99,6 +100,8 @@ export function App() {
           </div>
         ) : null}
         <LoginPage onLoggedIn={onLoggedIn} />
+        {/* Legal pack (#68): reachable pre-login too — public documents. */}
+        <LegalFooter />
       </>
     );
   }
@@ -139,6 +142,7 @@ export function App() {
           onUnauthorized={onUnauthorized}
         />
       ) : null}
+      <LegalFooter />
     </>
   );
 }
