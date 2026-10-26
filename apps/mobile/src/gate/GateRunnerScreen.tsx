@@ -23,6 +23,12 @@ import React, { useCallback, useEffect, useReducer, useRef, useState } from "rea
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import { badgeById } from "@balashikshana/core-engine";
+import { announceForAccessibility } from "../a11y/nativeAnnounce";
+import {
+  gateFeedbackMessage,
+  questionTransitionMessage,
+  timerCrossoverMessage,
+} from "../a11y/announceMessages";
 import type { AudioCoordinator } from "../audio/coordinator";
 import { Button, ProgressBar, Sheet } from "../design/primitives";
 import { useTheme } from "../design/theme";
@@ -87,6 +93,45 @@ export function GateRunnerScreen({
   const loadedRef = useRef(false);
   /** Deadline auto-complete guard (one in-flight completion). */
   const completingRef = useRef(false);
+
+  // #67: screen-reader announcements — question transitions, feedback
+  // appearance, and Gold-check countdown crossovers (30s / 10s only;
+  // per-second speech would drown the question). announceForAccessibility
+  // is a no-op without an active reader; messages parallel visible UI
+  // information-for-information (spoken headlines stay literal).
+  const announcedQuestionRef = useRef("");
+  const announcedBudgetSecRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.phase !== "question" || !state.sessionId) return;
+    const key = `${state.index}:${state.questions[state.index]?.questionId ?? ""}`;
+    if (key === announcedQuestionRef.current) return;
+    announcedQuestionRef.current = key;
+    announceForAccessibility(questionTransitionMessage(state.index, state.questions.length));
+  });
+  useEffect(() => {
+    if (!state.checked) return;
+    announceForAccessibility(
+      gateFeedbackMessage({
+        isCorrect: state.checked.isCorrect,
+        correctAnswer: state.checked.correctAnswer,
+        cognitiveTimeSec: state.checked.cognitiveTimeSec,
+        wasRapidGuess: state.checked.wasRapidGuess,
+      }),
+    );
+  }, [state.checked]);
+  useEffect(() => {
+    if (state.mode !== "goldCheck" || state.phase === "loading" || state.phase === "status") return;
+    // No deadline armed yet (pre-session): reset the crossover baseline
+    // so arming never reads as an immediate threshold crossing.
+    if (state.goldCheckDeadlineMs <= 0) {
+      announcedBudgetSecRef.current = null;
+      return;
+    }
+    const remainingSec = Math.ceil(Math.max(0, state.goldCheckDeadlineMs - state.nowMs) / 1000);
+    const message = timerCrossoverMessage(announcedBudgetSecRef.current, remainingSec);
+    announcedBudgetSecRef.current = remainingSec;
+    if (message) announceForAccessibility(message);
+  }, [state.mode, state.phase, state.nowMs, state.goldCheckDeadlineMs]);
 
   // ------------------------------------------------------------------
   // Load: identity + pack + two-key status (offline-first).

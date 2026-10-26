@@ -342,6 +342,14 @@ The M6 telemetry layer (roadmap D5: first-party only — no third-party analytic
 - **Correlation:** inbound `X-Request-Id` honored when strictly UUID (else fresh), echoed on every reply header AND in the problem+json envelope (`requestId` extension member — additive OpenAPI change per D11); survives client -> edge -> origin.
 - **Dashboards:** `deploy/observability/dashboards/api-overview.json` (Grafana OSS schema, committed, panel exprs cross-checked against exported metrics in CI). Full runbook — SLOs, alert first-response, operator Prometheus/Grafana/Alertmanager wiring, redaction policy, ADRs: `docs/observability.md`.
 
+### 27. Accessibility & Performance Enforcement (issue #67)
+The M6 audit gate before store submission: a committed audit with findings by severity (`docs/accessibility-audit.md`) plus the enforcement that keeps every finding fixed. One P1 was found and fixed — screen-reader announcements for dynamic changes (feedback, question transitions, Gold-check countdown crossovers at 30s/10s) through a pure message-builder + native seam (`apps/mobile/src/a11y/`), so VoiceOver/TalkBack users hear what sighted children see.
+
+- **Portal (runtime):** every view runs axe in the existing jsdom vitest suite (`apps/parent-portal/src/__tests__/a11y.test.tsx`, jest-axe 11 devDep) — CI fails on new WCAG violations; a canary test plants violations to prove the engine fires, and the login test renders the real App shell.
+- **Portal (lint-time):** `eslint-plugin-jsx-a11y` recommended profile in the flat config — static markup violations never reach jsdom.
+- **Mobile (source-pins):** no RN component harness exists (standing debt), so a11y is enforced in the repo's source-scan style (`apps/mobile/tests/accessibility-source-pins.test.ts`): every `Pressable` must carry a NAME (mutation-tested — role-only nameless buttons fail), the mascot stays decorative-hidden, the animated-component set is closed and reduced-motion-gated (two mechanisms pinned), and the announcement wiring stays in place.
+- **Performance budget (measured, enforced):** `docs/performance-budget.md` + `scripts/measure-bundle-sizes.mjs --check` — Hermes bytecode budget 5.5 MiB/platform (measured: android 4.995 / ios 5.005 MiB, ~91%), SVG-only assets, virtualization/memoization decisions documented with thresholds, and the low-end device-matrix protocol (60fps floor, cold start, TTS variance) for the user-side run before #69.
+
 ---
 
 ## Repository Structure & Documentation
@@ -383,6 +391,8 @@ balashikshana/
 │   ├── database-migrations.md                # PostgreSQL migration ledger & runner guide (served datastore)
 │   ├── deployment.md                         # Deploy runbook: Terraform environments, secrets, migrations-on-deploy, smoke gate, rollback (issue #64)
 │   ├── observability.md                      # Observability runbook: metrics, SLOs, alerting, error tracking, redaction policy (issue #66)
+│   ├── accessibility-audit.md                # Accessibility + performance audit: findings by severity, fix status, tooling decisions (issue #67)
+│   ├── performance-budget.md                 # Measured Hermes bundle budget + measurement gate, 60fps device-matrix protocol, TTS variance protocol (issue #67)
 │   ├── gateway.md                            # Dwara edge runbook: consumers + credentials ADR, rate-limit layering, TLS/mTLS ops, staged rollout (issue #65)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)
