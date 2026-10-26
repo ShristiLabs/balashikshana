@@ -271,9 +271,9 @@ describe("consent gate", () => {
     assert.equal(await attemptsInDb(kid.studentId), 0);
 
     await queryDb("DELETE FROM consent_policy_versions WHERE version = '99.0.0-sync-test'");
-    await queryDb(
-      "UPDATE consent_policy_versions SET active = true WHERE active = false AND version <> '99.0.0-sync-test'"
-    );
+    // Restore the migration-014 baseline ONLY (v2); blanket-reactivating
+    // every inactive row would trip the partial unique index on v1+v2.
+    await queryDb("UPDATE consent_policy_versions SET active = true WHERE version = '2' AND active = false");
     const ok = await upload(kid.deviceToken, [attemptWire(1)]);
     assert.equal(ok.status, 200);
     assert.equal(ok.json.stats.inserted, 1);

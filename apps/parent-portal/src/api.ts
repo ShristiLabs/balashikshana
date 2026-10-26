@@ -80,8 +80,22 @@ export interface LoginResult {
   parent: ParentPublic;
 }
 
+/** One versioned legal document (issue #68): the in-app privacy policy / terms. */
+export interface LegalDocument {
+  kind: "privacy-policy" | "terms-of-service";
+  version: string;
+  locale: string;
+  body: string;
+  createdAt: string;
+  active: boolean;
+}
+
 export const api = {
   baseUrl: BASE_URL,
+  /** Public legal catalog (no token — the texts are reachable pre-login). */
+  legalDocument(kind: LegalDocument["kind"]): Promise<LegalDocument> {
+    return call<LegalDocument>(`/api/legal/${kind}/latest`);
+  },
   login(email: string, password: string): Promise<LoginResult> {
     return call<LoginResult>("/api/parents/login", { method: "POST", body: { email, password } });
   },

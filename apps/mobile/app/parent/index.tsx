@@ -14,6 +14,7 @@ import { useTheme } from "../../src/design/theme";
 import { spacing, typeRamp } from "../../src/design/tokens";
 import { ReminderSettingsSection } from "../../src/notifications/ReminderSettingsSection";
 import { createApiClient } from "../../src/onboarding/api";
+import { LegalDocuments } from "../../src/onboarding/LegalDocuments";
 import { ParentalGate } from "../../src/onboarding/ParentalGate";
 import { createNativeDependencies } from "../../src/onboarding/nativeStores";
 import { TokenStore } from "../../src/onboarding/storage";
@@ -104,6 +105,14 @@ export default function ParentScreen() {
 
       <View style={{ gap: spacing.md, marginTop: spacing.md }}>
         <ReminderSettingsSection />
+      </View>
+
+      {/* Legal pack (issue #68): the versioned Privacy Policy + Terms of
+          Service, parent-reachable behind the same gate as everything else
+          in this area. Rendered in-app; no external links. */}
+      <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+        <Text style={{ ...typeRamp.h3, color: colors.text }}>Legal documents</Text>
+        <LegalDocuments api={createApiClient({ baseUrl: API_BASE })} testID="parent.legal" />
       </View>
 
       <View style={{ gap: spacing.md, marginTop: spacing.md }}>

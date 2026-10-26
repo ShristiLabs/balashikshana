@@ -299,13 +299,17 @@ describe("uniqueness and shape guards", () => {
   });
 });
 
-describe("consent policy catalog (issue #41, migration 004)", () => {
-  test("v1 placeholder policy is seeded active with NON-LEGAL marking", async () => {
-    const row = (await db.query("SELECT * FROM consent_policy_versions WHERE version = '1'")).rows[0];
-    assert.ok(row, "v1 policy row must be seeded");
-    assert.equal(row.active, true);
-    assert.equal(row.locale, "en-US");
-    assert.match(row.policy_text, /NOT LEGAL ADVICE/, "seed text must be clearly marked non-legal");
+describe("consent policy catalog (issue #41 migration 004 + migration 014 bump)", () => {
+  test("v1 placeholder retained inactive; v2 production statement seeded active", async () => {
+    const v1 = (await db.query("SELECT * FROM consent_policy_versions WHERE version = '1'")).rows[0];
+    assert.ok(v1, "v1 policy row must be seeded");
+    assert.equal(v1.active, false, "migration 014 deactivates the placeholder");
+    assert.equal(v1.locale, "en-US");
+    assert.match(v1.policy_text, /NOT LEGAL ADVICE/, "placeholder text is clearly marked non-legal");
+    const v2 = (await db.query("SELECT * FROM consent_policy_versions WHERE version = '2'")).rows[0];
+    assert.ok(v2, "v2 production consent statement seeded (migration 014)");
+    assert.equal(v2.active, true);
+    assert.match(v2.policy_text, /Privacy Policy and Terms of Service/);
   });
 
   test("the partial unique index rejects a second active policy per locale (23505)", async () => {
@@ -514,11 +518,13 @@ describe("migration 002 reversibility", () => {
   // the placement records, 010 (issue #61) layers the portal child
   // settings, 011 (issue #62) layers the deletion audit ledger, 012
   // (issue #63) layers the weekly digest sent-ledger + parent opt-out
-  // column, and 013 (issue #66) layers the first-party error_events
-  // store, so the rollback removes all twelve post-001 migrations (in
-  // order) and the up restores them; the reversibility contract is unchanged.
-  test("down removes exactly the 002..013 objects, up restores them (and re-derives the legacy flag)", async () => {
-    await migrate({ direction: "down", count: 12 });
+  // column, 013 (issue #66) layers the first-party error_events store,
+  // and 014 (issue #68) layers the legal_documents catalog + the consent
+  // policy v2 bump, so the rollback removes all thirteen post-001
+  // migrations (in order) and the up restores them; the reversibility
+  // contract is unchanged.
+  test("down removes exactly the 002..014 objects, up restores them (and re-derives the legacy flag)", async () => {
+    await migrate({ direction: "down", count: 13 });
 
     let names = (await db.query("SELECT name FROM pgmigrations ORDER BY name")).rows.map((r) => r.name);
     assert.deepEqual(names, ["001_initial_schema"], "down must leave only 001 applied");
@@ -541,7 +547,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('student_session_outcomes') AS student_session_outcomes,
            to_regclass('student_placement_records') AS student_placement_records,
            to_regclass('portal_child_settings') AS portal_child_settings,
-           to_regclass('weekly_digest_sent') AS weekly_digest_sent`
+           to_regclass('weekly_digest_sent') AS weekly_digest_sent,
+           to_regclass('legal_documents') AS legal_documents`
       )
     ).rows[0];
     assert.deepEqual(gone, {
@@ -560,7 +567,8 @@ describe("migration 002 reversibility", () => {
       student_session_outcomes: null,
       student_placement_records: null,
       portal_child_settings: null,
-      weekly_digest_sent: null
+      weekly_digest_sent: null,
+      legal_documents: null
     });
 
     // 012's parents.weekly_email_enabled column is gone with the rollback.
@@ -593,9 +601,10 @@ describe("migration 002 reversibility", () => {
         "010_portal_child_settings",
         "011_deletion_audit",
         "012_weekly_digest",
-        "013_error_events"
+        "013_error_events",
+        "014_legal_documents"
       ],
-      "up must re-apply 002 through 013"
+      "up must re-apply 002 through 014"
     );
 
     const back = (
@@ -609,7 +618,8 @@ describe("migration 002 reversibility", () => {
            to_regclass('parent_sessions') AS parent_sessions,
            to_regclass('parent_tokens') AS parent_tokens,
            to_regclass('consent_policy_versions') AS consent_policy_versions,
-           to_regclass('child_device_sessions') AS child_device_sessions`
+           to_regclass('child_device_sessions') AS child_device_sessions,
+           to_regclass('legal_documents') AS legal_documents`
       )
     ).rows[0];
     for (const [object, regclass] of Object.entries(back)) {

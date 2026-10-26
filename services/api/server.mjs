@@ -20,6 +20,7 @@ import {
   requireConsentForStudent,
   requireParentWithCurrentConsent
 } from "./consent.mjs";
+import { legalPlugin } from "./legal.mjs";
 import { childrenPlugin, insertStudentProfile, PolicyDriftError, sendPolicyDrift } from "./children.mjs";
 import { contentPacksPlugin } from "./content-packs.mjs";
 import { syncPlugin, RATE_LIMIT_SYNC_PER_TOKEN_MIN } from "./sync.mjs";
@@ -748,6 +749,12 @@ await app.register(parentAuthPlugin, {
 // per-IP + per-token); none is a token-guessing surface.
 await app.register(consentPlugin, { db, isProduction: IS_PRODUCTION, logger });
 
+// Legal documents (issue #68): the versioned privacy policy + terms of
+// service that ship in-app. Public like policy/latest (the texts are
+// public by nature and must be reachable BEFORE consent capture); global
+// per-IP bucket only.
+await app.register(legalPlugin, { db });
+
 // Child-profile routes (issue #42): parent-scoped children list/create,
 // legacy claim-or-archive, and child device-session mint/revoke. All sit
 // behind the global per-IP + per-token buckets except claim, which
@@ -860,7 +867,45 @@ app.get("/api/health", async () => {
 // a valid student or child-device session the caller also receives its own
 // full summary. Archived child profiles are excluded (#42: archived
 // students disappear from the login-screen listing).
+//
+// PRODUCTION DATA-MINIMIZATION (#68 security review, finding SR-1): the
+// dev-mode listing (every profile card, anonymously) exists for the local
+// dev harness login screen — in production nothing calls it anonymously
+// (the shipped app authenticates via parent onboarding / device tokens)
+// and an unauthenticated directory of children's nicknames, avatars, ages,
+// and grades is child personal information no product need justifies
+// (COPPA data minimization). In production the route therefore requires a
+// student or child-device session and returns ONLY the caller's own card;
+// parent tokens are the wrong kind (403 — parents use /api/parent/children)
+// and anonymous callers get 401.
 app.get("/api/students", async (req, reply) => {
+  const auth = await getSessionFromRequest(req);
+  if (IS_PRODUCTION) {
+    if (auth.error) {
+      return sendProblem(reply, 401, { type: `${PROBLEM_BASE}/unauthorized`, detail: auth.error });
+    }
+    if (auth.wrongType) {
+      return sendProblem(reply, 403, {
+        type: `${PROBLEM_BASE}/wrong-token-type`,
+        detail: "Parent session tokens cannot access student routes."
+      });
+    }
+    const ownId = (auth.session || auth.childSession).student_id;
+    const rows = await db.all(
+      "SELECT student_id, username, nickname, avatar, age_years, current_grade FROM students WHERE student_id = $1 AND status <> 'archived'",
+      [ownId]
+    );
+    const own = await getStudentFullState(ownId);
+    req._balashiStudentId = ownId;
+    return { students: rows.map((r) => ({
+      studentId: r.student_id,
+      username: r.username,
+      nickname: r.nickname,
+      avatar: r.avatar,
+      ageYears: r.age_years,
+      currentGrade: r.current_grade
+    })), ownSummary: own.summary };
+  }
   const rows = await db.all(
     "SELECT student_id, username, nickname, avatar, age_years, current_grade FROM students WHERE status <> 'archived' ORDER BY created_at ASC"
   );
@@ -872,7 +917,6 @@ app.get("/api/students", async (req, reply) => {
     ageYears: r.age_years,
     currentGrade: r.current_grade
   }));
-  const auth = await getSessionFromRequest(req);
   if (auth.session || auth.childSession) {
     const ownId = (auth.session || auth.childSession).student_id;
     const own = await getStudentFullState(ownId);

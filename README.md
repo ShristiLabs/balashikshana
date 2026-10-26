@@ -350,6 +350,13 @@ The M6 audit gate before store submission: a committed audit with findings by se
 - **Mobile (source-pins):** no RN component harness exists (standing debt), so a11y is enforced in the repo's source-scan style (`apps/mobile/tests/accessibility-source-pins.test.ts`): every `Pressable` must carry a NAME (mutation-tested — role-only nameless buttons fail), the mascot stays decorative-hidden, the animated-component set is closed and reduced-motion-gated (two mechanisms pinned), and the announcement wiring stays in place.
 - **Performance budget (measured, enforced):** `docs/performance-budget.md` + `scripts/measure-bundle-sizes.mjs --check` — Hermes bytecode budget 5.5 MiB/platform (measured: android 4.995 / ios 5.005 MiB, ~91%), SVG-only assets, virtualization/memoization decisions documented with thresholds, and the low-end device-matrix protocol (60fps floor, cold start, TTS variance) for the user-side run before #69.
 
+### 28. Security Review + COPPA Legal Pack (issue #68)
+The legal-critical M6 gate: a whole-system external-style security review (`docs/security-review.md` — findings by severity, fixed-vs-debt; this issue fixed the two P2s: the unauthenticated child directory on `GET /api/students` is production-gated to the caller's own card, and the NON-LEGAL consent placeholder is replaced by the production consent statement v2) plus the shipped legal pack.
+
+- **Legal pack, versioned and in-app:** `legal_documents` (migration 014) mirrors the consent-policy catalog — append-only, one active row per kind+locale, served publicly at `/api/legal/{privacy-policy,terms-of-service}/latest`. The Privacy Policy + Terms render on the onboarding consent screen BEFORE the accept button, in the gated parent area, and in a portal footer on every view (login included). Drafts carry the counsel-review banner and `[BRACKETED]` placeholders; `docs/legal/README.md` is the versioning/publishing runbook (legal bumps never trigger re-consent; material changes bump the consent policy too — both directions tested).
+- **Families/Kids self-check, evidence-first:** `docs/families-kids-self-check.md` — the SDK scan (exact per-manifest runtime-dependency COPPA allowlist + vendor blocklist, `apps/mobile/tests/coppa-invariants.test.ts`), the link audit (zero external-link escape hatches in shipped mobile source; zero remote-push surfaces), the parental-gate bypass matrix (every parent-content render sits behind the hold-to-confirm gate), and age-appropriate design checks. Nothing is assertion-only.
+- **Data-flow inventory:** `docs/data-flow-inventory.md` — every personal-information class with storage, purpose, flows out (SMTP provider + app stores only), and retention; cross-checked against the #62 export and #66 telemetry. This is the source of truth for #69's store Data Safety forms.
+
 ---
 
 ## Repository Structure & Documentation
@@ -393,6 +400,10 @@ balashikshana/
 │   ├── observability.md                      # Observability runbook: metrics, SLOs, alerting, error tracking, redaction policy (issue #66)
 │   ├── accessibility-audit.md                # Accessibility + performance audit: findings by severity, fix status, tooling decisions (issue #67)
 │   ├── performance-budget.md                 # Measured Hermes bundle budget + measurement gate, 60fps device-matrix protocol, TTS variance protocol (issue #67)
+│   ├── security-review.md                    # Whole-system external-style security review: severity-triaged findings fixed-vs-debt, verified-good surfaces w/ evidence (issue #68)
+│   ├── families-kids-self-check.md           # Apple Kids + Play Families self-check: SDK scan, link audit, parental-gate bypass matrix — evidence-cited (issue #68)
+│   ├── data-flow-inventory.md                # Every personal-info class: storage, purpose, flows out, retention; source of truth for #69 store forms (issue #68)
+│   ├── legal/                                # COPPA legal pack: versioned privacy policy + terms mirrors, consent statement, publishing/re-consent runbook (issue #68)
 │   ├── gateway.md                            # Dwara edge runbook: consumers + credentials ADR, rate-limit layering, TLS/mTLS ops, staged rollout (issue #65)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)

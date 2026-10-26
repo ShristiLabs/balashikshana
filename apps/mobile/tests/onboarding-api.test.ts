@@ -149,6 +149,48 @@ describe("error doctrine: res.ok is checked on every call", () => {
     await expect(api.policyLatest()).rejects.toMatchObject({ code: "bad-status", status: 502 });
   });
 
+  it("#68 legalLatest fetches the versioned legal catalog (both kinds)", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      const kind = url.includes("terms-of-service") ? "terms-of-service" : "privacy-policy";
+      return jsonResponse(200, {
+        kind,
+        version: "1",
+        locale: "en-US",
+        body: `DRAFT ${kind} text`,
+        createdAt: "2026-10-26T00:00:00Z",
+        active: true,
+      });
+    });
+    const api = clientWith(fetchImpl as unknown as FetchLike);
+
+    const privacy = await api.legalLatest("privacy-policy");
+    expect(privacy.kind).toBe("privacy-policy");
+    expect(privacy.version).toBe("1");
+    expect(privacy.body).toContain("DRAFT");
+
+    const terms = await api.legalLatest("terms-of-service");
+    expect(terms.kind).toBe("terms-of-service");
+    expect(terms.body).toContain("terms-of-service");
+    const calls = (fetchImpl as unknown as MockCalls).mock.calls.map(([u]) => String(u));
+    expect(calls).toEqual([
+      "http://api.test/api/legal/privacy-policy/latest",
+      "http://api.test/api/legal/terms-of-service/latest",
+    ]);
+  });
+
+  it("#68 legalLatest problem bodies map to ApiError codes", async () => {
+    const api = clientWith((async () =>
+      jsonResponse(404, {
+        status: 404,
+        type: `${PROBLEM}/not-found`,
+        title: "Not Found",
+      })) as unknown as FetchLike);
+    await expect(api.legalLatest("privacy-policy")).rejects.toMatchObject({
+      code: "not-found",
+      status: 404,
+    });
+  });
+
   it("empty success bodies are a bad-body error, not null crashes", async () => {
     const api = clientWith((async () => new Response("", { status: 200 })) as unknown as FetchLike);
     await expect(api.policyLatest()).rejects.toMatchObject({ code: "bad-body" });

@@ -226,6 +226,16 @@ export interface ConsentCaptureResult {
   capturedAt: string;
 }
 
+/** One versioned legal document (issue #68): kind, version, full body. */
+export interface LegalDocumentResult {
+  kind: "privacy-policy" | "terms-of-service";
+  version: string;
+  locale: string;
+  body: string;
+  createdAt: string;
+  active: boolean;
+}
+
 export interface CreateChildResult {
   studentId: string;
   username: string;
@@ -255,6 +265,7 @@ export interface ApiClient {
     policyText: string;
     createdAt: string;
   }>;
+  legalLatest(kind: "privacy-policy" | "terms-of-service"): Promise<LegalDocumentResult>;
   consentStatus(token: string): Promise<ConsentStatusInfo>;
   captureConsent(token: string, policyVersion: string): Promise<ConsentCaptureResult>;
   listChildren(token: string): Promise<{ parentId: string; children: ChildProfileInfo[] }>;
@@ -315,6 +326,11 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         policyText: string;
         createdAt: string;
       }>(await call({ method: "GET", path: "/api/consent/policy/latest" }));
+    },
+    async legalLatest(kind) {
+      return expectResult<LegalDocumentResult>(
+        await call({ method: "GET", path: `/api/legal/${kind}/latest` }),
+      );
     },
     async consentStatus(token) {
       return expectResult<ConsentStatusInfo>(
