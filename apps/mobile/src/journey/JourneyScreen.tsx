@@ -16,16 +16,9 @@
  * disabled.
  */
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
-import { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../design/theme";
 import { Button } from "../design/primitives";
 import { spacing, typeRamp } from "../design/tokens";
@@ -367,7 +360,7 @@ export function JourneyScreen(): React.ReactElement {
         ) : null}
         <GardenHealthView garden={model.garden} />
       </View>
-      <ScrollView
+      <Animated.ScrollView
         contentContainerStyle={{
           alignItems: "center",
           paddingHorizontal: spacing.xl,
@@ -393,7 +386,7 @@ export function JourneyScreen(): React.ReactElement {
         >
           <Text style={{ ...typeRamp.label, color: colors.textMuted }}>BACK TO START</Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }
