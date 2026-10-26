@@ -42,7 +42,7 @@ import {
   gamificationSummary,
   initialGamificationState,
 } from "../src/gamification/rewardsProjector";
-// eslint-disable-next-line import/no-unresolved
+ 
 import { DatabaseSync } from "node:sqlite";
 import { createPracticeEnv, FIXTURE_UNIT, type PracticeTestEnv } from "./helpers/practiceEnv";
 

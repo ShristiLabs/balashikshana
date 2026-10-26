@@ -125,7 +125,7 @@ describe("themes", () => {
   it("status ink labels reach 4.5:1 on the surface for every tone in every theme", () => {
     for (const mode of modes) {
       const t = themes[mode]!;
-      for (const tone of Object.keys(t.statusInk) as Array<keyof typeof t.statusInk>) {
+      for (const tone of Object.keys(t.statusInk) as (keyof typeof t.statusInk)[]) {
         expect(
           contrast(t.statusInk[tone]!, t.surface),
           `${mode} statusInk.${tone}`,

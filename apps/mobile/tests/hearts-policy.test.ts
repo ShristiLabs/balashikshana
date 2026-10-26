@@ -38,7 +38,7 @@ import type {
 } from "../src/sync/types";
 import { createPracticeEnv, FIXTURE_UNIT, type PracticeTestEnv } from "./helpers/practiceEnv";
 
-// eslint-disable-next-line import/no-unresolved
+ 
 import { DatabaseSync } from "node:sqlite";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
