@@ -115,6 +115,13 @@ locals {
     { name = "TRUST_PROXY_CIDRS", value = var.trust_proxy_cidrs },
   ]
 
+  # #66 first-party metrics listener: env only when the port is enabled
+  # (0 = listener off in the app; no port mapping either).
+  container_env_metrics = var.metrics_port > 0 ? [
+    { name = "METRICS_PORT", value = tostring(var.metrics_port) },
+    { name = "METRICS_HOST", value = var.metrics_host },
+  ] : []
+
   container_env_rate_limits = [
     for name, value in var.rate_limits : { name = name, value = value }
   ]
@@ -135,14 +142,25 @@ resource "aws_ecs_task_definition" "api" {
       image     = var.api_image_uri
       essential = true
 
-      portMappings = [
-        {
-          containerPort = var.api_container_port
-          protocol      = "tcp"
-        }
-      ]
+      portMappings = concat(
+        [
+          {
+            containerPort = var.api_container_port
+            protocol      = "tcp"
+          }
+        ],
+        # #66: the internal metrics listener port mapping exists only
+        # when the listener is enabled; ingress is governed by the
+        # metrics-scrape SG rules below (opt-in CIDR list).
+        var.metrics_port > 0 ? [
+          {
+            containerPort = var.metrics_port
+            protocol      = "tcp"
+          }
+        ] : []
+      )
 
-      environment = concat(local.container_env_base, local.container_env_rate_limits)
+      environment = concat(local.container_env_base, local.container_env_metrics, local.container_env_rate_limits)
 
       secrets = [
         {
@@ -245,6 +263,29 @@ resource "aws_vpc_security_group_ingress_rule" "task_from_alb" {
   from_port                    = var.api_container_port
   to_port                      = var.api_container_port
   ip_protocol                  = "tcp"
+}
+
+# #66: internal metrics scraping (self-hosted Prometheus). Opt-in by
+# CIDR list: EMPTY default creates NO rule — the metrics port is
+# unreachable from anywhere. Never widen to 0.0.0.0/0 (D5: the
+# exposition is internal-only; a source-restricted SG plus the optional
+# METRICS_TOKEN are the two gates). The "port:cidr" key convention
+# matches the ALB public rules above (IPv4).
+locals {
+  metrics_scrape_rules = toset([
+    for cidr in var.metrics_scrape_cidrs : "${var.metrics_port}:${cidr}"
+  ])
+}
+
+resource "aws_vpc_security_group_ingress_rule" "task_metrics_scrape" {
+  for_each = var.metrics_port > 0 ? local.metrics_scrape_rules : toset([])
+
+  security_group_id = aws_security_group.task.id
+  description       = "Internal metrics scrape (issue #66) from ${split(":", each.key)[1]}"
+  cidr_ipv4         = split(":", each.key)[1]
+  from_port         = var.metrics_port
+  to_port           = var.metrics_port
+  ip_protocol       = "tcp"
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_all" {

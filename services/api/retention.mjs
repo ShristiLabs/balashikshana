@@ -58,6 +58,16 @@ export async function runRetentionSweep(db, { now = new Date() } = {}) {
   const parentTokens = await db.run("DELETE FROM parent_tokens WHERE expires_at <= $1", [nowIso]);
   counts.parentTokens = parentTokens.rowCount ?? 0;
 
+  // #66: first-party error events are a ROLLING OPERATIONAL WINDOW, not
+  // evidence — error_events rows older than ERROR_EVENT_RETENTION_DAYS
+  // (default 30) purge on the same sweep. Bounded storage for a table
+  // whose volume is failure-driven (flood-capped at capture as well).
+  const errorRetentionDays = Number(process.env.ERROR_EVENT_RETENTION_DAYS || 30);
+  const safeDays = Number.isFinite(errorRetentionDays) && errorRetentionDays > 0 ? errorRetentionDays : 30;
+  const cutoffIso = new Date(now.getTime() - safeDays * 24 * 60 * 60 * 1000).toISOString();
+  const errorEvents = await db.run("DELETE FROM error_events WHERE captured_at <= $1", [cutoffIso]);
+  counts.errorEvents = errorEvents.rowCount ?? 0;
+
   return counts;
 }
 

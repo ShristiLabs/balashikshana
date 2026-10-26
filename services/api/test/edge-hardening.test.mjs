@@ -271,7 +271,11 @@ describe("structured logging and request IDs", () => {
     assert.ok(line.requestId, "requestId missing");
     assert.equal(line.statusCode, 200);
     assert.equal(typeof line.durationMs, "number");
-    assert.equal(line.url, "/api/health");
+    // #66 contract: path (query-stripped) + bounded route class; the
+    // raw url with query strings is never logged.
+    assert.equal(line.path, "/api/health");
+    assert.equal(line.route, "/api/health");
+    assert.equal(line.url, undefined);
   });
 
   test("authenticated requests log the session's studentId", async () => {
@@ -294,10 +298,11 @@ describe("structured logging and request IDs", () => {
         }
       })
       .filter((o) => o && o.msg === "request");
-    const line = parsed.find((o) => o.url === `/api/students/${student.studentId}`);
+    const line = parsed.find((o) => o.path === `/api/students/${student.studentId}`);
     assert.ok(line, "request log line for the authenticated call missing");
     assert.equal(line.studentId, student.studentId);
     assert.equal(line.statusCode, 200);
+    assert.equal(line.route, "/api/students/:studentId");
   });
 });
 

@@ -58,6 +58,16 @@ async function raw(base, pathname, { method = "POST", token, body } = {}) {
   return { status: res.status, text: await res.text(), contentType: res.headers.get("content-type") };
 }
 
+// #66 correlation: every problem envelope now carries a per-request
+// `requestId` (unique BY DESIGN — it is the correlation key). Anti-
+// enumeration byte-identity is about the ENUMERABLE problem fields, so
+// uniform-body assertions compare with requestId normalized out.
+function uniformBody(rawRes) {
+  const parsed = JSON.parse(rawRes.text);
+  delete parsed.requestId;
+  return JSON.stringify(parsed);
+}
+
 // Every test mints its own emails so no test depends on another's rows.
 let seq = 0;
 const uniqueEmail = () => `parent${++seq}@example.com`;
@@ -249,7 +259,7 @@ describe("email verification", () => {
     const replayRaw = await raw(API, "/api/parents/verify-email", { body: { token: signup.json.verificationToken } });
     const unknownRaw = await raw(API, "/api/parents/verify-email", { body: { token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } });
     assert.equal(replayRaw.status, unknownRaw.status);
-    assert.equal(replayRaw.text, unknownRaw.text, "replayed and unknown tokens must be indistinguishable");
+    assert.equal(uniformBody(replayRaw), uniformBody(unknownRaw), "replayed and unknown tokens must be indistinguishable (modulo the per-request correlation id)");
   });
 
   test("expired verification token is rejected uniformly", async () => {
@@ -323,7 +333,7 @@ describe("parent login", () => {
     assert.equal(unknown.status, 401);
     assert.equal(wrong.status, 401);
     assert.match(unknown.contentType, /application\/problem\+json/);
-    assert.equal(unknown.text, wrong.text, "401 bodies must be byte-identical (no account enumeration)");
+    assert.equal(uniformBody(unknown), uniformBody(wrong), "401 bodies must be byte-identical modulo the correlation id (no account enumeration)");
   });
 
   test("session token is hashed at rest with 7d expiry and 30d refresh window", async () => {
@@ -591,8 +601,8 @@ describe("password reset", () => {
       assert.equal(b.status, 400);
       assert.match(b.contentType, /application\/problem\+json/);
     }
-    assert.equal(bodies[0].text, bodies[1].text, "replayed and unknown tokens must be indistinguishable");
-    assert.equal(bodies[0].text, bodies[2].text, "replayed and expired tokens must be indistinguishable");
+    assert.equal(uniformBody(bodies[0]), uniformBody(bodies[1]), "replayed and unknown tokens must be indistinguishable (modulo the correlation id)");
+    assert.equal(uniformBody(bodies[0]), uniformBody(bodies[2]), "replayed and expired tokens must be indistinguishable (modulo the correlation id)");
   });
 
   test("confirm schema: short newPassword, short-after-trim newPassword, and short token fail 400", async () => {
@@ -775,7 +785,7 @@ describe("production seam suppression (NODE_ENV=production)", () => {
     });
     assert.equal(known.status, 202);
     assert.equal(unknown.status, 202);
-    assert.equal(known.text, unknown.text, "production reset-request must be byte-identical (no enumeration)");
+    assert.equal(uniformBody(known), uniformBody(unknown), "production reset-request must be byte-identical modulo the correlation id (no enumeration)");
   });
 
   test("login anti-enumeration holds in production too", async () => {
@@ -787,6 +797,6 @@ describe("production seam suppression (NODE_ENV=production)", () => {
     });
     assert.equal(unknown.status, 401);
     assert.equal(wrong.status, 401);
-    assert.equal(unknown.text, wrong.text);
+    assert.equal(uniformBody(unknown), uniformBody(wrong));
   });
 });

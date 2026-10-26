@@ -22,7 +22,12 @@ export function sendProblem(reply, status, { type, title, detail, errors, retryA
     title: title || STATUS_TITLES[status] || "Error",
     status,
     detail: detail || STATUS_TITLES[status] || "Error",
-    instance: reply.request.url
+    instance: reply.request.url,
+    // #66 correlation: the request id rides INSIDE the problem envelope
+    // (and on the X-Request-Id reply header) so a client-reported error
+    // greps end to end — client -> edge -> origin logs. Additive RFC
+    // 9457 extension member (OpenAPI baseline updated per D11).
+    requestId: reply.request.id
   };
   if (errors) body.errors = errors;
   // RFC 9457 extension members (e.g. currentPolicyVersion on consent

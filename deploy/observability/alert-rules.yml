@@ -1,0 +1,83 @@
+# Balashikshana API alert rules (issue #66) — ALERTS AS CODE.
+#
+# First-party only (D5): these rules evaluate the ORIGIN's own metrics
+# (scraped from the internal metrics listener; see docs/observability.md
+# for the operator wiring: self-hosted Prometheus -> Alertmanager -> ops
+# channel). Threshold rationale is a first-class annotation (`rationale`)
+# on every rule so the alert file is self-documenting; `first_response`
+# is the on-call's first move (full runbook: docs/observability.md).
+#
+# CI validation (services/api/test/alert-rules.test.mjs):
+#   - structural: every rule carries expr/for/severity/summary/
+#     rationale/first_response;
+#   - vocabulary: every metric referenced in an expr is one the registry
+#     actually exports (no rule can reference a metric that silently
+#     does not exist);
+#   - synthetic trigger: thresholds are exercised against synthetic
+#     snapshots in the vitest suite, and the promtool unit-test file
+#     (alert-tests.yml) exercises the full PromQL semantics operator-side
+#     (`promtool test rules alert-tests.yml` — the staging exercise for
+#     the issue's acceptance criterion).
+
+groups:
+  - name: balashikshana-api
+    rules:
+      - alert: ApiP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, route_class) (rate(http_request_duration_seconds_bucket[5m]))) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 800ms for 10m on one or more route classes"
+          rationale: "SLO: p95 request latency 500ms per route class (kid-device round trips on school/home networks have ~200-400ms RTT budget; curriculum question fetches are small JSON and engine work is <10ms server-side, so 500ms covers network without hiding server regression). Alert at 0.8s for 10m: 60% over SLO, sustained, so a single batch-upload tail or a cold start cannot page anyone."
+          first_response: "Check db_pool_waiting and db_pool_idle (pool saturation is the top cause), then deployment recency (migrations on deploy) and ALB/target health in the #64 runbook."
+
+      - alert: ApiErrorRateHigh
+        expr: sum(rate(http_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.001) > 0.01
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx rate above 1% of all requests for 10m"
+          rationale: "SLO: 99% of requests succeed (a learning app's failures are a child's lost session). 1% sustained over 10m is roughly 30+ failed requests/min at observed dev traffic scale — well above noise, below user-visible outage. clamp_min guards the empty-traffic divide-by-zero (no traffic = no ratio, no page)."
+          first_response: "Query error_events by fingerprint for the dominant problem type (grouped stacks in the error_events table; docs/observability.md), correlate request ids to logs, check DB health."
+
+      - alert: SyncFailureSpike
+        expr: sum(rate(sync_requests_total{outcome="error"}[10m])) / clamp_min(sum(rate(sync_requests_total[10m])), 0.001) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sync failure ratio above 5% for 10m"
+          rationale: "Sync (POST /api/sync/attempts, GET /api/sync/progress) is the offline-first child-device lifeline (D8): failures mean practice data at risk of queue overflow on devices. Auth/validation rejects are normal noise at low single digits; 5% sustained means a systemic break (bad release, schema drift, consent gate). Alert includes 401/403/429 outcomes by design — a device fleet locked out by an auth change IS a sync outage."
+          first_response: "Break the ratio down by endpoint and status (http_requests_total route_class=/api/sync/*); check recent deployments and the consent/version gates; devices retry on their own queue (no data lost while diagnosing)."
+
+      - alert: GateEvaluationAnomaly
+        expr: sum(rate(gate_evaluate_total{outcome="pass"}[30m])) / clamp_min(sum(rate(gate_evaluate_total[30m])), 0.001) < 0.05 and sum(rate(gate_evaluate_total[30m])) > 0.01
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gate pass rate below 5% over 30m with meaningful volume"
+          rationale: "The boss-gate engine (core-engine, zero-dep) has stable per-unit difficulty; a near-zero pass rate at >0.6 evaluations/min means an engine/curriculum regression shipped (bad unit data or a scoring change), not harder kids. Volume guard (>0.01/s) keeps the alert silent on empty traffic."
+          first_response: "Compare pass rate by unit (error HTTP is not involved; gate_evaluate_total counts ENGINE outcomes): a single unit at 0% = content bug in that unit's gate data; all units = engine/scoring change. Roll back the offending release."
+
+      - alert: ErrorEventFlood
+        expr: sum(rate(error_events_total{outcome="captured"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Unhandled 5xx captured above 0.5/s for 5m"
+          rationale: "error_events_total counts CAPTURED unhandled errors (post flood-cap): >0.5/s sustained means many DISTINCT fingerprints are failing (the per-fingerprint cap suppresses repeats), i.e. broad breakage — usually faster to see than the 1% ratio alert at low traffic."
+          first_response: "Same as ApiErrorRateHigh: fingerprint histogram in error_events, then the top stack. If flood-capped dominates instead, a single hot bug is looping — check metrics_observations_rejected_total too."
+
+      - alert: DbPoolSaturation
+        expr: db_pool_waiting > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5 clients waiting on the Postgres pool for 5m"
+          rationale: "Pool max is 10 (db.mjs). Sustained waiting > 5 means queries are arriving faster than connections free up: slow queries, a missing index after a migration, or traffic growth. Latency alert usually fires alongside (pool waits show up in p95) — this alert names the cause."
+          first_response: "pg_stat_activity on the RDS instance (longest running queries), check for a recent migration, then ALB request rate by route class for a traffic shift."

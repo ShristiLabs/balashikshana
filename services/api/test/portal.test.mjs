@@ -257,8 +257,8 @@ describe("portal ownership: parent_children scoping (AC2)", () => {
     assert.equal(unknownHit.status, 404);
     // Anti-enumeration: identical problem shape (the RFC instance field
     // names the caller's own path by design, so compare the rest).
-    const { instance: _s, ...strangerBody } = strangerHit.json;
-    const { instance: _u, ...unknownBody } = unknownHit.json;
+    const { instance: _s, requestId: _rs, ...strangerBody } = strangerHit.json;
+    const { instance: _u, requestId: _ru, ...unknownBody } = unknownHit.json;
     assert.deepEqual(strangerBody, unknownBody);
     // Same for settings read/write and weekly.
     for (const [method, route] of [

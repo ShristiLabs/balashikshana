@@ -58,6 +58,12 @@ import {
   updateTopicMemoryStability,
   computeRetrievabilityPct
 } from "../../packages/core-engine/src/index.mjs";
+import { createMetricsRegistry } from "./observability/metrics.mjs";
+import { declareApiMetrics } from "./observability/api-metrics.mjs";
+import { routeClassFor, statusClassFor, methodFor, UNMATCHED_ROUTE_CLASS } from "./observability/route-classes.mjs";
+import { isUuid, truncateIp, logSafeUrl, redactText } from "./observability/redact.mjs";
+import { captureErrorEvent } from "./observability/error-store.mjs";
+import { startMetricsListener } from "./observability/metrics-listener.mjs";
 
 // --- Environment configuration -------------------------------------------
 // PORT                        listen port                        (default 4000)
@@ -103,6 +109,20 @@ import {
 //                             envelope From, default
 //                             "Balashikshana <no-reply@balashikshana.local>");
 //                             credentials live ONLY in env (secret-scan rule)
+// METRICS_PORT                FIRST-PARTY METRICS LISTENER (issue #66, D5):
+//                             when set to a positive integer, the Prometheus
+//                             text exposition is served on this SEPARATE
+//                             internal port (never the public app port;
+//                             never routed at the edge). Unset = no listener.
+// METRICS_HOST                metrics listener bind address (default 127.0.0.1 —
+//                             a local run is never reachable off-host; the
+//                             container wiring overrides to 0.0.0.0 behind a
+//                             scrape-source-only SG rule)
+// METRICS_TOKEN               optional bearer token required on the metrics
+//                             listener (defense in depth on shared private
+//                             networks; unset = no token check)
+// ERROR_EVENT_RETENTION_DAYS  error_events retention window (default 30; the
+//                             retention sweep purges older rows)
 const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
 
 function parseAllowedOrigins() {
@@ -145,6 +165,37 @@ const db = await createDb(logger).catch((err) => {
   logger.fatal({ err: err.message }, "Database initialization failed");
   process.exit(1);
 });
+
+// --- First-party metrics (issue #66, D5) ------------------------------------
+// Zero-dependency registry (observability/metrics.mjs); the metric
+// vocabulary lives in observability/api-metrics.mjs (shared with the
+// alert-rule/dashboard cross-consistency tests). Label values are
+// BOUNDED BY CONSTRUCTION: route classes are Fastify route patterns (the
+// server's fixed route inventory — never a raw URL), methods an enum,
+// status classes 2xx-5xx; anything failing a label guard is rejected and
+// counted on metrics_observations_rejected_total instead of creating a
+// series. Cardinality is a security property here: an unbounded-label
+// attack cannot allocate registry memory.
+const metrics = createMetricsRegistry();
+const {
+  httpRequestsTotal,
+  httpRequestDuration,
+  gateEvaluationsTotal,
+  syncRequestsTotal,
+  errorEventsTotal,
+  dbPoolTotal,
+  dbPoolIdle,
+  dbPoolWaiting
+} = declareApiMetrics(metrics);
+
+function pollDbPoolGauges() {
+  dbPoolTotal.set({}, db.pool.totalCount);
+  dbPoolIdle.set({}, db.pool.idleCount);
+  dbPoolWaiting.set({}, db.pool.waitingCount);
+}
+pollDbPoolGauges();
+const dbPoolGaugeTimer = setInterval(pollDbPoolGauges, 5000);
+dbPoolGaugeTimer.unref();
 
 // Equalizes login timing between unknown-user and wrong-PIN paths so the
 // uniform 401 cannot be turned into a username oracle by response time.
@@ -505,7 +556,16 @@ const TRUST_PROXY_CIDRS = (process.env.TRUST_PROXY_CIDRS || "")
 const app = Fastify({
   logger: false,
   disableRequestLogging: true,
-  genReqId: () => crypto.randomUUID(),
+  // Correlation seam (issue #66): ACCEPT an inbound X-Request-Id only
+  // when it is a strictly well-formed UUID (charset-validated, so a
+  // crafted header can neither inject log content nor grow unbounded),
+  // giving client -> edge -> origin continuity; everything else gets a
+  // fresh UUID. The id is echoed on every reply header and inside the
+  // problem+json envelope (problem.mjs).
+  genReqId: (req) => {
+    const inbound = req.headers["x-request-id"];
+    return isUuid(inbound) ? inbound : crypto.randomUUID();
+  },
   bodyLimit: BODY_LIMIT_BYTES,
   trustProxy: TRUST_PROXY_CIDRS.length > 0 ? TRUST_PROXY_CIDRS : false,
   // Keep the schemas closed: unknown body fields are a 400 validation
@@ -576,14 +636,39 @@ app.addHook("onRequest", async (req, reply) => {
 });
 
 app.addHook("onResponse", (req, reply, done) => {
+  const durationMs = Date.now() - (req._balashiStartedAt || Date.now());
+  const routeClass = routeClassFor(req);
+  const statusClass = statusClassFor(reply.statusCode);
+  const method = methodFor(req);
+
+  // Metrics first (issue #66): route class is the Fastify route
+  // PATTERN, never the raw URL; label guards bound cardinality.
+  httpRequestsTotal.inc({ route_class: routeClass, method, status_class: statusClass });
+  httpRequestDuration.observe(
+    { route_class: routeClass, method, status_class: statusClass },
+    durationMs / 1000
+  );
+
+  // Structured request log with the #66 PII policy applied:
+  //   - route = the route pattern (bounded vocabulary); path = the
+  //     REQUEST PATH with query stripped (logSafeUrl) and only for
+  //     MATCHED routes — an unmatched path is attacker-controlled free
+  //     text and is never logged verbatim;
+  //   - ip is truncated to its network prefix (COPPA: a persistent
+  //     full IP is personal information; the prefix keeps ISP/network
+  //     signal without a per-device identifier);
+  //   - studentId/parentId are opaque surrogate UUIDs (the documented
+  //     exemption — correlation keys, resolvable only via authorized
+  //     DB access; see docs/observability.md).
   logger.info(
     {
       requestId: req.id,
-      method: req.method,
-      url: req.raw.url,
+      method,
+      route: routeClass,
+      path: routeClass === UNMATCHED_ROUTE_CLASS ? undefined : logSafeUrl(req.raw.url),
       statusCode: reply.statusCode,
-      durationMs: Date.now() - (req._balashiStartedAt || Date.now()),
-      ip: req.ip,
+      durationMs,
+      ip: truncateIp(req.ip),
       studentId: req._balashiStudentId || undefined,
       parentId: req._balashiParentId || undefined
     },
@@ -616,7 +701,23 @@ app.setErrorHandler((err, req, reply) => {
   if (err.statusCode === 401) {
     return sendProblem(reply, 401, { type: `${PROBLEM_BASE}/unauthorized`, detail: err.message || STATUS_TITLES[401] });
   }
-  logger.error({ err: err.message, requestId: req.id }, "Unhandled request error");
+  logger.error(
+    { err: redactText(err?.message), requestId: req.id, route: routeClassFor(req) },
+    "Unhandled request error"
+  );
+  // First-party error capture (issue #66): redacted at the seam, flood-
+  // capped, persisted to error_events; never includes request bodies.
+  captureErrorEvent(db, {
+    requestId: req.id,
+    routeClass: routeClassFor(req),
+    problemType: "internal",
+    statusCode: 500,
+    message: err?.message,
+    stack: err?.stack,
+    environment: process.env.NODE_ENV || "development"
+  })
+    .then((outcome) => errorEventsTotal.inc({ outcome: outcome.captured ? "captured" : outcome.reason }))
+    .catch(() => errorEventsTotal.inc({ outcome: "insert-failed" }));
   return sendProblem(reply, 500, { type: `${PROBLEM_BASE}/internal`, detail: "Internal server error." });
 });
 
@@ -673,10 +774,14 @@ await app.register(contentPacksPlugin, {
 // Sync protocol routes (issue #48, D8): child-device-token batch upload
 // + authoritative snapshot. Behind the global per-IP + per-token buckets
 // plus the dedicated sync per-token bucket (batch traffic sizing).
+// #66: the sync success-rate metric is derived INSIDE the plugin from
+// the final HTTP outcome of each sync route (a scoped onResponse hook)
+// — upload/snapshot failures are exactly the 4xx/5xx outcomes.
 await app.register(syncPlugin, {
   db,
   logger,
-  packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs")
+  packsDir: process.env.BALASHIKSHANA_CONTENT_PACKS_DIR || path.join(__dirname, "content-packs"),
+  metrics: { syncRequestsTotal }
 });
 
 // Gamification ledger read (issue #55, D9): the kid-facing reward view.
@@ -1364,6 +1469,11 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
     motorBaselineSec: motorSec
   });
 
+  // Gate pass-rate metric (issue #66): counts the ENGINE outcome
+  // (pass/fail), not the HTTP status — a 200 carrying a failed gate is
+  // the signal the pass-rate SLO needs. Label is a 2-value enum.
+  gateEvaluationsTotal.inc({ outcome: evalResult.passed ? "pass" : "fail" });
+
   const prevProg = await db.get("SELECT * FROM student_unit_progress WHERE student_id = $1 AND unit_id = $2", [studentId, unitId]);
   const fg = computeFluencyGrade(evalResult.passed, evalResult.medianCogSpeedSec, unitRow.gate_max_speed_sec);
   const srUpdate = updateTopicMemoryStability({
@@ -1485,6 +1595,31 @@ app.post("/api/gate/evaluate", { schema: gateEvaluateSchema }, async (req, reply
 // --- Start ------------------------------------------------------------------------
 
 const PORT = Number(process.env.PORT || 4000);
+
+// First-party metrics listener (issue #66): separate internal port,
+// opt-in via METRICS_PORT, loopback-bound unless METRICS_HOST says
+// otherwise, optional bearer token. NEVER on the public app port and
+// never routed at the edge (Dwara routes /api/* only).
+const METRICS_PORT = Number(process.env.METRICS_PORT || 0);
+if (Number.isInteger(METRICS_PORT) && METRICS_PORT > 0) {
+  try {
+    startMetricsListener({
+      registry: metrics,
+      port: METRICS_PORT,
+      host: process.env.METRICS_HOST || "127.0.0.1",
+      token: process.env.METRICS_TOKEN || undefined
+    });
+    logger.info(
+      { port: METRICS_PORT, host: process.env.METRICS_HOST || "127.0.0.1", tokenProtected: Boolean(process.env.METRICS_TOKEN) },
+      "Metrics listener started (internal)"
+    );
+  } catch (err) {
+    // Observability must not take the API down; the failure is loud in
+    // logs and the API still serves.
+    logger.error({ err: err.message }, "Metrics listener failed to start");
+  }
+}
+
 app
   .listen({ port: PORT, host: "0.0.0.0" })
   .then(() => {

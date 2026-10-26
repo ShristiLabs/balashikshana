@@ -296,6 +296,20 @@ starts it. Rationale and the migration path:
   a false signal that scale-out is already handled. The advisory locks
   already provide correctness; everything else is load-driven.
 
+## Observability (issue #66 — cross-reference)
+
+First-party telemetry: the API tasks expose Prometheus metrics on a
+separate internal port (`metrics_port`, default 9101; module wiring in
+`infra/modules/api_service`). Scraping ingress is OPT-IN — set
+`metrics_scrape_cidrs` in an environment's tfvars to your self-hosted
+Prometheus hosts' CIDRs (empty default = no ingress rule at all; never
+`0.0.0.0/0`); optionally set `METRICS_TOKEN` (SSM -> task env) as a
+bearer gate. Alert rules (`deploy/observability/alert-rules.yml`),
+promtool tests, and the Grafana dashboard ship in-repo; the operator
+wiring (self-hosted Prometheus/Grafana/Alertmanager, edge analytics
+toggle) is documented in docs/observability.md. containerInsights stays
+OFF (D5) — the first-party stack replaces it.
+
 ## Cost posture
 
 Single NAT gateway per environment (~$32/mo each), `db.t4g` burstable
