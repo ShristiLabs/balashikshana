@@ -68,7 +68,9 @@ const CHILD_DEVICE_SESSION_TTL_MS = 30 * 86400000;
 // can evolve independently).
 const DUMMY_STUDENT_PIN_HASH = hashPinScrypt("claim-timing-equalizer");
 
-const GRADE_IDS = ["pre-k", "kindergarten", "grade-1", "grade-2", "grade-3"];
+// Exported since #70: the B2B roster-import stub validates roster grade
+// values against the SAME registry id set — one grade vocabulary, no fork.
+export const GRADE_IDS = ["pre-k", "kindergarten", "grade-1", "grade-2", "grade-3"];
 const PLATFORMS = ["ios", "android", "web"];
 const RELATION_MAX_LENGTH = 32;
 

@@ -1919,6 +1919,206 @@ paths:
         "500":
           $ref: "#/components/responses/Internal"
 
+  /api/b2b/licenses:
+    post:
+      tags: [b2b]
+      operationId: activateB2BLicense
+      summary: Activate a licensing-core seat license for the caller's organization (issue #70)
+      description: |
+        PARENT session tokens only (student and child device tokens are
+        403 wrong-token-type). Body is a ShristiLabs licensing-core
+        license file (claims v2 + detached Ed25519 `signature`, base64).
+        Verification is OFFLINE per licensing-core semantics: canonical
+        JSON (recursively key-sorted, compact) signature check, expiry,
+        and a `balashikshana` product pin. The activating parent's
+        organization is created on first activation (one org per parent);
+        at most one ACTIVE license per organization — renewals supersede
+        only once the active license has expired. A license_id is
+        globally unique: re-activation (any org) is 409. This is the B2B
+        SEAM — issuance/billing live on the ShristiLabs licensing
+        platform, not here.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/B2BLicenseFile"
+      responses:
+        "201":
+          description: License activated (organization created on first activation)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/B2BLicenseActivation"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: License already activated, or the organization already has an active unexpired license
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: License failed verification (invalid signature, expired, wrong product, unparseable claims)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/b2b/licenses/current:
+    get:
+      tags: [b2b]
+      operationId: getB2BLicenseStatus
+      summary: Seat status for the caller's organization (seats licensed/assigned/remaining, expiry)
+      description: |
+        PARENT session tokens only. Read-only seat accounting for the
+        org's ACTIVE license. `licenseState` reports `active-expired`
+        when the row is still active but the clock has passed
+        `expiresAt` (seat claims are refused at that point).
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Seat status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/B2BLicenseStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No organization exists for this account (activate a license first)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The organization has no active license
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/b2b/seats:
+    post:
+      tags: [b2b]
+      operationId: claimB2BSeat
+      summary: Claim one license seat for an opaque subject label (issue #70)
+      description: |
+        PARENT session tokens only. `subject` is an opaque
+        caller-chosen identifier (a teacher/staff label at the school's
+        discretion — adult-provided, unique per organization). Seat
+        claims re-validate the active license's expiry at write time;
+        accounting counts only seats on the ACTIVE license. 409
+        `b2b-seat-exhausted` carries `seatsLicensed`/`seatsAssigned` as
+        RFC 9457 extension members.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject]
+              additionalProperties: false
+              properties:
+                subject:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Opaque seat-subject label (teacher/staff identifier)
+      responses:
+        "201":
+          description: Seat claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/B2BSeat"
+        "400":
+          $ref: "#/components/responses/Validation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: No active license, license expired at claim time, subject already seated, or seats exhausted
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
+  /api/b2b/roster/validate:
+    post:
+      tags: [b2b]
+      operationId: validateB2BRoster
+      summary: Teacher roster-import STUB — validation-only dry run, zero writes (issue #70)
+      description: |
+        PARENT session tokens only. Accepts a roster as CSV
+        (Content-Type: text/csv; header row of exactly
+        `student_name,grade,guardian_email` in any order, RFC 4180
+        quoting, max 500 rows) or JSON `{ rows: [...] }`. Returns a
+        per-row accepted/rejected verdict with reasons plus a seat
+        projection against the org's active license. THIS IS A STUB:
+        nothing is created, stored, or invited — roster rows are
+        transient request bodies, never persisted and never logged (only
+        counts). No teacher portal exists.
+      parameters:
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+            description: 'CSV with header `student_name,grade,guardian_email` (any order)'
+          application/json:
+            schema:
+              $ref: "#/components/schemas/B2BRosterRows"
+      responses:
+        "200":
+          description: Dry-run validation result (nothing was created)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/B2BRosterValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          description: Malformed CSV, invalid header, or wrong body shape
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+
 components:
   parameters:
     StudentId:
@@ -3811,3 +4011,190 @@ components:
               description: Weekly series identical to GET .../analytics/weekly series
               items:
                 type: object
+    B2BLicenseFile:
+      type: object
+      description: |
+        A ShristiLabs licensing-core license file (claims v2): the claims
+        flattened alongside the base64 detached Ed25519 `signature` over
+        the canonical JSON of the claims (recursively key-sorted,
+        compact). Unknown additional fields are ignored (licensing-core
+        serde parity).
+      required:
+        - license_id
+        - product_id
+        - customer
+        - plan
+        - seats
+        - instance_id
+        - issued_at
+        - expires_at
+        - features
+        - signature
+      properties:
+        license_id:
+          type: string
+        product_id:
+          type: string
+          description: Must be `balashikshana` (product pin; 422 product-mismatch otherwise)
+        customer:
+          type: string
+          description: School/district display name (becomes the organization name)
+        plan:
+          type: string
+        seats:
+          type: integer
+          minimum: 0
+          description: Licensed seat count (u32 in licensing-core)
+        instance_id:
+          type: string
+        issued_at:
+          type: string
+          description: RFC 3339 UTC timestamp with 'Z' (chrono canonical form)
+        expires_at:
+          type: string
+          description: RFC 3339 UTC timestamp with 'Z' (chrono canonical form)
+        features:
+          type: array
+          items:
+            type: string
+        signature:
+          type: string
+          description: base64-encoded 64-byte detached Ed25519 signature over the canonical claims JSON
+
+    B2BLicenseActivation:
+      type: object
+      properties:
+        organizationId:
+          type: string
+        organizationName:
+          type: string
+        licenseId:
+          type: string
+        plan:
+          type: string
+        seats:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        issuedAt:
+          type: string
+        expiresAt:
+          type: string
+        status:
+          type: string
+          enum: [active]
+
+    B2BLicenseStatus:
+      type: object
+      properties:
+        organizationId:
+          type: string
+        licenseId:
+          type: string
+        plan:
+          type: string
+        seatsLicensed:
+          type: integer
+        seatsAssigned:
+          type: integer
+        seatsRemaining:
+          type: integer
+        issuedAt:
+          type: string
+        expiresAt:
+          type: string
+        licenseState:
+          type: string
+          enum: [active, active-expired]
+          description: active-expired = the row is the active license but the clock has passed expiresAt
+
+    B2BSeat:
+      type: object
+      properties:
+        seatId:
+          type: string
+        subject:
+          type: string
+        licenseId:
+          type: string
+        createdAt:
+          type: string
+
+    B2BRosterRows:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [student_name, grade, guardian_email]
+            properties:
+              student_name:
+                type: string
+                minLength: 1
+                maxLength: 100
+              grade:
+                type: string
+                enum: [pre-k, kindergarten, grade-1, grade-2, grade-3]
+              guardian_email:
+                type: string
+                maxLength: 254
+
+    B2BRosterValidation:
+      type: object
+      properties:
+        dryRun:
+          type: boolean
+          enum: [true]
+        validationOnly:
+          type: boolean
+          enum: [true]
+        note:
+          type: string
+          description: Always states that nothing was created, stored, or invited
+        summary:
+          type: object
+          properties:
+            rowsTotal:
+              type: integer
+            accepted:
+              type: integer
+            rejected:
+              type: integer
+            seatsNeeded:
+              type: integer
+            seatsSufficient:
+              type: [boolean, "null"]
+              nullable: true
+              description: null when the org has no active license (no seat projection possible)
+            seatProjection:
+              type: [object, "null"]
+              nullable: true
+              properties:
+                seatsLicensed:
+                  type: integer
+                seatsAssigned:
+                  type: integer
+                seatsRemaining:
+                  type: integer
+                licenseState:
+                  type: string
+                  enum: [active, active-expired]
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: integer
+              status:
+                type: string
+                enum: [accepted, rejected]
+              reasons:
+                type: array
+                items:
+                  type: string

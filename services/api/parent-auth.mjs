@@ -54,12 +54,16 @@ const RESET_TOKEN_TTL_MS = 3600000;
 // two surfaces can evolve independently).
 const DUMMY_PARENT_PASSWORD_HASH = hashPinScrypt("parent-timing-equalizer");
 
-const EMAIL_MAX_LENGTH = 254;
+// Exported since #70 alongside EMAIL_PATTERN (one email doctrine).
+export const EMAIL_MAX_LENGTH = 254;
 // Pragmatic RFC-shaped email pattern (issue #40 owns real validation; the
 // 002 CHECK is a shape guard only): anchored, one @, local part <= 64
 // chars from the atext set plus dot, and a dotted-quad-style domain of
 // >= 2 labels of [A-Za-z0-9-] labels that start and end alphanumerically.
-const EMAIL_PATTERN =
+// Exported since #70: the B2B roster-import stub validates guardian
+// email addresses with the EXACT same pragmatic pattern — one email
+// doctrine, no drift between account creation and roster validation.
+export const EMAIL_PATTERN =
   "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]{1,64}@[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$";
 
 const TOKEN_PATTERN = "^[A-Za-z0-9_-]+$";

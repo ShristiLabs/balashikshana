@@ -34,6 +34,9 @@ C = child learner, S = server operational.
 | 19 | Error events | S | failures | `error_events` | reliability | internal | 30-day rolling purge |
 | 20 | Deletion audit | S | #62 deletion | `deletion_audit` (append-only) | compliance evidence | none | indefinite (identifiers + timestamps only) |
 | 21 | Curriculum content, questions, packs | - | seeded/compiled | `grades/units/skill_topics/practice_questions`, signed pack files | the product | public content endpoints + signed packs (public artifacts, no PII) | n/a |
+| 22 | B2B organizations (school/district account + owner binding) | P | parent activates a license (#70 seam) | `organizations` (one per parent owner) | B2B seat licensing seam | none | life of the owning parent account (cascade) |
+| 23 | B2B license records (claims + activation evidence incl. signature, status) | P | license activation (#70) | `organization_licenses` (append-only; supersede/revoked states) | seat validation + audit evidence | none | life of the org; retained as activation evidence |
+| 24 | B2B seat assignments (opaque subject labels) | P | parent claims seats (#70) | `organization_seats` (unique per org+subject) | seat accounting | none | life of the license/org (cascade) |
 
 ## Cross-checks performed (#68)
 
@@ -57,6 +60,13 @@ C = child learner, S = server operational.
 5. **Consent coverage** — no C-subject row can be created without a
    current-version consent record (suite-end invariant, re-verified
    post-M3–M5 on this branch).
+6. **B2B seam rows are adult/organizational, and roster intake is
+   transient (#70)** — rows 22-24 carry no child data (org names, license
+   claims, opaque seat labels; all adult-provided). The roster-import
+   STUB (`POST /api/b2b/roster/validate`) validates submitted rows and
+   writes NOTHING: student names/guardian emails are transient request
+   bodies — never persisted (row-count-delta tests) and never logged
+   (counts only). No store-form impact: the app collects nothing new.
 
 ## Store-form mapping hints (#69 will finalize)
 
