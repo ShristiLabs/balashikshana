@@ -57,6 +57,36 @@ variable "edge_slot_hostname" {
   default     = "gateway"
 }
 
+variable "enable_gateway" {
+  description = "Deploy the Dwara edge gateway (#65, D10): NLB TCP passthrough -> gateway (TLS terminates at Dwara) -> origin ALB over HTTPS"
+  type        = bool
+  default     = false
+}
+
+variable "gateway_image_uri" {
+  description = "ECR image URI for the Dwara gateway (deploy/dwara/docker build, pushed per deploy)"
+  type        = string
+  default     = ""
+}
+
+variable "gateway_allowed_ingress_cidrs" {
+  description = "CIDRs allowed to reach the public edge listener (default: everywhere, same posture as the api ALB)"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "gateway_admin_ingress_cidrs" {
+  description = "CIDRs allowed to reach the gateway mTLS admin port — INTERNAL ops ranges only (VPN/bastion); the module rejects 0.0.0.0/0"
+  type        = list(string)
+  default     = ["10.0.0.0/8"] # RFC1918 placeholder — replace with the environment's real ops ranges
+}
+
+variable "gateway_nlb_deletion_protection" {
+  description = "Gateway NLB deletion protection (prod: true)"
+  type        = bool
+  default     = false
+}
+
 variable "db_instance_class" {
   description = "RDS instance class"
   type        = string

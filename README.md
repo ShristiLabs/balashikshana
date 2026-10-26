@@ -322,6 +322,15 @@ The M6 deployment foundation: infrastructure-as-code for dev/staging/prod, secre
 - **Redis/multi-instance (roadmap D2 revisited):** single API task per environment stays the default; the schedulers are already advisory-locked, so a second instance is safe for them — Redis re-enters exactly when rate-limit buckets need a shared store. The compose Redis service (never read by any code) was removed; `docker/docker-compose.yml` still runs postgres + api + web for local dev.
 - Runbook (bootstrap, secrets, rollback/drain, portal + packs deploys, cost posture): `docs/deployment.md`; module map: `infra/README.md`; architecture: `docs/architecture.md` section 5.
 
+### 25. Dwara Gateway Fronting: Consumers, Edge Rate Limits, TLS Termination, mTLS Admin (issue #65)
+The M6 edge layer (roadmap D10): the in-house Dwara Rust API gateway fronts the public API — **the Fastify origin keeps its own auth** (dual-token doctrine, CORS, IDOR-safe middleware unchanged); the edge ADDS per-class consumer credentials, coarse volumetric rate limits layered above the origin's semantic buckets, TLS termination, and an mTLS-only admin surface.
+
+- **Config in-repo:** `deploy/dwara/envs/{dev,staging,prod}.yaml` — staging/prod byte-identical, dev differs only by the loopback origin triple (test-enforced DRY). Validated against the vendored Dwara JSON Schema (provenance-pinned by sha256) by a 62-gate vitest suite in the existing CI test step: schema validity, distinct ref-only credentials (SSM `${...}` references, never literals), admin mTLS isolation (client CA required, admin port never a listener port, no client certs on public listeners), full OpenAPI route coverage, policy registry consistency, D10 `X-Consumer-*` stripping toward the origin, TLS posture, staged-rollout pin, secret scan.
+- **Consumers (ADR in `docs/gateway.md`):** `parent-app`, `child-device`, `portal` — API-key CLASS identifiers (public-by-design for the SPA; the origin's session/device tokens remain the only auth), each with daily quotas; admin access is a client certificate on the separate mTLS admin listener. Routes stay `auth_required: false` in stage 1 (deployed clients do not send edge keys yet) — the flip is a deliberate, test-pinned stage-2 change.
+- **Rate-limit layering:** edge = coarse volumetric per class/per IP (stacked GCRA, 429 + Retry-After); origin = tight semantic caps (login/signup/reset per IP, sync 30/min per device token). `TRUST_PROXY_CIDRS` (default off) restores true-client-IP keying at the origin behind the edge with peer-checked XFF semantics.
+- **IaC:** `infra/modules/gateway` — NLB TCP passthrough (TLS terminates at Dwara, not the LB), ECS Fargate gateway service, the #64 `gateway.<env>.<zone>` edge slot now real, SSM ARN secret injection (keys + TLS material), admin port SG-restricted to internal ops CIDRs (module validation rejects `0.0.0.0/0`). Validate-only as always: CI runs fmt/validate, apply stays human.
+- **Verification:** `deploy/dwara/verify-edge.sh` scripts the issue ACs (edge health, key-but-no-session still 401 from the origin, synthetic burst -> 429 with Retry-After, admin rejected without a client cert); `scripts/post-deploy-smoke.mjs --edge-url ...` adds an optional edge path check. Full runbook: `docs/gateway.md`.
+
 
 ---
 
@@ -350,7 +359,9 @@ balashikshana/
 │   └── parent-portal/                        # Parent portal SPA (Vite + React 19 + TS): login, children overview, quadrant/weekly analytics, server-enforced parental controls (issue #61), COPPA data export + deletion self-serve (issue #62), weekly email toggle (issue #63)
 ├── tools/
 │   └── content-pipeline/                     # Signed per-grade content-pack compiler (node:sqlite + node:crypto, zero runtime deps)
-├── infra/                                    # Terraform IaC (issue #64): shared modules + dev/staging/prod env roots (validate-only), deploy + migrate scripts; runbook in docs/deployment.md
+├── infra/                                    # Terraform IaC (issue #64): shared modules (network, postgres, api_service, static_site, packs_store, gateway) + dev/staging/prod env roots (validate-only), deploy + migrate scripts; runbooks in docs/deployment.md + docs/gateway.md
+├── deploy/
+│   └── dwara/                                # Edge gateway config (issue #65): envs/{dev,staging,prod}.yaml, vendored Dwara JSON Schema, dev cert generator, verify-edge.sh AC script, image build
 ├── docs/
 │   ├── us-curriculum-registry.json           # Canonical JSON DAG of all 130 units, 614 topics & 9-asset bundles
 │   ├── us-curriculum-mapping.md              # Complete Pre-K to Grade 3 unit progression & skill-topic mapping
@@ -361,6 +372,7 @@ balashikshana/
 │   ├── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
 │   ├── database-migrations.md                # PostgreSQL migration ledger & runner guide (served datastore)
 │   ├── deployment.md                         # Deploy runbook: Terraform environments, secrets, migrations-on-deploy, smoke gate, rollback (issue #64)
+│   ├── gateway.md                            # Dwara edge runbook: consumers + credentials ADR, rate-limit layering, TLS/mTLS ops, staged rollout (issue #65)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)
 │   └── roadmap.md                            # Approved M1–M6 enterprise launch roadmap (decisions D1–D11)

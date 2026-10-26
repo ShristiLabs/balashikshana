@@ -112,6 +112,7 @@ locals {
     { name = "SMTP_HOST", value = var.smtp_host },
     { name = "SMTP_PORT", value = var.smtp_port },
     { name = "SMTP_FROM", value = var.smtp_from },
+    { name = "TRUST_PROXY_CIDRS", value = var.trust_proxy_cidrs },
   ]
 
   container_env_rate_limits = [

@@ -168,4 +168,51 @@ describe("post-deploy smoke gate", () => {
     assert.equal(outcome.passed, false);
     assert.ok(outcome.failures.some((f) => f.startsWith("health:")));
   });
+
+  test("edge-url (#65): healthy edge adds the 6th check and passes", async () => {
+    const api = await startServer(fixtureHandler());
+    const edge = await startServer(fixtureHandler()); // same /api/health contract, served through "the edge"
+    const outcome = await runSmoke({
+      baseUrl: `http://127.0.0.1:${api.address().port}`,
+      edgeUrl: `http://127.0.0.1:${edge.address().port}`,
+    });
+    assert.equal(outcome.passed, true);
+    assert.deepEqual(outcome.failures, []);
+    assert.deepEqual(
+      outcome.results.map((r) => r.check),
+      ["health", "curriculum-summary", "practice-fetch", "pack-index", "edge-health"]
+    );
+    assert.equal(outcome.results.at(-1).questions, DEFAULT_EXPECTED_QUESTIONS);
+    await Promise.all([new Promise((r) => api.close(r)), new Promise((r) => edge.close(r))]);
+  });
+
+  test("edge-url (#65): fails (never throws) when the edge is unreachable", async () => {
+    const api = await startServer(fixtureHandler());
+    const outcome = await runSmoke({
+      baseUrl: `http://127.0.0.1:${api.address().port}`,
+      edgeUrl: "http://127.0.0.1:1",
+    });
+    assert.equal(outcome.passed, false);
+    assert.ok(outcome.failures.some((f) => f.startsWith("edge-health:")));
+    await new Promise((r) => api.close(r));
+  });
+
+  test("edge-url (#65): fails when the edge health status is not ok", async () => {
+    const api = await startServer(fixtureHandler());
+    const edge = await startServer(
+      fixtureHandler({
+        "/api/health": { status: 200, body: { ...healthyFixtures["/api/health"], status: "degraded" } },
+      })
+    );
+    const outcome = await runSmoke({
+      baseUrl: `http://127.0.0.1:${api.address().port}`,
+      edgeUrl: `http://127.0.0.1:${edge.address().port}`,
+    });
+    assert.equal(outcome.passed, false);
+    assert.ok(
+      outcome.failures.some((f) => f.includes('expected status "ok"')),
+      "a degraded edge health contract must be reported"
+    );
+    await Promise.all([new Promise((r) => api.close(r)), new Promise((r) => edge.close(r))]);
+  });
 });

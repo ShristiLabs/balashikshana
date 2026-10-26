@@ -21,7 +21,8 @@
  *
  * Usage:
  *   node scripts/post-deploy-smoke.mjs [--base-url https://api...] \
- *       [--portal-url https://portal...] [--expected-questions 6140] [--count 8]
+ *       [--portal-url https://portal...] [--edge-url https://gateway...] \
+ *       [--expected-questions 6140] [--count 8]
  */
 
 import { pathToFileURL } from "node:url";
@@ -62,6 +63,7 @@ async function fetchJson(fetchImpl, url, label, failures) {
 export async function runSmoke({
   baseUrl = DEFAULT_BASE_URL,
   portalUrl = null,
+  edgeUrl = null,
   expectedQuestions = DEFAULT_EXPECTED_QUESTIONS,
   topicQuery = DEFAULT_TOPIC_QUERY,
   count = DEFAULT_COUNT,
@@ -149,16 +151,36 @@ export async function runSmoke({
     }
   }
 
+  // 6. Edge (optional, #65): when the Dwara gateway fronts this
+  // environment, the same health contract must hold THROUGH the edge
+  // (TLS terminates at the gateway). Full edge verification — rate-limit
+  // bursts, admin mTLS rejection, D10 origin-auth probe — is
+  // deploy/dwara/verify-edge.sh; this check only proves the edge path is
+  // alive after a deploy. Node fetch verifies TLS by default: for a
+  // locally self-signed edge use NODE_TLS_REJECT_UNAUTHORIZED=0
+  // (documented, dev-only).
+  if (edgeUrl) {
+    const edge = String(edgeUrl).replace(/\/+$/, "");
+    const edgeHealth = await fetchJson(fetchImpl, `${edge}/api/health`, "edge-health", failures);
+    if (edgeHealth) {
+      if (edgeHealth.body?.status !== "ok") {
+        failures.push(`edge-health: expected status "ok", got ${JSON.stringify(edgeHealth.body?.status)}`);
+      }
+      results.push({ check: "edge-health", ok: true, durationMs: edgeHealth.durationMs, questions: edgeHealth.body?.totalPracticeQuestionsInDb });
+    }
+  }
+
   return { passed: failures.length === 0, failures, results };
 }
 
 function parseArgs(argv) {
-  const args = { baseUrl: DEFAULT_BASE_URL, portalUrl: null, expectedQuestions: DEFAULT_EXPECTED_QUESTIONS, count: DEFAULT_COUNT };
+  const args = { baseUrl: DEFAULT_BASE_URL, portalUrl: null, edgeUrl: null, expectedQuestions: DEFAULT_EXPECTED_QUESTIONS, count: DEFAULT_COUNT };
   for (let i = 2; i < argv.length; i += 2) {
     const flag = argv[i];
     const value = argv[i + 1];
     if (flag === "--base-url") args.baseUrl = value;
     else if (flag === "--portal-url") args.portalUrl = value;
+    else if (flag === "--edge-url") args.edgeUrl = value;
     else if (flag === "--expected-questions") args.expectedQuestions = Number(value);
     else if (flag === "--count") args.count = Number(value);
     else {

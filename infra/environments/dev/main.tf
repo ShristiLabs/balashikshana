@@ -60,6 +60,11 @@ module "api_service" {
 
   allowed_origins = var.allowed_origins
 
+  # Behind the Dwara edge (#65): honor X-Forwarded-For from VPC-internal
+  # hops only (peer-checked), so the origin per-IP buckets key on the true
+  # client IP. Empty when the gateway is off — pre-#65 behavior unchanged.
+  trust_proxy_cidrs = var.enable_gateway ? module.network.vpc_cidr_block : ""
+
   seed_demo_students    = var.seed_demo_students
   weekly_digest_enabled = var.weekly_digest_enabled
   smtp_host             = var.smtp_host
@@ -74,10 +79,53 @@ module "api_service" {
   hosted_zone_id      = data.aws_route53_zone.this.zone_id
   hosted_zone_name    = data.aws_route53_zone.this.name
   api_hostname        = var.api_hostname
-  create_edge_slot    = var.create_edge_slot
-  edge_slot_hostname  = var.edge_slot_hostname
+  # When the gateway module owns the gateway.<env>.<zone> record, the
+  # placeholder edge-slot CNAME here must be suppressed (duplicate
+  # records would otherwise fight over the name).
+  create_edge_slot   = var.enable_gateway ? false : var.create_edge_slot
+  edge_slot_hostname = var.edge_slot_hostname
 
   alb_deletion_protection = var.alb_deletion_protection
+
+  tags = local.common_tags
+}
+
+# Dwara edge gateway (#65, D10): NLB TCP passthrough -> gateway (TLS
+# terminates at Dwara, consumers + edge rate limits applied) -> origin ALB
+# over HTTPS. Disabled by default; staging/prod enable it in tfvars. The
+# origin KEEPS its own auth — the gateway only adds edge concerns (D10).
+module "gateway" {
+  count  = var.enable_gateway ? 1 : 0
+  source = "../../modules/gateway"
+
+  name_prefix        = local.name_prefix
+  aws_region         = var.aws_region
+  vpc_id             = module.network.vpc_id
+  public_subnet_ids  = module.network.public_subnet_ids
+  private_subnet_ids = module.network.private_subnet_ids
+  cluster_name       = module.api_service.cluster_name
+
+  gateway_image_uri = var.gateway_image_uri
+
+  allowed_ingress_cidrs = var.gateway_allowed_ingress_cidrs
+  admin_ingress_cidrs   = var.gateway_admin_ingress_cidrs
+
+  ssm_parameter_prefix = local.ssm_prefix
+
+  # ARNs constructed (no data sources — same doctrine as smtp_* above);
+  # the operator provisions the SecureStrings before first apply
+  # (docs/gateway.md "Credentials and certificates").
+  edge_tls_cert_parameter_arn         = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/edge_tls_cert"
+  edge_tls_key_parameter_arn          = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/edge_tls_key"
+  edge_tls_client_ca_parameter_arn    = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/edge_tls_client_ca"
+  edge_key_parent_parameter_arn       = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/edge_key_parent"
+  edge_key_child_device_parameter_arn = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/edge_key_child_device"
+  edge_key_portal_parameter_arn       = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/edge_key_portal"
+
+  hosted_zone_id          = data.aws_route53_zone.this.zone_id
+  hosted_zone_name        = data.aws_route53_zone.this.name
+  edge_hostname           = var.edge_slot_hostname
+  nlb_deletion_protection = var.gateway_nlb_deletion_protection
 
   tags = local.common_tags
 }
