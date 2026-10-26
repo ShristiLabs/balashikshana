@@ -313,6 +313,16 @@ The M5 email surface: one idempotent weekly email per eligible parent summarizin
 - Architecture detail: `docs/architecture.md` section 3.6.
 
 
+### 24. Deployment: Terraform IaC, Environments & Deploy Runbook (issue #64)
+The M6 deployment foundation: infrastructure-as-code for dev/staging/prod, secrets management, migrations-on-deploy, and a post-deploy smoke gate — delivered as reviewable, validated code. **Nothing provisions automatically**: CI only runs `terraform fmt` + `validate` (pinned Terraform 1.5.7, no cloud credentials); `terraform plan` and `apply` are human steps under the standing manual-deploy preference.
+
+- **Provider & layout:** AWS, single region, minimal parameterized surface — `infra/modules/` (network, RDS PostgreSQL 16, ECS Fargate API service + ALB + TLS, S3 + CloudFront portal hosting, S3 content-pack store) with `infra/environments/{dev,staging,prod}` roots that are byte-identical except `terraform.tfvars` (test-enforced DRY). A `gateway.<env>` DNS slot is reserved for the Dwara edge (#65, roadmap D10). Decision record and alternatives considered: `docs/deployment.md`.
+- **Secrets:** SSM Parameter Store `/balashikshana/<env>/*` (SecureString) — `db_master_password`, `smtp_user`, `smtp_pass` pre-created by the operator, `database_url` composed by Terraform; the ECS task injects them by ARN at start. No secrets in the repo, enforced by TWO layers: `.gitignore` (`*.auto.tfvars`, state files) and the `infra-secrets` vitest scan that fails CI on secret-shaped literals.
+- **Deploy sequence:** `infra/scripts/deploy.sh <env>` runs the runbook as one command — (1) one-off ECS migrations task (`npm run migrate`, refuses to continue on non-zero exit) BEFORE traffic shifts, (2) rolling replacement behind the ALB health check with connection drain, (3) stability wait, (4) `scripts/post-deploy-smoke.mjs` (health with the 6,140-question seed check, curriculum summary, practice fetch, content-pack index, portal origin — any failure fails the deploy).
+- **Redis/multi-instance (roadmap D2 revisited):** single API task per environment stays the default; the schedulers are already advisory-locked, so a second instance is safe for them — Redis re-enters exactly when rate-limit buckets need a shared store. The compose Redis service (never read by any code) was removed; `docker/docker-compose.yml` still runs postgres + api + web for local dev.
+- Runbook (bootstrap, secrets, rollback/drain, portal + packs deploys, cost posture): `docs/deployment.md`; module map: `infra/README.md`; architecture: `docs/architecture.md` section 5.
+
+
 ---
 
 ## Repository Structure & Documentation
@@ -340,6 +350,7 @@ balashikshana/
 │   └── parent-portal/                        # Parent portal SPA (Vite + React 19 + TS): login, children overview, quadrant/weekly analytics, server-enforced parental controls (issue #61), COPPA data export + deletion self-serve (issue #62), weekly email toggle (issue #63)
 ├── tools/
 │   └── content-pipeline/                     # Signed per-grade content-pack compiler (node:sqlite + node:crypto, zero runtime deps)
+├── infra/                                    # Terraform IaC (issue #64): shared modules + dev/staging/prod env roots (validate-only), deploy + migrate scripts; runbook in docs/deployment.md
 ├── docs/
 │   ├── us-curriculum-registry.json           # Canonical JSON DAG of all 130 units, 614 topics & 9-asset bundles
 │   ├── us-curriculum-mapping.md              # Complete Pre-K to Grade 3 unit progression & skill-topic mapping
@@ -349,6 +360,7 @@ balashikshana/
 │   ├── skill-topic-assets-catalog.md         # Catalog of all 9 asset categories across all 614 skill topics
 │   ├── architecture.md                       # Offline-first iOS/Android client, SQLite schema, & cloud sync architecture
 │   ├── database-migrations.md                # PostgreSQL migration ledger & runner guide (served datastore)
+│   ├── deployment.md                         # Deploy runbook: Terraform environments, secrets, migrations-on-deploy, smoke gate, rollback (issue #64)
 │   ├── openapi/
 │   │   └── baseline.yaml                     # OpenAPI 3.1 API contract (oasdiff breaking-change baseline)
 │   └── roadmap.md                            # Approved M1–M6 enterprise launch roadmap (decisions D1–D11)

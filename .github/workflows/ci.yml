@@ -55,6 +55,29 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Terraform IaC gate (issue #64): fmt + validate across all three
+      # environments, pinned to the same 1.5.7 the runbook uses. Validate
+      # never touches AWS (init -backend=false skips state; data sources are
+      # only resolved at plan time, which stays a human step).
+      - name: Terraform Format & Validate (infra/, pinned 1.5.7)
+        env:
+          TF_PLUGIN_CACHE_DIR: /tmp/tf-plugin-cache
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+          unzip -oq /tmp/terraform.zip -d /tmp/tfbin
+          chmod +x /tmp/tfbin/terraform
+          mkdir -p "${TF_PLUGIN_CACHE_DIR}"
+          /tmp/tfbin/terraform fmt -check -recursive infra/
+          for env_dir in dev staging prod; do
+            echo "Validating infra/environments/${env_dir}"
+            (
+              cd "infra/environments/${env_dir}"
+              /tmp/tfbin/terraform init -backend=false -input=false >/dev/null
+              /tmp/tfbin/terraform validate
+            )
+          done
+
       - name: Install workspace dependencies (api, core-engine, mobile, content-pipeline, parent-portal)
         run: |
           npm ci --workspaces=false --prefix services/api

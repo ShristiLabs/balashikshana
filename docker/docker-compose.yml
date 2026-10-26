@@ -19,17 +19,10 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: balashikshana-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+  # Redis was removed by #64 (roadmap D2 revisit): nothing in the API ever
+  # read REDIS_URL — the service was dead infrastructure. Redis re-enters
+  # only with multi-instance (rate-limit buckets); see docs/deployment.md
+  # "Single instance vs multi-instance".
 
   api:
     build:
@@ -40,14 +33,11 @@ services:
     environment:
       PORT: 4000
       DATABASE_URL: postgresql://balashikshana:balashikshana_dev@postgres:5432/balashikshana_db
-      REDIS_URL: redis://redis:6379
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:4200}
     ports:
       - "4000:4000"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   web:
