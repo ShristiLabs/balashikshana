@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
- 
+
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { UNIT_STATES } from "@balashikshana/core-engine";

@@ -38,7 +38,6 @@ import type {
 } from "../src/sync/types";
 import { createPracticeEnv, FIXTURE_UNIT, type PracticeTestEnv } from "./helpers/practiceEnv";
 
- 
 import { DatabaseSync } from "node:sqlite";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));

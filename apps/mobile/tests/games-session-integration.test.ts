@@ -20,7 +20,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
- 
+
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { computeCognitiveTimeSec } from "@balashikshana/core-engine";

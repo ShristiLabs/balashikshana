@@ -17,7 +17,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
- 
+
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import type { PracticeQuestion } from "../src/practice/types";

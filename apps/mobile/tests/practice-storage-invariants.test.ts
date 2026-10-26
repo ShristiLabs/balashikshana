@@ -14,7 +14,7 @@
  *    projection (deterministic engine = D8 recovery story).
  */
 import { describe, expect, it } from "vitest";
- 
+
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import os from "node:os";

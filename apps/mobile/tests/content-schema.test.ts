@@ -13,7 +13,7 @@
  */
 // node:sqlite is a Node 22 built-in the expo eslint import resolver does
 // not know yet; the runtime import is real (test script enables the flag).
- 
+
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import os from "node:os";

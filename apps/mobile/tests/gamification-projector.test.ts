@@ -42,7 +42,7 @@ import {
   gamificationSummary,
   initialGamificationState,
 } from "../src/gamification/rewardsProjector";
- 
+
 import { DatabaseSync } from "node:sqlite";
 import { createPracticeEnv, FIXTURE_UNIT, type PracticeTestEnv } from "./helpers/practiceEnv";
 
