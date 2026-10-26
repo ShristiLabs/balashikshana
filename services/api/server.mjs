@@ -29,6 +29,7 @@ import { portalPlugin } from "./portal.mjs";
 import { dataRightsPlugin } from "./data-rights.mjs";
 import { startRetentionSweep } from "./retention.mjs";
 import { startWeeklyDigestScheduler } from "./weekly-digest.mjs";
+import { defaultTransport, smtpConfigured } from "./mailer.mjs";
 import {
   resolveOptionalStudentId,
   loadChildSettings,
@@ -104,6 +105,11 @@ import { startMetricsListener } from "./observability/metrics-listener.mjs";
 // SMTP_HOST                   mail transport selection (issue #63 seam): set ->
 //                             SMTP transport (nodemailer, lazy-loaded); unset ->
 //                             null transport (mail dropped, never crashes)
+// MAIL_CAPTURE_FILE           TEST/DEBUG ONLY (issue #69): set -> file-capture
+//                             transport (every envelope appended as a JSON
+//                             line) with precedence over SMTP; NEVER set in
+//                             any deployment environment — the capture file
+//                             contains the delivered auth codes
 // SMTP_PORT / SMTP_SECURE / SMTP_USER / SMTP_PASS / SMTP_FROM
 //                             SMTP transport knobs (587 / STARTTLS unless
 //                             SMTP_SECURE=true / credentials if configured /
@@ -732,10 +738,30 @@ app.setNotFoundHandler((req, reply) => {
 // carry bearer tokens and sit behind the global per-IP + per-token buckets;
 // the token-guessing and email-harvesting routes get dedicated route-level
 // buckets (M1 login-bucket pattern).
+//
+// Mailer flip (issue #69): verification/password-reset tokens are DELIVERED
+// BY EMAIL through the #63 seam — in production the response bodies never
+// carry them (the #68-pinned blocker this closes). The transport resolves
+// once here (file-capture for tests via MAIL_CAPTURE_FILE > SMTP when
+// SMTP_HOST > the honest null transport). A production boot without any
+// real transport logs a LOUD error — not a throw, deliberately: dev and
+// staging ECS tasks also run NODE_ENV=production with an empty SMTP_HOST
+// (they have no real parents), and taking them down would not improve
+// security (tokens never leak either way; the honest null transport
+// reports ok:false per send). The store-submission checklist pins "real
+// SMTP_HOST verified in prod" as a pre-filing operator step
+// (docs/store/review-notes.md).
+const parentMailer = await defaultTransport(logger);
+if (IS_PRODUCTION && !smtpConfigured() && !String(process.env.MAIL_CAPTURE_FILE || "").trim()) {
+  logger?.error?.(
+    "PRODUCTION BOOT WITHOUT SMTP_HOST: parent verification/password-reset mail WILL BE DROPPED (null transport) — parents cannot verify email addresses until SMTP_HOST is set. Tokens are still never returned in response bodies."
+  );
+}
 await app.register(parentAuthPlugin, {
   db,
   isProduction: IS_PRODUCTION,
   logger,
+  mailer: parentMailer,
   rateLimits: {
     signup: { max: RATE_LIMIT_PARENT_SIGNUP_PER_IP_MIN, timeWindow: "1 minute" },
     login: { max: RATE_LIMIT_PARENT_LOGIN_PER_IP_MIN, timeWindow: "1 minute" },

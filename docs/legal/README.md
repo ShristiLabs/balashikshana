@@ -108,14 +108,17 @@ the text depends on are pinned here so #69 cannot ship without them:
 
 1. **Email delivery of verification and password-reset links.** The
    policy (sections 2a and 7) states the email provider sends the
-   verification link and password-reset mail. Today those tokens are
-   still delivered through the development response-body seam
-   (`parent-auth.mjs`, `devDeliveryFields` — suppressed in production),
-   a deferral documented in that module ("a future issue flips these
-   calls to the mailer" — the #63 seam exists and the weekly digest
-   already routes through it). **The flip of verification/reset mail to
-   the SMTP transport is a #69 BLOCKER**: without it, a production
-   parent cannot verify an email address, which blocks verifiable
-   consent itself. (Found by the #68 review-of-the-review.)
+   verification link and password-reset mail. ~~Today those tokens are
+   still delivered through the development response-body seam~~
+   **RESOLVED by #69 (the mailer flip)**: verification/reset tokens now
+   route through the #63 SMTP transport (`parent-auth.mjs` +
+   `auth-emails.mjs`); production response bodies never carry tokens
+   (byte-level NODE_ENV=production tests, `test/parent-auth-mail.test.mjs`),
+   and the mailed credential is a plain-text copyable code with no link
+   (anti-phishing; full-entropy token retained over a 6-digit code).
+   Operational note: a production boot without `SMTP_HOST` logs a loud
+   boot error (mail dropped honestly) — verify a real SMTP host before
+   any store filing (docs/store/README.md pre-filing checklist).
 2. **Backup retention answer.** `[BACKUP_RETENTION_PLACEHOLDER]` must be
-   answered with the real backup window (the store forms ask it too).
+   answered with the real backup window (the store forms ask it too) —
+   still USER-SIDE.
